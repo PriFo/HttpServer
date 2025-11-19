@@ -51,83 +51,83 @@ func (kc *KeywordClassifier) initializeCommonPatterns() {
 	// Метизы и крепеж
 	kc.patterns["болт"] = &KeywordPattern{
 		RootWord:   "болт",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.11",
+		KpvedName:  "Изделия с резьбой нарезанной из металлов черных, не включенные в другие группировки",
 		Confidence: 0.98,
 		Examples:   []string{"болт м", "болт м10", "болт din"},
 	}
 
 	kc.patterns["винт"] = &KeywordPattern{
 		RootWord:   "винт",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.11",
+		KpvedName:  "Изделия с резьбой нарезанной из металлов черных, не включенные в другие группировки",
 		Confidence: 0.98,
 	}
 
 	kc.patterns["гайка"] = &KeywordPattern{
 		RootWord:   "гайка",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.11",
+		KpvedName:  "Изделия с резьбой нарезанной из металлов черных, не включенные в другие группировки",
 		Confidence: 0.98,
 	}
 
 	kc.patterns["шайба"] = &KeywordPattern{
 		RootWord:   "шайба",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.12",
+		KpvedName:  "Изделия крепежные ненарезные из металлов черных прочие",
 		Confidence: 0.98,
 	}
 
 	kc.patterns["саморез"] = &KeywordPattern{
 		RootWord:   "саморез",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.11",
+		KpvedName:  "Изделия с резьбой нарезанной из металлов черных, не включенные в другие группировки",
 		Confidence: 0.97,
 	}
 
 	kc.patterns["заклепка"] = &KeywordPattern{
 		RootWord:   "заклепка",
-		KpvedCode:  "25.93.11",
-		KpvedName:  "Болты, винты, гайки и аналогичные изделия",
+		KpvedCode:  "25.94.12",
+		KpvedName:  "Изделия крепежные ненарезные из металлов черных прочие",
 		Confidence: 0.96,
 	}
 
 	// Инструменты
 	kc.patterns["ключ"] = &KeywordPattern{
 		RootWord:   "ключ",
-		KpvedCode:  "25.73.11",
-		KpvedName:  "Инструменты ручные",
+		KpvedCode:  "25.73.30",
+		KpvedName:  "Инструмент ручной прочий",
 		Confidence: 0.95,
 		Examples:   []string{"ключ комбинированный", "ключ рожковый", "ключ трещоточный"},
 	}
 
 	kc.patterns["сверло"] = &KeywordPattern{
 		RootWord:   "сверло",
-		KpvedCode:  "25.99.12",
-		KpvedName:  "Инструменты режущие",
+		KpvedCode:  "25.73.40",
+		KpvedName:  "Части сменные для ручных инструментов, оснащенных или не оснащенных приводом механическим, или для станков",
 		Confidence: 0.97,
 		Examples:   []string{"сверло по металлу", "сверло к/х", "сверло с конус"},
 	}
 
 	kc.patterns["фреза"] = &KeywordPattern{
 		RootWord:   "фреза",
-		KpvedCode:  "25.99.12",
-		KpvedName:  "Инструменты режущие",
+		KpvedCode:  "25.73.40",
+		KpvedName:  "Части сменные для ручных инструментов, оснащенных или не оснащенных приводом механическим, или для станков",
 		Confidence: 0.96,
 	}
 
 	kc.patterns["коронка"] = &KeywordPattern{
 		RootWord:   "коронка",
-		KpvedCode:  "25.99.12",
-		KpvedName:  "Инструменты режущие",
+		KpvedCode:  "25.73.40",
+		KpvedName:  "Части сменные для ручных инструментов, оснащенных или не оснащенных приводом механическим, или для станков",
 		Confidence: 0.95,
 	}
 
 	// Подшипники
 	kc.patterns["подшипник"] = &KeywordPattern{
 		RootWord:   "подшипник",
-		KpvedCode:  "28.15.32",
-		KpvedName:  "Подшипники",
+		KpvedCode:  "28.15.10",
+		KpvedName:  "Подшипники шариковые или роликовые",
 		Confidence: 0.99,
 		Examples:   []string{"подшипник № 2rs", "подшипник арт", "шарикоподшипник"},
 	}
@@ -135,106 +135,106 @@ func (kc *KeywordClassifier) initializeCommonPatterns() {
 	// Строительные материалы
 	kc.patterns["панель"] = &KeywordPattern{
 		RootWord:   "панель",
-		KpvedCode:  "23.69.19",
-		KpvedName:  "Изделия строительные из гипса, бетона или цемента прочие",
+		KpvedCode:  "23.61.11",
+		KpvedName:  "Плитки, плиты, кирпичи и изделия аналогичные из цемента, бетона или камня искусственного",
 		Confidence: 0.90,
-		Examples:   []string{"панель isowall", "панель isocop", "панель спс"},
+		Examples:   []string{"панель бетонная", "панель жб", "панель спс"},
 	}
 
 	kc.patterns["уголок"] = &KeywordPattern{
 		RootWord:   "уголок",
 		KpvedCode:  "24.10.73",
-		KpvedName:  "Профили открытые из стали",
+		KpvedName:  "Профили открытые из стали легированной прочей горячекатаные, горячепротянутые или горячепрессованные, но без дальнейшей обработки",
 		Confidence: 0.96,
 	}
 
 	kc.patterns["арматура"] = &KeywordPattern{
 		RootWord:   "арматура",
-		KpvedCode:  "24.10.11",
-		KpvedName:  "Арматура строительная",
+		KpvedCode:  "24.10.61",
+		KpvedName:  "Стержни и прутки горячекатаные в свободно смотанных бухтах из стали нелегированной",
 		Confidence: 0.94,
 	}
 
 	// Электротехника
 	kc.patterns["автомат"] = &KeywordPattern{
 		RootWord:   "автомат",
-		KpvedCode:  "27.11.21",
-		KpvedName:  "Аппаратура коммутационная",
+		KpvedCode:  "27.12.22",
+		KpvedName:  "Выключатели автоматические на напряжение не более 1000 В (низковольтные)",
 		Confidence: 0.94,
 	}
 
 	kc.patterns["кабель"] = &KeywordPattern{
 		RootWord:   "кабель",
-		KpvedCode:  "27.32.11",
-		KpvedName:  "Кабели",
+		KpvedCode:  "27.32.13",
+		KpvedName:  "Провода и кабели электрические прочие, рассчитанные на напряжение не более 1000 В (низковольтные)",
 		Confidence: 0.98,
 	}
 
 	// Сантехника
 	kc.patterns["муфта"] = &KeywordPattern{
 		RootWord:   "муфта",
-		KpvedCode:  "28.14.11",
-		KpvedName:  "Арматура трубопроводная",
+		KpvedCode:  "24.20.40",
+		KpvedName:  "Фитинги для труб стальные, не литые",
 		Confidence: 0.95,
 	}
 
 	kc.patterns["тройник"] = &KeywordPattern{
 		RootWord:   "тройник",
-		KpvedCode:  "28.14.11",
-		KpvedName:  "Арматура трубопроводная",
+		KpvedCode:  "24.20.40",
+		KpvedName:  "Фитинги для труб стальные, не литые",
 		Confidence: 0.96,
 	}
 
 	// Гидравлика и пневматика
 	kc.patterns["пневмоцилиндр"] = &KeywordPattern{
 		RootWord:   "пневмоцилиндр",
-		KpvedCode:  "28.13.11",
-		KpvedName:  "Цилиндры гидравлические и пневматические",
+		KpvedCode:  "28.12.11",
+		KpvedName:  "Двигатели и установки силовые гидравлические и пневматические линейного действия (цилиндры)",
 		Confidence: 0.98,
 	}
 
 	kc.patterns["редуктор"] = &KeywordPattern{
 		RootWord:   "редуктор",
-		KpvedCode:  "28.15.11",
-		KpvedName:  "Редукторы",
+		KpvedCode:  "28.15.24",
+		KpvedName:  "Колеса и передачи зубчатые; винты ходовые шариковые; коробки передач и переключатели скоростей прочие",
 		Confidence: 0.97,
 	}
 
 	kc.patterns["фильтр"] = &KeywordPattern{
 		RootWord:   "фильтр",
-		KpvedCode:  "28.29.11",
-		KpvedName:  "Фильтры и аппараты для фильтрования жидкостей",
+		KpvedCode:  "28.29.12",
+		KpvedName:  "Оборудование для фильтрования или очистки жидкостей",
 		Confidence: 0.95,
 	}
 
 	kc.patterns["сальник"] = &KeywordPattern{
 		RootWord:   "сальник",
-		KpvedCode:  "28.29.12",
-		KpvedName:  "Уплотнения",
+		KpvedCode:  "28.29.23",
+		KpvedName:  "Прокладки и уплотнения аналогичные из металла листового в сочетании с материалами прочими",
 		Confidence: 0.96,
 	}
 
 	// Прочее
 	kc.patterns["лоток"] = &KeywordPattern{
 		RootWord:   "лоток",
-		KpvedCode:  "25.99.19",
-		KpvedName:  "Изделия металлические прочие",
+		KpvedCode:  "25.99.29",
+		KpvedName:  "Изделия прочие из недрагоценных металлов, не включенные в другие группировки",
 		Confidence: 0.90,
 	}
 
 	// Фасонные элементы для строительных конструкций
 	kc.patterns["фасонные"] = &KeywordPattern{
 		RootWord:   "фасонные",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "25.11.23",
+		KpvedName:  "Конструкции прочие, части конструкций, плиты, прутки, уголки, профили и изделия аналогичные из металлов черных или алюминия",
 		Confidence: 0.95,
 		Examples:   []string{"фасонные элементы", "фасонные элементы для панелей", "mq фасонные элементы"},
 	}
 
 	kc.patterns["элемент"] = &KeywordPattern{
 		RootWord:   "элемент",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "25.11.23",
+		KpvedName:  "Конструкции прочие, части конструкций, плиты, прутки, уголки, профили и изделия аналогичные из металлов черных или алюминия",
 		Confidence: 0.90,
 		Examples:   []string{"фасонные элементы", "соединительные элементы", "крепежные элементы"},
 	}
@@ -259,8 +259,8 @@ func (kc *KeywordClassifier) initializeCommonPatterns() {
 	// Кабели (исправление ошибки классификации как печатных плат)
 	kc.patterns["контрольный"] = &KeywordPattern{
 		RootWord:   "контрольный",
-		KpvedCode:  "27.32.11",
-		KpvedName:  "Кабели силовые",
+		KpvedCode:  "27.32.13",
+		KpvedName:  "Провода и кабели электрические прочие, рассчитанные на напряжение не более 1000 В (низковольтные)",
 		Confidence: 0.95,
 		Examples:   []string{"контрольный кабель", "helukabel контрольный", "кабель контрольный"},
 	}
@@ -268,40 +268,40 @@ func (kc *KeywordClassifier) initializeCommonPatterns() {
 	// Сэндвич-панели (металлические конструкции с утеплителем)
 	kc.patterns["isowall"] = &KeywordPattern{
 		RootWord:   "isowall",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "24.33.30",
+		KpvedName:  "Сэндвич панели из покрытого стального листа",
 		Confidence: 0.98,
 		Examples:   []string{"панель isowall", "isowall box", "isowall fire"},
 	}
 
 	kc.patterns["сэндвич"] = &KeywordPattern{
 		RootWord:   "сэндвич",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "24.33.30",
+		KpvedName:  "Сэндвич панели из покрытого стального листа",
 		Confidence: 0.98,
 		Examples:   []string{"сэндвич панель", "сэндвич-панель", "панель сэндвич"},
 	}
 
 	kc.patterns["sandwich"] = &KeywordPattern{
 		RootWord:   "sandwich",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "24.33.30",
+		KpvedName:  "Сэндвич панели из покрытого стального листа",
 		Confidence: 0.98,
 		Examples:   []string{"sandwich panel", "sandwich панель"},
 	}
 
 	kc.patterns["isopan"] = &KeywordPattern{
 		RootWord:   "isopan",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "24.33.30",
+		KpvedName:  "Сэндвич панели из покрытого стального листа",
 		Confidence: 0.95,
 		Examples:   []string{"панель isopan", "isopan fire"},
 	}
 
 	kc.patterns["изопан"] = &KeywordPattern{
 		RootWord:   "изопан",
-		KpvedCode:  "25.11.11",
-		KpvedName:  "Конструкции и детали строительные металлические",
+		KpvedCode:  "24.33.30",
+		KpvedName:  "Сэндвич панели из покрытого стального листа",
 		Confidence: 0.95,
 		Examples:   []string{"панель изопан"},
 	}
