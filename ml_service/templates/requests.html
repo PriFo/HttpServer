@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="frame">
+    <div class="frame-header">
+        <h3>История запросов</h3>
+        <form class="grid" style="grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 0.5rem;" method="get">
+            <select name="status">
+                <option value="">Все статусы</option>
+                {% for option in ['queued','running','completed','error'] %}
+                <option value="{{ option }}" {% if status == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <select name="kind">
+                <option value="">Все типы</option>
+                {% for option in ['train','predict','quality','drift','baseline_refresh'] %}
+                <option value="{{ option }}" {% if kind == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Фильтровать</button>
+        </form>
+    </div>
+    <div class="metrics-grid">
+        <article>
+            <p>Всего ({{ metrics.window_hours }}h)</p>
+            <h3>{{ metrics.total }}</h3>
+        </article>
+        <article>
+            <p>Выполнено</p>
+            <h3>{{ metrics.completed }}</h3>
+        </article>
+        <article>
+            <p>Ошибок</p>
+            <h3>{{ metrics.errored }}</h3>
+        </article>
+        <article>
+            <p>Running / Queued</p>
+            <h3>{{ metrics.running }}/{{ metrics.queued }}</h3>
+        </article>
+        <article>
+            <p>Запросы с дообучением</p>
+            <h3>{{ metrics.retrain_candidates }}</h3>
+        </article>
+    </div>
+    <div id="requests-chart" style="height: 360px;"></div>
+    <script>
+        const reqChart = {{ chart|tojson }};
+        if (reqChart && reqChart.data) {
+            Plotly.newPlot('requests-chart', reqChart.data, reqChart.layout, {responsive: true});
+        }
+    </script>
+    <div class="pane">
+        <div class="data-table">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Тип</th>
+                    <th>Статус</th>
+                    <th>Приоритет</th>
+                    <th>Прогресс</th>
+                    <th>Начало</th>
+                    <th>Ошибка</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.kind }}</td>
+                        <td>
+                            <span class="status-pill {% if item.status == 'completed' %}success{% elif item.status == 'error' %}error{% else %}running{% endif %}">
+                                {{ item.status }}
+                            </span>
+                        </td>
+                        <td>{{ '%.2f'|format(item.priority) }}</td>
+                        <td>{{ item.progress }}%</td>
+                        <td>{{ item.started_at }}</td>
+                        <td>{{ item.error or "—" }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="7">Запросов нет.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

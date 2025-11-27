@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title if title else "ML Monitoring" }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root {
+            --frame-bg: #f5f6fa;
+            --frame-border: #e1e4f0;
+            --accent: #5761d7;
+            --text-color: #1f2233;
+            --badge-bg: #5761d7;
+            --badge-color: #fff;
+            --table-header-bg: #eef0fb;
+        }
+        :root[data-theme="dark"] {
+            --frame-bg: #1f2433;
+            --frame-border: #30384f;
+            --accent: #8f9dff;
+            --text-color: #f5f7ff;
+            --badge-bg: #8f9dff;
+            --badge-color: #1f2433;
+            --table-header-bg: #2a3144;
+            background: #151925;
+        }
+        body {
+            padding: 1.5rem;
+            background: var(--frame-bg);
+            color: var(--text-color);
+        }
+        nav {
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav ul {
+            margin: 0;
+        }
+        nav a {
+            font-weight: 600;
+        }
+        .badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.4rem;
+            background: var(--badge-bg);
+            color: var(--badge-color);
+            font-size: 0.8rem;
+        }
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .frame {
+            background: var(--frame-bg);
+            border: 1px solid var(--frame-border);
+            border-radius: 18px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        }
+        .frame-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .frame-header h3 {
+            margin: 0;
+        }
+        .split-frame {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 1rem;
+        }
+        .pane {
+            background: var(--frame-bg);
+            border: 1px solid var(--frame-border);
+            border-radius: 12px;
+            padding: 1rem;
+            height: 100%;
+            overflow: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table thead {
+            background: var(--table-header-bg);
+        }
+        table th, table td {
+            padding: 0.55rem 0.6rem;
+            border-bottom: 1px solid #e2e6f3;
+        }
+        .status-pill {
+            border-radius: 999px;
+            padding: 0.2rem 0.7rem;
+            font-size: 0.85rem;
+            text-transform: capitalize;
+        }
+        .status-pill.success { background: rgba(18, 164, 90, .15); color: #12a45a; }
+        .status-pill.error { background: rgba(214, 63, 63, .15); color: #d63f3f; }
+        .status-pill.running { background: rgba(255, 187, 68, .2); color: #b36b00; }
+        .alert {
+            background: rgba(255, 105, 97, 0.12);
+            border-left: 4px solid #ff6961;
+            padding: 0.8rem;
+            margin-top: 1rem;
+            border-radius: 8px;
+        }
+        .events-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 0.75rem;
+        }
+        .event-card {
+            border: 1px solid var(--frame-border);
+            border-radius: 16px;
+            padding: 0.8rem;
+            background: var(--frame-bg);
+        }
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+        .table-card {
+            border-radius: 14px;
+            background: linear-gradient(145deg, rgba(33,37,52,0.95), rgba(20,22,35,0.92));
+            color: #f5f7ff;
+            box-shadow: 0 20px 35px rgba(10, 12, 22, 0.45);
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        :root[data-theme="light"] .table-card {
+            background: linear-gradient(145deg, #2d3350, #242940);
+        }
+        .table-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 30px 60px rgba(10, 12, 22, 0.65);
+        }
+        .table-card .card-header {
+            padding: 0.9rem 1rem;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            opacity: 0.85;
+        }
+        .table-card .card-body {
+            padding: 1rem;
+        }
+        .table-card .card-title {
+            font-size: 1.15rem;
+            margin-bottom: 0.4rem;
+        }
+        .table-card .card-text {
+            font-size: 0.92rem;
+            opacity: 0.85;
+        }
+        .text-muted {
+            color: rgba(143, 149, 175, 0.9);
+            font-size: 0.85rem;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .metrics-grid article {
+            border: 1px solid var(--frame-border);
+            border-radius: 12px;
+            padding: 0.6rem 0.8rem;
+            background: var(--frame-bg);
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <ul>
+        <li><strong>ML Monitoring</strong></li>
+    </ul>
+    <ul>
+        <li><a href="/">Воркеры</a></li>
+        <li><a href="/db">База данных</a></li>
+        <li><a href="/requests">Запросы</a></li>
+        <li><a href="/models">Модели</a></li>
+        <li><button id="theme-toggle" aria-label="Toggle theme">🌓</button></li>
+    </ul>
+</nav>
+<main>
+    {% block content %}{% endblock %}
+</main>
+<script>
+    const root = document.documentElement;
+    const toggleBtn = document.getElementById('theme-toggle');
+    const storedTheme = localStorage.getItem('ml-theme');
+    if (storedTheme) {
+        root.setAttribute('data-theme', storedTheme);
+    }
+    toggleBtn?.addEventListener('click', () => {
+        const current = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', current);
+        localStorage.setItem('ml-theme', current);
+    });
+</script>
+</body>
+</html>
+

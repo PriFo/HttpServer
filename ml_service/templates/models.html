@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="frame">
+    <div class="frame-header">
+        <h3>Модели</h3>
+        {% if envelope.current %}
+            <span class="badge">{{ envelope.current.model_version }}</span>
+        {% endif %}
+    </div>
+    {% if envelope.current %}
+        <div class="grid">
+            <article>
+                <h4>Дата обучения</h4>
+                <p>{{ envelope.current.created_at }}</p>
+            </article>
+            <article>
+                <h4>Accuracy</h4>
+                <p>{{ envelope.current.metrics.accuracy }}</p>
+            </article>
+            <article>
+                <h4>F1 macro</h4>
+                <p>{{ envelope.current.metrics.f1_macro }}</p>
+            </article>
+            <article>
+                <h4>Confidence</h4>
+                <p>{{ envelope.current.metrics.avg_confidence }}</p>
+            </article>
+        </div>
+    {% else %}
+        <p>Модель еще не обучена.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>График метрик</h3>
+    </div>
+    <div id="model-chart" style="height: 360px;"></div>
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>История версий</h3>
+    </div>
+    <div class="pane">
+        <div class="data-table">
+            <table>
+                <thead>
+                <tr>
+                    <th>Версия</th>
+                    <th>Дата</th>
+                    <th>Accuracy</th>
+                    <th>F1</th>
+                    <th>Confidence</th>
+                    <th>Данных</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for record in history %}
+                    <tr>
+                        <td>{{ record.model_version }}</td>
+                        <td>{{ record.created_at }}</td>
+                        <td>{{ record.metrics.accuracy }}</td>
+                        <td>{{ record.metrics.f1_macro }}</td>
+                        <td>{{ record.metrics.avg_confidence }}</td>
+                        <td>{{ record.data_volume }}</td>
+                    </tr>
+                {% endfor %}
+                {% if not history %}
+                    <tr><td colspan="6">История пуста.</td></tr>
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    const modelChart = {{ chart|tojson }};
+    if (modelChart && modelChart.data) {
+        Plotly.newPlot('model-chart', modelChart.data, modelChart.layout, {responsive: true});
+    }
+</script>
+
+{% endblock %}
+

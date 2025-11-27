@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="frame">
+    <div class="frame-header">
+<h3>Главная</h3>
+        <span class="badge">Обновлено {{ snapshot.get("created_at", "—") }}</span>
+    </div>
+    <div class="grid">
+        <article>
+            <h4>Активные</h4>
+            <p><strong>{{ snapshot.get("active_workers", 0) }}</strong></p>
+        </article>
+        <article>
+            <h4>Очередь</h4>
+            <p><strong>{{ snapshot.get("queued_tasks", 0) }}</strong></p>
+        </article>
+        <article>
+            <h4>Завершено</h4>
+            <p><strong>{{ snapshot.get("completed_tasks", 0) }}</strong></p>
+        </article>
+        <article>
+            <h4>Ошибок</h4>
+            <p><strong>{{ snapshot.get("error_tasks", 0) }}</strong></p>
+        </article>
+        <article>
+            <h4>CPU</h4>
+            <p>{{ snapshot.get("cpu_usage", 0) }}%</p>
+        </article>
+        <article>
+            <h4>RAM</h4>
+            <p>{{ snapshot.get("ram_usage", 0) }}%</p>
+        </article>
+    </div>
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h4>Лента событий</h4>
+    </div>
+    {% if recent_events %}
+    <div class="events-grid">
+        {% for event in recent_events %}
+            <div class="event-card">
+                <small>{{ event.created_at }}</small>
+                <h5>{{ event.source }} · {{ event.level|upper }}</h5>
+                <p>{{ event.message }}</p>
+            </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        <p>Ошибок не зафиксировано.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h4>Последние ошибочные запросы</h4>
+    </div>
+    {% if errored_requests %}
+    <div class="pane">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Тип</th>
+                <th>Статус</th>
+                <th>Ошибка</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for item in errored_requests %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.kind }}</td>
+                    <td><span class="status-pill error">{{ item.status }}</span></td>
+                    <td>{{ item.error or "—" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Все запросы выполнились успешно.</p>
+    {% endif %}
+</div>
+
+<script>
+    const chartData = {{ chart|tojson }};
+    if (chartData && chartData.data) {
+        Plotly.newPlot('requests-chart', chartData.data, chartData.layout, {responsive: true});
+    }
+</script>
+
+{% endblock %}
+

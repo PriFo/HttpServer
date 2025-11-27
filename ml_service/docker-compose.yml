@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  ml-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ml_service:latest
+    container_name: ml-service
+    environment:
+      - ML_API_HOST=0.0.0.0
+      - ML_API_PORT=8085
+      - ML_ARTIFACTS_ROOT=/app/ml_service/ml_artifacts
+    ports:
+      - "8085:8085"
+      - "6565:6565"
+    volumes:
+      - ./ml_artifacts:/app/ml_service/ml_artifacts
+      - ./data:/app/ml_service/data
+      - ./ml_store.db:/app/ml_service/ml_store.db
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 8G
+        reservations:
+          cpus: "2.0"
+          memory: 8G
+

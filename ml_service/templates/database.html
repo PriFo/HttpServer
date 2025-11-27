@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="frame">
+    <div class="frame-header">
+        <h3>Статистика базы данных</h3>
+        <span class="badge">Таблиц: {{ summary.tables }}</span>
+    </div>
+    <div class="grid">
+        <article>
+            <h4>Размер</h4>
+            <p>{{ summary.size_mb }} MB</p>
+        </article>
+        <article>
+            <h4>Последнее обновление</h4>
+            <p>{{ summary.last_updated or "—" }}</p>
+        </article>
+    </div>
+</div>
+
+<div class="split-frame">
+    <div class="pane">
+        <h4>Таблицы</h4>
+        <div class="card-grid">
+            {% for item in summary.tables_detail %}
+            <a class="table-card" href="/db?table={{ item.name }}">
+                <div class="card-header">{{ item.name }}</div>
+                <div class="card-body">
+                    <h5 class="card-title">Столбцов: {{ item.column_count or "—" }}</h5>
+                    <p class="card-text">
+                        <span class="text-muted">Записей</span><br>
+                        <strong>{{ item.count }}</strong>
+                    </p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="pane data-view">
+        <h4>Просмотр данных {% if selected_table %}«{{ selected_table }}»{% endif %}</h4>
+        {% if table_preview %}
+            {% if table_preview.error %}
+                <div class="alert">{{ table_preview.error }}</div>
+            {% elif table_preview.rows %}
+                <div class="data-table">
+                    <table>
+                        <thead>
+                        <tr>
+                            {% for column in table_preview.columns %}
+                                <th>{{ column }}</th>
+                            {% endfor %}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in table_preview.rows %}
+                            <tr>
+                                {% for column in table_preview.columns %}
+                                    <td>{{ row[column] }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>В таблице нет данных.</p>
+            {% endif %}
+        {% else %}
+            <p>Выберите таблицу слева, чтобы увидеть содержимое.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
