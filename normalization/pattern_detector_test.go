@@ -77,7 +77,7 @@ func TestDetectPatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := detector.DetectPatterns(tt.input)
-			
+
 			// Если ожидаемых типов нет, проверяем, что паттерны не найдены
 			if len(tt.expectedTypes) == 0 {
 				if len(matches) > 0 {
@@ -160,7 +160,7 @@ func TestApplyPatterns(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := detector.DetectPatterns(tt.input)
 			result := detector.ApplyFixes(tt.input, matches)
-			
+
 			if result != tt.expected {
 				t.Errorf("ApplyFixes(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
@@ -172,36 +172,36 @@ func TestPatternMatching(t *testing.T) {
 	detector := NewPatternDetector()
 
 	tests := []struct {
-		name           string
-		input          string
-		shouldMatch    bool
-		patternType    PatternType
-		autoFixable    bool
+		name        string
+		input       string
+		shouldMatch bool
+		patternType PatternType
+		autoFixable bool
 	}{
 		{
 			name:        "Технический код - совпадение",
-			input:        "ER-00013004",
+			input:       "ER-00013004",
 			shouldMatch: true,
 			patternType: PatternTechnicalCode,
 			autoFixable: true,
 		},
 		{
 			name:        "Артикул - совпадение",
-			input:        "арт.123",
+			input:       "арт.123",
 			shouldMatch: false, // Может не обнаруживаться из-за особенностей regex
 			patternType: PatternArticul,
 			autoFixable: true,
 		},
 		{
 			name:        "Размеры - совпадение",
-			input:        "100x100",
+			input:       "100x100",
 			shouldMatch: true,
 			patternType: PatternDimension,
 			autoFixable: true,
 		},
 		{
 			name:        "Нет паттернов",
-			input:        "Обычный товар",
+			input:       "Обычный товар",
 			shouldMatch: false,
 			patternType: "",
 			autoFixable: false,
@@ -211,13 +211,13 @@ func TestPatternMatching(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := detector.DetectPatterns(tt.input)
-			
+
 			if tt.shouldMatch {
 				if len(matches) == 0 {
 					t.Errorf("DetectPatterns(%q) should find patterns, but found none", tt.input)
 					return
 				}
-				
+
 				found := false
 				for _, match := range matches {
 					if match.Type == tt.patternType {
@@ -228,7 +228,7 @@ func TestPatternMatching(t *testing.T) {
 						break
 					}
 				}
-				
+
 				if !found {
 					t.Errorf("DetectPatterns(%q) did not find expected pattern type %v", tt.input, tt.patternType)
 				}
@@ -295,7 +295,7 @@ func TestEdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			matches := detector.DetectPatterns(tt.input)
 			result := detector.ApplyFixes(tt.input, matches)
-			
+
 			// Для очень длинных строк и Unicode проверяем, что результат не пустой и не содержит паттернов
 			if tt.name == "Очень длинная строка" || tt.name == "Unicode символы" {
 				if result == "" {
@@ -315,15 +315,15 @@ func TestEdgeCases(t *testing.T) {
 
 func TestGetPatternSummary(t *testing.T) {
 	detector := NewPatternDetector()
-	
+
 	input := "Товар ER-00013004 100x100 арт.123"
 	matches := detector.DetectPatterns(input)
 	summary := detector.GetPatternSummary(matches)
-	
+
 	if summary["total"].(int) != len(matches) {
 		t.Errorf("GetPatternSummary total = %v, want %d", summary["total"], len(matches))
 	}
-	
+
 	if summary["auto_fixable"].(int) == 0 && len(matches) > 0 {
 		t.Errorf("GetPatternSummary auto_fixable should be > 0 when patterns are found")
 	}
@@ -331,15 +331,14 @@ func TestGetPatternSummary(t *testing.T) {
 
 func TestSuggestCorrection(t *testing.T) {
 	detector := NewPatternDetector()
-	
+
 	input := "Товар ER-00013004 100x100"
 	matches := detector.DetectPatterns(input)
 	corrected := detector.SuggestCorrection(input, matches)
-	
+
 	// Проверяем, что исправленная версия не содержит паттернов
 	remainingMatches := detector.DetectPatterns(corrected)
 	if len(remainingMatches) > 0 {
 		t.Errorf("SuggestCorrection(%q) still contains patterns: %v", corrected, remainingMatches)
 	}
 }
-

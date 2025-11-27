@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -99,17 +100,80 @@ func NewAIClient(apiKey, model string) *AIClient {
 		timeout:          30 * time.Second,
 	}
 
+	// Оптимизированный HTTP Transport с таймаутами на установку соединения
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,  // Таймаут на установку TCP соединения
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second, // Таймаут на получение заголовков ответа
+		TLSHandshakeTimeout:  5 * time.Second,
+		DisableKeepAlives:    false,
+		DisableCompression:   false,
+	}
+
 	return &AIClient{
 		apiKey:  apiKey,
 		baseURL: "https://api.arliai.com/v1/chat/completions",
 		model:   model,
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second, // Увеличиваем таймаут для больших классификаторов
+			Timeout:   15 * time.Second, // Общий таймаут для запроса
+			Transport: transport,
 		},
 		rateLimiter:    limiter,
 		circuitBreaker: breaker,
 	}
 }
+
+
+// NewAIClientWithBaseURL создает новый клиент с указанным baseURL
+func NewAIClientWithBaseURL(apiKey, model, baseURL string) *AIClient {
+	// Rate limiter: 60 запросов в минуту (1 запрос/сек) с burst=5
+	// Это защищает от превышения квот API и неконтролируемых расходов
+	limiter := rate.NewLimiter(rate.Every(time.Second), 5)
+
+	// Circuit Breaker: защита от каскадных сбоев
+	// - 5 ошибок подряд -> открываем breaker (блокируем запросы)
+	// - Ждем 30 секунд перед попыткой восстановления
+	// - 2 успешных запроса -> закрываем breaker (нормальная работа)
+	breaker := &CircuitBreaker{
+		state:            StateClosed,
+		failureThreshold: 5,
+		successThreshold: 2,
+		timeout:          30 * time.Second,
+	}
+
+	// Оптимизированный HTTP Transport с таймаутами на установку соединения
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,  // Таймаут на установку TCP соединения
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second, // Таймаут на получение заголовков ответа
+		TLSHandshakeTimeout:  5 * time.Second,
+		DisableKeepAlives:    false,
+		DisableCompression:   false,
+	}
+
+	return &AIClient{
+		apiKey:  apiKey,
+		baseURL: baseURL,
+		model:   model,
+		httpClient: &http.Client{
+			Timeout:   15 * time.Second, // Общий таймаут для запроса
+			Transport: transport,
+		},
+		rateLimiter:    limiter,
+		circuitBreaker: breaker,
+	}
+}
+
 
 // ProcessProduct отправляет запрос к API для обработки товара
 func (c *AIClient) ProcessProduct(productName, systemPrompt string) (*AIProcessingResult, error) {
@@ -172,7 +236,22 @@ func (c *AIClient) ProcessProduct(productName, systemPrompt string) (*AIProcessi
 
 	if resp.StatusCode != http.StatusOK {
 		c.circuitBreaker.recordFailure()
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		
+		// Детальная обработка различных HTTP статусов
+		var errorMsg string
+		if resp.StatusCode == http.StatusTooManyRequests {
+			errorMsg = fmt.Sprintf("rate limit exceeded (429): %s", string(body))
+		} else if resp.StatusCode == http.StatusUnauthorized {
+			errorMsg = fmt.Sprintf("unauthorized (401): invalid API key - %s", string(body))
+		} else if resp.StatusCode == http.StatusForbidden {
+			errorMsg = fmt.Sprintf("forbidden (403): API key may not have required permissions - %s", string(body))
+		} else if resp.StatusCode >= 500 {
+			errorMsg = fmt.Sprintf("server error (%d): %s", resp.StatusCode, string(body))
+		} else {
+			errorMsg = fmt.Sprintf("client error (%d): %s", resp.StatusCode, string(body))
+		}
+		
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, errorMsg)
 	}
 
 	var aiResp AIResponse
@@ -183,7 +262,20 @@ func (c *AIClient) ProcessProduct(productName, systemPrompt string) (*AIProcessi
 
 	if aiResp.Error != nil {
 		c.circuitBreaker.recordFailure()
-		return nil, fmt.Errorf("API error: %s (type: %s)", aiResp.Error.Message, aiResp.Error.Type)
+		
+		// Проверяем тип ошибки для лучшей классификации
+		errorType := aiResp.Error.Type
+		errorMsg := aiResp.Error.Message
+		
+		// Проверяем на quota/rate limit ошибки в сообщении
+		if strings.Contains(strings.ToLower(errorMsg), "quota") || 
+		   strings.Contains(strings.ToLower(errorMsg), "rate limit") ||
+		   strings.Contains(strings.ToLower(errorType), "quota") ||
+		   strings.Contains(strings.ToLower(errorType), "rate_limit") {
+			return nil, fmt.Errorf("quota/rate limit error: %s (type: %s)", errorMsg, errorType)
+		}
+		
+		return nil, fmt.Errorf("API error: %s (type: %s)", errorMsg, errorType)
 	}
 
 	if len(aiResp.Choices) == 0 {
@@ -249,10 +341,22 @@ func (c *AIClient) cleanJSONResponse(content string) string {
 
 // GetCompletion универсальный метод для получения ответа от AI
 // Возвращает очищенный JSON ответ для дальнейшей обработки
+// Использует context.Background() для обратной совместимости
 func (c *AIClient) GetCompletion(systemPrompt, userPrompt string) (string, error) {
+	return c.GetCompletionWithContext(context.Background(), systemPrompt, userPrompt)
+}
+
+// GetCompletionWithContext универсальный метод для получения ответа от AI с поддержкой контекста
+// Возвращает очищенный JSON ответ для дальнейшей обработки
+func (c *AIClient) GetCompletionWithContext(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	// Проверяем Circuit Breaker перед запросом
 	if !c.circuitBreaker.canProceed() {
 		return "", fmt.Errorf("circuit breaker is open (state: %s), API calls are temporarily blocked", c.circuitBreaker.getState())
+	}
+
+	// Проверяем, не отменен ли контекст
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("context cancelled: %v", ctx.Err())
 	}
 
 	messages := []Message{
@@ -279,7 +383,16 @@ func (c *AIClient) GetCompletion(systemPrompt, userPrompt string) (string, error
 		return "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", c.baseURL, bytes.NewBuffer(jsonData))
+	// Создаем контекст с таймаутом, объединяя с переданным контекстом
+	// Используем меньший таймаут, если переданный контекст уже имеет таймаут
+	requestCtx := ctx
+	if _, hasTimeout := ctx.Deadline(); !hasTimeout {
+		var cancel context.CancelFunc
+		requestCtx, cancel = context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+	}
+
+	req, err := http.NewRequestWithContext(requestCtx, "POST", c.baseURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
@@ -288,17 +401,42 @@ func (c *AIClient) GetCompletion(systemPrompt, userPrompt string) (string, error
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	// Применяем rate limiting перед запросом
-	ctx := context.Background()
-	if err := c.rateLimiter.Wait(ctx); err != nil {
+	if err := c.rateLimiter.Wait(requestCtx); err != nil {
+		if requestCtx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("rate limiter timeout: %v", err)
+		}
+		if requestCtx.Err() == context.Canceled {
+			return "", fmt.Errorf("rate limiter cancelled: %v", err)
+		}
 		return "", fmt.Errorf("rate limiter error: %v", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.circuitBreaker.recordFailure()
+		// Проверяем, не истек ли таймаут контекста
+		if requestCtx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("API request timeout: %v", err)
+		}
+		if requestCtx.Err() == context.Canceled {
+			return "", fmt.Errorf("API request cancelled: %v", err)
+		}
+		// Проверяем ошибки подключения (безопасно, err не nil здесь)
+		errStr := err.Error()
+		if strings.Contains(errStr, "connection refused") || 
+		   strings.Contains(errStr, "no such host") ||
+		   strings.Contains(errStr, "ECONNREFUSED") {
+			return "", fmt.Errorf("API unavailable (connection refused): %v", err)
+		}
 		return "", fmt.Errorf("API request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	
+	// Гарантируем закрытие body даже при панике
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -308,7 +446,22 @@ func (c *AIClient) GetCompletion(systemPrompt, userPrompt string) (string, error
 
 	if resp.StatusCode != http.StatusOK {
 		c.circuitBreaker.recordFailure()
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		
+		// Детальная обработка различных HTTP статусов
+		var errorMsg string
+		if resp.StatusCode == http.StatusTooManyRequests {
+			errorMsg = fmt.Sprintf("rate limit exceeded (429): %s", string(body))
+		} else if resp.StatusCode == http.StatusUnauthorized {
+			errorMsg = fmt.Sprintf("unauthorized (401): invalid API key - %s", string(body))
+		} else if resp.StatusCode == http.StatusForbidden {
+			errorMsg = fmt.Sprintf("forbidden (403): API key may not have required permissions - %s", string(body))
+		} else if resp.StatusCode >= 500 {
+			errorMsg = fmt.Sprintf("server error (%d): %s", resp.StatusCode, string(body))
+		} else {
+			errorMsg = fmt.Sprintf("client error (%d): %s", resp.StatusCode, string(body))
+		}
+		
+		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, errorMsg)
 	}
 
 	var aiResp AIResponse
@@ -319,7 +472,20 @@ func (c *AIClient) GetCompletion(systemPrompt, userPrompt string) (string, error
 
 	if aiResp.Error != nil {
 		c.circuitBreaker.recordFailure()
-		return "", fmt.Errorf("API error: %s (type: %s)", aiResp.Error.Message, aiResp.Error.Type)
+		
+		// Проверяем тип ошибки для лучшей классификации
+		errorType := aiResp.Error.Type
+		errorMsg := aiResp.Error.Message
+		
+		// Проверяем на quota/rate limit ошибки в сообщении
+		if strings.Contains(strings.ToLower(errorMsg), "quota") || 
+		   strings.Contains(strings.ToLower(errorMsg), "rate limit") ||
+		   strings.Contains(strings.ToLower(errorType), "quota") ||
+		   strings.Contains(strings.ToLower(errorType), "rate_limit") {
+			return "", fmt.Errorf("quota/rate limit error: %s (type: %s)", errorMsg, errorType)
+		}
+		
+		return "", fmt.Errorf("API error: %s (type: %s)", errorMsg, errorType)
 	}
 
 	if len(aiResp.Choices) == 0 {
@@ -484,4 +650,37 @@ func (c *AIClient) GetCircuitBreakerState() map[string]interface{} {
 		"last_failure_time": lastFailureTime,
 	}
 }
+
+// WaitForCircuitBreakerRecovery ждет, пока circuit breaker восстановится (перейдет в half-open или closed)
+// Возвращает true если circuit breaker готов к работе, false если произошла ошибка или таймаут
+func (c *AIClient) WaitForCircuitBreakerRecovery(maxWaitTime time.Duration) bool {
+	if c.circuitBreaker == nil {
+		return true // Если circuit breaker не инициализирован, считаем что все готово
+	}
+
+	startTime := time.Now()
+	ticker := time.NewTicker(100 * time.Millisecond) // Проверяем каждые 100мс
+	defer ticker.Stop()
+
+	for {
+		// Проверяем, можно ли выполнить запрос
+		if c.circuitBreaker.canProceed() {
+			return true
+		}
+
+		// Проверяем таймаут
+		if time.Since(startTime) >= maxWaitTime {
+			return false
+		}
+
+		// Ждем следующей проверки
+		select {
+		case <-ticker.C:
+			continue
+		case <-time.After(maxWaitTime - time.Since(startTime)):
+			return false
+		}
+	}
+}
+
 

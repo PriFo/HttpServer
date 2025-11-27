@@ -1,0 +1,21 @@
+=== ╨Я╨а╨Ю╨Т╨Х╨а╨Ъ╨Р ╨б╨Ю╨Ф╨Х╨а╨Ц╨Ш╨Ь╨Ю╨У╨Ю service.db ===
+
+2025/11/26 00:43:21 Running migration: creating normalization_sessions table...
+2025/11/26 00:43:21 Normalization sessions migration completed: table and 6 indexes created
+1. ╨Ъ╨Ы╨Ш╨Х╨Э╨в╨л:
+   - ID: 1, Name: AITAS KZ
+   - ID: 2, Name: Darkside
+   - ID: 3, Name: ╨б╨╕╤Б╤В╨╡╨╝╨░
+   ╨Т╤Б╨╡╨│╨╛: 3
+
+2. ╨Я╨а╨Ю╨Х╨Ъ╨в╨л:
+   - ID: 1, Name: AITAS-MDM-2025-001, Client ID: 1
+   - ID: 2, Name: MDM-2025-001, Client ID: 2
+   - ID: 3, Name: ╨У╨╗╨╛╨▒╨░╨╗╤М╨╜╤Л╨╡ ╤Н╤В╨░╨╗╨╛╨╜╤Л, Client ID: 3
+   ╨Т╤Б╨╡╨│╨╛: 3
+
+3. ╨С╨Р╨Ч╨л ╨Ф╨Р╨Э╨Э╨л╨е:
+   ╨Т╤Б╨╡╨│╨╛: 0
+
+4. ╨Ь╨Х╨в╨Р╨Ф╨Р╨Э╨Э╨л╨Х:
+   ╨Т╤Б╨╡╨│╨╛: 0

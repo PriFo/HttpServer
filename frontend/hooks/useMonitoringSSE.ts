@@ -43,10 +43,13 @@ export function useMonitoringSSE(enabled: boolean = true) {
         eventSourceRef.current = eventSource
 
         eventSource.onopen = () => {
-          console.log('[SSE] Connected to monitoring events')
-          setConnected(true)
-          setError(null)
-          reconnectAttemptsRef.current = 0
+          try {
+            setConnected(true)
+            setError(null)
+            reconnectAttemptsRef.current = 0
+          } catch {
+            // Игнорируем ошибки установки состояния
+          }
         }
 
         eventSource.onmessage = (event) => {
@@ -54,39 +57,61 @@ export function useMonitoringSSE(enabled: boolean = true) {
             const data = JSON.parse(event.data)
 
             if (data.type === 'connected') {
-              console.log('[SSE] Connection confirmed:', data.message)
+              // Игнорируем сообщение о подключении
             } else if (data.type === 'metrics') {
-              setMetrics(data)
+              try {
+                setMetrics(data)
+              } catch {
+                // Игнорируем ошибки установки метрик
+              }
             }
           } catch (err) {
-            console.error('[SSE] Error parsing message:', err)
+            // Безопасная обработка ошибок парсинга
+            try {
+              setError('Ошибка обработки данных мониторинга')
+            } catch {
+              // Игнорируем ошибки установки состояния
+            }
           }
         }
 
         eventSource.onerror = (err) => {
-          console.error('[SSE] Connection error:', err)
-          setConnected(false)
-          eventSource.close()
-          eventSourceRef.current = null
+          // Проверяем состояние соединения перед логированием ошибки
+          if (eventSource.readyState === EventSource.CLOSED) {
+            // Соединение закрыто - это нормально при переподключении
+            setConnected(false)
+            eventSource.close()
+            eventSourceRef.current = null
 
-          // Reconnect with exponential backoff
-          reconnectAttemptsRef.current += 1
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000)
+            // Reconnect with exponential backoff
+            reconnectAttemptsRef.current += 1
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000)
 
-          if (reconnectAttemptsRef.current <= 5) {
-            console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`)
-            setError(`Connection lost. Reconnecting in ${(delay / 1000).toFixed(0)}s...`)
+            if (reconnectAttemptsRef.current <= 5) {
+              try {
+                setError(`Соединение потеряно. Переподключение через ${(delay / 1000).toFixed(0)}с...`)
+              } catch {
+                // Игнорируем ошибки установки состояния
+              }
 
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect()
-            }, delay)
-          } else {
-            setError('Connection failed after multiple attempts')
+              reconnectTimeoutRef.current = setTimeout(() => {
+                connect()
+              }, delay)
+            } else {
+              try {
+                setError('Не удалось подключиться после нескольких попыток')
+              } catch {
+                // Игнорируем ошибки установки состояния
+              }
+            }
           }
         }
       } catch (err) {
-        console.error('[SSE] Error creating EventSource:', err)
-        setError('Failed to establish connection')
+        try {
+          setError('Не удалось установить соединение')
+        } catch {
+          // Игнорируем ошибки установки состояния
+        }
       }
     }
 

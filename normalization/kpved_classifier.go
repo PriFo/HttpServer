@@ -241,9 +241,9 @@ func (k *KpvedClassifier) SearchKpvedByName(searchTerm string, limit int) ([]map
 		}
 
 		result := map[string]interface{}{
-			"code":   code,
-			"name":   name,
-			"level":  level,
+			"code":  code,
+			"name":  name,
+			"level": level,
 		}
 
 		if parentCode.Valid {

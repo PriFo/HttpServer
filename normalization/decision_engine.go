@@ -182,9 +182,9 @@ func (d *DecisionEngine) collectCandidates(
 func (d *DecisionEngine) getSourcePriority(source string, confidence float64) float64 {
 	// Базовые приоритеты источников
 	basePriority := map[string]float64{
-		"stage7": 1.0,  // AI Hierarchical - наиболее надежный при высокой уверенности
-		"stage6": 0.9,  // Keyword - быстрый и точный при высокой уверенности
-		"stage8": 0.5,  // Fallback - резервный вариант
+		"stage7": 1.0, // AI Hierarchical - наиболее надежный при высокой уверенности
+		"stage6": 0.9, // Keyword - быстрый и точный при высокой уверенности
+		"stage8": 0.5, // Fallback - резервный вариант
 	}
 
 	priority, exists := basePriority[source]
@@ -252,7 +252,7 @@ func (d *DecisionEngine) checkTypeCompatibility(code string, expectedType string
 		"55": true, "56": true, // Услуги жилья и питания
 		"58": true, "59": true, "60": true, "61": true, "62": true, "63": true, // Информация
 		"64": true, "65": true, "66": true, // Финансовые услуги
-		"68": true, // Недвижимость
+		"68": true,                                                                         // Недвижимость
 		"69": true, "70": true, "71": true, "72": true, "73": true, "74": true, "75": true, // Проф. услуги
 		"77": true, "78": true, "79": true, "80": true, "81": true, "82": true, // Административные
 		"84": true, "85": true, "86": true, "87": true, "88": true, // Госуслуги, образование, здравоохранение
@@ -358,13 +358,13 @@ func (d *DecisionEngine) DecideBatch(
 // GetStatistics возвращает статистику по принятым решениям
 func (d *DecisionEngine) GetStatistics(decisions []*FinalDecision) map[string]interface{} {
 	stats := map[string]interface{}{
-		"total":                len(decisions),
-		"by_method":            make(map[string]int),
-		"by_reason":            make(map[string]int),
-		"validation_passed":    0,
-		"manual_review":        0,
-		"avg_confidence":       0.0,
-		"type_corrected":       0,
+		"total":             len(decisions),
+		"by_method":         make(map[string]int),
+		"by_reason":         make(map[string]int),
+		"validation_passed": 0,
+		"manual_review":     0,
+		"avg_confidence":    0.0,
+		"type_corrected":    0,
 	}
 
 	if len(decisions) == 0 {

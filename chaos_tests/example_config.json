@@ -1,0 +1,31 @@
+{
+  "base_url": "http://localhost:9999",
+  "reports_dir": "./reports",
+  "logs_dir": "./logs",
+  "tests": {
+    "concurrent_config": {
+      "num_requests": 10,
+      "quick_mode_requests": 5
+    },
+    "stress": {
+      "num_requests": 100,
+      "concurrency": 10
+    },
+    "monitor": {
+      "duration": 60,
+      "interval": 5
+    }
+  },
+  "timeouts": {
+    "http": 30,
+    "server_wait": 60,
+    "retry_delay": 1,
+    "max_retries": 3
+  },
+  "server": {
+    "auto_start": false,
+    "api_key": "",
+    "executable_path": ""
+  }
+}
+

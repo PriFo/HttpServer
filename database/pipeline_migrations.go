@@ -159,6 +159,6 @@ func CopyFrom1C(targetDB, sourceDB *sql.DB, sourceTable string) error {
 		return err
 	}
 
-	log.Printf("Copied data from %s.%s to processing_items", sourceDB, sourceTable)
+	log.Printf("Copied data from %v.%s to processing_items", sourceDB, sourceTable)
 	return nil
 }

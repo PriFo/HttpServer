@@ -35,9 +35,9 @@ export function useKPVEDTree() {
   const [nodePath, setNodePath] = useState<string[]>([])
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
-  const loadRootHierarchy = useCallback(async (database: string) => {
+  const loadRootHierarchy = useCallback(async () => {
     try {
-      const response = await fetch(`/api/kpved/hierarchy?database=${database}`)
+      const response = await fetch(`/api/kpved/hierarchy`)
       if (!response.ok) throw new Error('Failed to load hierarchy')
 
       const data = await response.json()
@@ -49,12 +49,12 @@ export function useKPVEDTree() {
     }
   }, [])
 
-  const loadChildNodes = useCallback(async (database: string, parentCode: string) => {
+  const loadChildNodes = useCallback(async (parentCode: string) => {
     setLoadingNodes((prev) => new Set(prev).add(parentCode))
 
     try {
       const response = await fetch(
-        `/api/kpved/hierarchy?database=${database}&parent_code=${parentCode}`
+        `/api/kpved/hierarchy?parent=${parentCode}`
       )
       if (!response.ok) throw new Error('Failed to load child nodes')
 
@@ -91,7 +91,7 @@ export function useKPVEDTree() {
   }, [])
 
   const toggleNode = useCallback(
-    async (code: string, database: string) => {
+    async (code: string) => {
       const isExpanded = expandedNodes.has(code)
 
       if (isExpanded) {
@@ -119,14 +119,14 @@ export function useKPVEDTree() {
 
         const node = findNode(hierarchy)
         if (node && !node.children && node.has_children) {
-          await loadChildNodes(database, code)
+          await loadChildNodes(code)
         }
       }
     },
     [expandedNodes, hierarchy, loadChildNodes]
   )
 
-  const searchKPVED = useCallback(async (database: string, query: string) => {
+  const searchKPVED = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([])
       setShowSearchResults(false)
@@ -135,12 +135,12 @@ export function useKPVEDTree() {
 
     try {
       const response = await fetch(
-        `/api/kpved/search?database=${database}&query=${encodeURIComponent(query)}`
+        `/api/kpved/search?q=${encodeURIComponent(query)}`
       )
       if (!response.ok) throw new Error('Search failed')
 
       const data = await response.json()
-      setSearchResults(data.results || [])
+      setSearchResults(data.results || data || [])
       setShowSearchResults(true)
     } catch (error) {
       console.error('Error searching KPVED:', error)
@@ -149,13 +149,16 @@ export function useKPVEDTree() {
     }
   }, [])
 
-  const loadStats = useCallback(async (database: string) => {
+  const loadStats = useCallback(async () => {
     try {
-      const response = await fetch(`/api/kpved/stats?database=${database}`)
+      const response = await fetch(`/api/kpved/stats`)
       if (!response.ok) throw new Error('Failed to load stats')
 
       const data = await response.json()
-      setStats(data)
+      setStats({
+        total: data.total_codes || data.total || 0,
+        levels: data.max_level || data.levels || 0,
+      })
     } catch (error) {
       console.error('Error loading stats:', error)
     }

@@ -1,8 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Breadcrumb } from "@/components/ui/breadcrumb"
+import { BreadcrumbList } from "@/components/seo/breadcrumb-list"
+import { motion } from "framer-motion"
+import { FadeIn } from "@/components/animations/fade-in"
+import { toast } from 'sonner'
+import { useApiClient } from '@/hooks/useApiClient'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   ArrowLeft,
   Play,
@@ -33,6 +41,36 @@ interface NormalizationStats {
   ai_enhanced: number
   basic_normalized: number
   is_running: boolean
+  // Поля для нормализации контрагентов
+  processed?: number
+  total?: number
+  progress?: number
+  currentStep?: string
+  current_step?: string // Поддержка snake_case из бэкенда
+  sessions?: Array<{
+    id: number
+    project_database_id: number
+    database_name: string
+    status: string
+    created_at: string
+    finished_at?: string
+  }>
+  databases?: Array<{
+    id: number
+    name: string
+    file_path: string
+    is_active: boolean
+  }>
+  active_sessions_count?: number
+  total_databases_count?: number
+  // Поля для номенклатуры (КПВЭД)
+  kpvedClassified?: number
+  kpvedTotal?: number
+  kpvedProgress?: number
+  // Поддержка snake_case из бэкенда
+  kpved_classified?: number
+  kpved_total?: number
+  kpved_progress?: number
 }
 
 interface ProjectDatabase {
@@ -47,8 +85,18 @@ interface ProjectDatabase {
   updated_at: string
 }
 
+interface Project {
+  project: {
+    id: number
+    name: string
+    project_type: string
+  }
+}
+
 export default function ClientNormalizationPage() {
   const params = useParams()
+  const router = useRouter()
+  const { get, post } = useApiClient()
   const clientId = params.clientId
   const projectId = params.projectId
   const [stats, setStats] = useState<NormalizationStats | null>(null)
@@ -56,108 +104,201 @@ export default function ClientNormalizationPage() {
   const [selectedDatabaseId, setSelectedDatabaseId] = useState('')
   const [databases, setDatabases] = useState<ProjectDatabase[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [processingMode, setProcessingMode] = useState<'single' | 'all'>('single')
+  const [useKpved, setUseKpved] = useState(false)
+  const [project, setProject] = useState<Project | null>(null)
+  const [isLoadingProject, setIsLoadingProject] = useState(true)
+  
+  // Определяем, является ли проект проектом контрагентов
+  const isCounterpartyProject = project?.project.project_type === 'counterparty' || 
+                                 project?.project.project_type === 'nomenclature_counterparties'
+  
+  // Определяем, является ли проект проектом номенклатуры
+  const isNomenclatureProject = project?.project.project_type === 'nomenclature' || 
+                                project?.project.project_type === 'normalization' ||
+                                project?.project.project_type === 'nomenclature_counterparties'
 
   useEffect(() => {
     if (clientId && projectId) {
+      fetchProject()
       fetchStats()
       fetchDatabases()
-      const interval = setInterval(fetchStats, 2000)
+      // Обновляем статус каждые 2 секунды только если процесс запущен
+      const interval = setInterval(() => {
+        fetchStats()
+      }, 2000)
       return () => clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, projectId])
 
+  const fetchProject = async () => {
+    setIsLoadingProject(true)
+    try {
+      const data = await get<Project>(`/api/clients/${clientId}/projects/${projectId}`, { skipErrorHandler: true })
+      setProject(data)
+    } catch (error) {
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
+      console.error('Failed to fetch project:', error)
+    } finally {
+      setIsLoadingProject(false)
+    }
+  }
+
   const fetchStats = async () => {
     try {
-      const response = await fetch(`/api/clients/${clientId}/projects/${projectId}/normalization/status`)
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
-      }
+      const data = await get<NormalizationStats>(`/api/clients/${clientId}/projects/${projectId}/normalization/status`, { skipErrorHandler: true })
+      // Преобразуем формат ответа для единообразия
+      setStats({
+        total_processed: data.total_processed || data.processed || 0,
+        total_groups: data.total_groups || 0,
+        benchmark_matches: data.benchmark_matches || 0,
+        ai_enhanced: data.ai_enhanced || 0,
+        basic_normalized: data.basic_normalized || 0,
+        is_running: data.is_running || false,
+        processed: data.processed || 0,
+        total: data.total || 0,
+        progress: data.progress || 0,
+        currentStep: (data.currentStep ?? data.current_step) || 'Не запущено',
+        sessions: data.sessions || [],
+        databases: data.databases || [],
+        active_sessions_count: data.active_sessions_count || 0,
+        total_databases_count: data.total_databases_count || 0,
+        // Поля для номенклатуры (КПВЭД)
+        kpvedClassified: data.kpvedClassified ?? data.kpved_classified,
+        kpvedTotal: data.kpvedTotal ?? data.kpved_total,
+        kpvedProgress: data.kpvedProgress ?? data.kpved_progress,
+      })
     } catch (error) {
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
       console.error('Failed to fetch normalization stats:', error)
     }
   }
 
   const fetchDatabases = async () => {
     try {
-      const response = await fetch(`/api/clients/${clientId}/projects/${projectId}/databases?active_only=true`)
-      if (response.ok) {
-        const data = await response.json()
-        setDatabases(data.databases || [])
-      }
+      const data = await get<{ databases: ProjectDatabase[] }>(`/api/clients/${clientId}/projects/${projectId}/databases?active_only=true`, { skipErrorHandler: true })
+      setDatabases(data.databases || [])
     } catch (error) {
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
       console.error('Failed to fetch databases:', error)
     }
   }
 
   const handleStart = async () => {
-    if (!selectedDatabaseId) {
+    if (processingMode === 'single' && !selectedDatabaseId) {
       setError('Пожалуйста, выберите базу данных')
       return
     }
 
-    const selectedDb = databases.find(db => db.id.toString() === selectedDatabaseId)
-    if (!selectedDb) {
-      setError('Выбранная база данных не найдена')
-      return
+    if (processingMode === 'single') {
+      const selectedDb = databases.find(db => db.id.toString() === selectedDatabaseId)
+      if (!selectedDb) {
+        setError('Выбранная база данных не найдена')
+        return
+      }
     }
 
     setIsLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/clients/${clientId}/projects/${projectId}/normalization/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          database_path: selectedDb.file_path
-        })
-      })
+      const requestBody: any = {
+        use_kpved: useKpved,
+      }
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        setError(errorData.error || 'Не удалось запустить нормализацию')
-        return
+      if (processingMode === 'all') {
+        requestBody.all_active = true
+      } else {
+        const selectedDb = databases.find(db => db.id.toString() === selectedDatabaseId)
+        if (selectedDb) {
+          requestBody.database_path = selectedDb.file_path
+        }
+      }
+
+      const result = await post<{ message?: string }>(`/api/clients/${clientId}/projects/${projectId}/normalization/start`, requestBody, { skipErrorHandler: true })
+      console.log('Normalization started:', result)
+      
+      // Показываем успешное сообщение, если есть
+      if (result.message) {
+        toast.success('Нормализация запущена', {
+          description: result.message,
+        })
+      } else {
+        toast.success('Нормализация запущена', {
+          description: 'Процесс нормализации успешно запущен',
+        })
       }
 
       await fetchStats()
     } catch (error) {
-      console.error('Failed to start normalization:', error)
-      setError('Ошибка подключения к серверу')
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
+      const errorMessage = error instanceof Error ? error.message : 'Ошибка подключения к серверу'
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleStop = async () => {
+    setIsLoading(true)
     try {
-      const response = await fetch(`/api/clients/${clientId}/projects/${projectId}/normalization/stop`, {
-        method: 'POST',
+      const result = await post<{ message?: string }>(`/api/clients/${clientId}/projects/${projectId}/normalization/stop`, {}, { skipErrorHandler: true })
+      
+      toast.success('Нормализация остановлена', {
+        description: result.message || 'Процесс нормализации успешно остановлен',
       })
-      if (response.ok) {
-        await fetchStats()
-      }
+      
+      // Обновляем статус несколько раз для надежности
+      setTimeout(() => fetchStats(), 300)
+      setTimeout(() => fetchStats(), 1000)
+      setTimeout(() => fetchStats(), 2000)
     } catch (error) {
-      console.error('Failed to stop normalization:', error)
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
+      const errorMessage = error instanceof Error ? error.message : 'Ошибка подключения к серверу'
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
     }
   }
 
+  const breadcrumbItems = [
+    { label: 'Клиенты', href: '/clients', icon: Database },
+    { label: 'Проекты', href: `/clients/${clientId}/projects`, icon: Database },
+    { label: 'Нормализация', href: `#`, icon: Play },
+  ]
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
-          <Link href={`/clients/${clientId}/projects/${projectId}`}>
+    <div className="container-wide mx-auto px-4 py-8 space-y-6">
+      <BreadcrumbList items={breadcrumbItems.map(item => ({ label: item.label, href: item.href || '#' }))} />
+      <div className="mb-4">
+        <Breadcrumb items={breadcrumbItems} />
+      </div>
+      <FadeIn>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-4"
+        >
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => router.push(`/clients/${clientId}/projects/${projectId}`)}
+            aria-label="Назад к проекту"
+          >
             <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">Нормализация для проекта</h1>
-          <p className="text-muted-foreground">
-            Запуск процесса нормализации с использованием эталонов клиента
-          </p>
-        </div>
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <Play className="h-8 w-8 text-primary" />
+              {isCounterpartyProject ? 'Нормализация контрагентов' : 'Нормализация для проекта'}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {isCounterpartyProject 
+                ? 'Параллельная обработка контрагентов с использованием эталонов из базы данных. Внешние источники обогащения не используются.'
+                : 'Запуск процесса нормализации с использованием эталонов клиента'}
+            </p>
+          </div>
         <div className="flex gap-2">
           {stats?.is_running ? (
             <Button onClick={handleStop} variant="destructive">
@@ -165,13 +306,17 @@ export default function ClientNormalizationPage() {
               Остановить
             </Button>
           ) : (
-            <Button onClick={handleStart} disabled={isLoading || !selectedDatabaseId}>
+            <Button 
+              onClick={handleStart} 
+              disabled={isLoading || (processingMode === 'single' && !selectedDatabaseId)}
+            >
               <Play className="mr-2 h-4 w-4" />
               {isLoading ? 'Запуск...' : 'Запустить нормализацию'}
             </Button>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
+        </motion.div>
+      </FadeIn>
 
       {/* Выбор базы данных */}
       {!stats?.is_running && (
@@ -182,54 +327,114 @@ export default function ClientNormalizationPage() {
               База данных источника
             </CardTitle>
             <CardDescription>
-              Выберите базу данных для нормализации из списка прикрепленных к проекту
+              {isCounterpartyProject 
+                ? 'Выберите режим обработки: конкретная база данных или все активные базы проекта. Базы данных будут обработаны параллельно с использованием пула воркеров.'
+                : 'Выберите режим обработки: конкретная база данных или все активные базы проекта'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="database-select">База данных</Label>
-              {databases.length === 0 ? (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Нет доступных баз данных. Пожалуйста, добавьте базу данных на странице проекта.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <>
-                  <Select value={selectedDatabaseId} onValueChange={setSelectedDatabaseId}>
-                    <SelectTrigger id="database-select">
-                      <SelectValue placeholder="Выберите базу данных" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {databases.map((db) => (
-                        <SelectItem key={db.id} value={db.id.toString()}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{db.name}</span>
-                            <span className="text-xs text-muted-foreground font-mono">{db.file_path}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedDatabaseId && databases.find(db => db.id.toString() === selectedDatabaseId) && (
-                    <div className="p-3 bg-muted rounded-md">
-                      <p className="text-sm font-medium">
-                        {databases.find(db => db.id.toString() === selectedDatabaseId)?.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground font-mono mt-1">
-                        {databases.find(db => db.id.toString() === selectedDatabaseId)?.file_path}
-                      </p>
-                      {databases.find(db => db.id.toString() === selectedDatabaseId)?.description && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {databases.find(db => db.id.toString() === selectedDatabaseId)?.description}
-                        </p>
-                      )}
+            {databases.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Нет доступных баз данных. Пожалуйста, добавьте базу данных на странице проекта.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  <Label>Режим обработки</Label>
+                  <RadioGroup value={processingMode} onValueChange={(v) => setProcessingMode(v as 'single' | 'all')}>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="single" id="mode-single" />
+                      <Label htmlFor="mode-single" className="cursor-pointer font-normal">
+                        Обработать конкретную базу данных
+                      </Label>
                     </div>
-                  )}
-                </>
-              )}
-            </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="all" id="mode-all" />
+                      <Label htmlFor="mode-all" className="cursor-pointer font-normal">
+                        Обработать все активные базы данных проекта ({databases.length})
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {processingMode === 'single' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="database-select">База данных</Label>
+                    <Select value={selectedDatabaseId} onValueChange={setSelectedDatabaseId}>
+                      <SelectTrigger id="database-select">
+                        <SelectValue placeholder="Выберите базу данных" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {databases.map((db, index) => (
+                          <SelectItem key={`db-select-${db.id}-${db.file_path}-${index}`} value={db.id.toString()}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{db.name}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{db.file_path}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedDatabaseId && databases.find(db => db.id.toString() === selectedDatabaseId) && (
+                      <div className="p-3 bg-muted rounded-md">
+                        <p className="text-sm font-medium">
+                          {databases.find(db => db.id.toString() === selectedDatabaseId)?.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono mt-1">
+                          {databases.find(db => db.id.toString() === selectedDatabaseId)?.file_path}
+                        </p>
+                        {databases.find(db => db.id.toString() === selectedDatabaseId)?.description && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {databases.find(db => db.id.toString() === selectedDatabaseId)?.description}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {processingMode === 'all' && (
+                  <div className="p-3 bg-muted rounded-md">
+                    <p className="text-sm font-medium mb-2">Будут обработаны следующие базы данных:</p>
+                    <ul className="space-y-1">
+                      {databases.map((db, index) => (
+                        <li key={`db-list-${db.id}-${db.file_path}-${index}`} className="text-sm flex items-center gap-2">
+                          <Database className="h-3 w-3" />
+                          <span className="font-medium">{db.name}</span>
+                          <span className="text-xs text-muted-foreground font-mono">({db.file_path})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!isCounterpartyProject && (
+                  <div className="flex items-center space-x-2 pt-2 border-t">
+                    <Checkbox
+                      id="use-kpved"
+                      checked={useKpved}
+                      onCheckedChange={(checked) => setUseKpved(checked === true)}
+                    />
+                    <Label htmlFor="use-kpved" className="cursor-pointer font-normal">
+                      Классификация по КПВЭД после нормализации
+                    </Label>
+                  </div>
+                )}
+                {isCounterpartyProject && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      Параллельная обработка контрагентов
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Базы данных будут обработаны параллельно с использованием пула воркеров для ускорения процесса нормализации.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
             {error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -321,7 +526,9 @@ export default function ClientNormalizationPage() {
             Процесс нормализации
           </CardTitle>
           <CardDescription>
-            Нормализация использует эталонные записи клиента для улучшения качества
+            {isCounterpartyProject 
+              ? 'Нормализация контрагентов использует только эталонные записи из базы данных. Внешние источники обогащения (dadata, adata, gisp) не используются.'
+              : 'Нормализация использует эталонные записи клиента для улучшения качества'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -330,16 +537,26 @@ export default function ClientNormalizationPage() {
               <span className="text-muted-foreground">1. Проверка эталонов:</span>
               <Badge variant="outline">{stats?.benchmark_matches || 0} совпадений</Badge>
             </div>
+            {!isCounterpartyProject && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">2. Базовая нормализация:</span>
+                  <Badge variant="outline">{stats?.basic_normalized || 0} записей</Badge>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">3. AI улучшение:</span>
+                  <Badge variant="outline">{stats?.ai_enhanced || 0} записей</Badge>
+                </div>
+              </>
+            )}
+            {isCounterpartyProject && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">2. Параллельная обработка БД:</span>
+                <Badge variant="outline">Воркеры</Badge>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">2. Базовая нормализация:</span>
-              <Badge variant="outline">{stats?.basic_normalized || 0} записей</Badge>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">3. AI улучшение:</span>
-              <Badge variant="outline">{stats?.ai_enhanced || 0} записей</Badge>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">4. Создание новых эталонов:</span>
+              <span className="text-muted-foreground">{isCounterpartyProject ? '3' : '4'}. Создание новых эталонов:</span>
               <Badge variant="outline">Автоматически</Badge>
             </div>
           </div>

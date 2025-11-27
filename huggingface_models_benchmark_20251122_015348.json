@@ -1,0 +1,35 @@
+{
+  "models": [
+    {
+      "avg_response_time_ms": 100,
+      "error_count": 0,
+      "max_response_time_ms": 0,
+      "median_response_time_ms": 0,
+      "min_response_time_ms": 0,
+      "model": "model1",
+      "p95_response_time_ms": 0,
+      "priority": 1,
+      "speed": 10.5,
+      "status": "✓ OK",
+      "success_count": 10,
+      "success_rate": 100,
+      "total_requests": 10
+    },
+    {
+      "avg_response_time_ms": 200,
+      "error_count": 5,
+      "max_response_time_ms": 0,
+      "median_response_time_ms": 0,
+      "min_response_time_ms": 0,
+      "model": "model2",
+      "p95_response_time_ms": 0,
+      "priority": 2,
+      "speed": 5,
+      "status": "⚠ 5 ошибок",
+      "success_count": 5,
+      "success_rate": 50,
+      "total_requests": 10
+    }
+  ],
+  "timestamp": "2025-11-22T01:53:48+03:00"
+}

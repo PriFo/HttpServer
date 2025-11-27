@@ -27,12 +27,12 @@ type PerformanceMetrics struct {
 	AverageItemsPerBatch float64 `json:"average_items_per_batch"`
 
 	// Качество нормализации
-	TotalNormalized      int64   `json:"total_normalized"`
-	BasicNormalized      int64   `json:"basic_normalized"`
-	AIEnhanced           int64   `json:"ai_enhanced"`
-	BenchmarkQuality     int64   `json:"benchmark_quality"`
-	AverageQualityScore  float64 `json:"average_quality_score"`
-	TotalQualityScore    float64 `json:"total_quality_score"`
+	TotalNormalized     int64   `json:"total_normalized"`
+	BasicNormalized     int64   `json:"basic_normalized"`
+	AIEnhanced          int64   `json:"ai_enhanced"`
+	BenchmarkQuality    int64   `json:"benchmark_quality"`
+	AverageQualityScore float64 `json:"average_quality_score"`
+	TotalQualityScore   float64 `json:"total_quality_score"`
 
 	// Временные метрики
 	StartTime           time.Time     `json:"start_time"`
@@ -40,10 +40,10 @@ type PerformanceMetrics struct {
 	AverageItemTime     time.Duration `json:"average_item_time_ms"`
 
 	// Ошибки
-	TotalErrors      int64            `json:"total_errors"`
-	ErrorsByType     map[string]int64 `json:"errors_by_type"`
-	LastError        string           `json:"last_error"`
-	LastErrorTime    time.Time        `json:"last_error_time"`
+	TotalErrors   int64            `json:"total_errors"`
+	ErrorsByType  map[string]int64 `json:"errors_by_type"`
+	LastError     string           `json:"last_error"`
+	LastErrorTime time.Time        `json:"last_error_time"`
 }
 
 // StatsCollector собирает и хранит статистику
@@ -185,7 +185,7 @@ func (sc *StatsCollector) GetSummary() map[string]interface{} {
 	}
 
 	summary := map[string]interface{}{
-		"uptime_seconds": uptime.Seconds(),
+		"uptime_seconds":              uptime.Seconds(),
 		"throughput_items_per_second": throughput,
 
 		"ai": map[string]interface{}{
@@ -197,16 +197,16 @@ func (sc *StatsCollector) GetSummary() map[string]interface{} {
 		},
 
 		"cache": map[string]interface{}{
-			"hits":              metrics.CacheHits,
-			"misses":            metrics.CacheMisses,
-			"hit_rate":          metrics.CacheHitRate,
-			"size":              metrics.CacheSize,
-			"memory_usage_kb":   metrics.CacheMemoryUsage / 1024,
+			"hits":            metrics.CacheHits,
+			"misses":          metrics.CacheMisses,
+			"hit_rate":        metrics.CacheHitRate,
+			"size":            metrics.CacheSize,
+			"memory_usage_kb": metrics.CacheMemoryUsage / 1024,
 		},
 
 		"batch": map[string]interface{}{
-			"total_batches":          metrics.TotalBatches,
-			"total_items":            metrics.TotalBatchedItems,
+			"total_batches":           metrics.TotalBatches,
+			"total_items":             metrics.TotalBatchedItems,
 			"average_items_per_batch": metrics.AverageItemsPerBatch,
 		},
 
@@ -220,9 +220,9 @@ func (sc *StatsCollector) GetSummary() map[string]interface{} {
 		},
 
 		"errors": map[string]interface{}{
-			"total":        metrics.TotalErrors,
-			"by_type":      metrics.ErrorsByType,
-			"last_error":   metrics.LastError,
+			"total":         metrics.TotalErrors,
+			"by_type":       metrics.ErrorsByType,
+			"last_error":    metrics.LastError,
 			"last_error_at": metrics.LastErrorTime,
 		},
 	}
@@ -242,10 +242,10 @@ func (sc *StatsCollector) GetDetailedReport() map[string]interface{} {
 		},
 
 		"performance": map[string]interface{}{
-			"total_items_processed":  metrics.TotalNormalized,
-			"total_processing_time":  metrics.TotalProcessingTime.String(),
-			"average_time_per_item":  metrics.AverageItemTime.String(),
-			"items_per_second":       float64(metrics.TotalNormalized) / time.Since(metrics.StartTime).Seconds(),
+			"total_items_processed": metrics.TotalNormalized,
+			"total_processing_time": metrics.TotalProcessingTime.String(),
+			"average_time_per_item": metrics.AverageItemTime.String(),
+			"items_per_second":      float64(metrics.TotalNormalized) / time.Since(metrics.StartTime).Seconds(),
 		},
 
 		"ai_stats": map[string]interface{}{

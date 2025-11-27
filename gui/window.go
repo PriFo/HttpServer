@@ -10,7 +10,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"fyne.io/fyne/v2"
-	"httpserver/server"
+	"httpserver/server/types"
 )
 
 // Window представляет главное окно приложения
@@ -27,11 +27,11 @@ type Window struct {
 	statusData binding.String
 	
 	// Каналы
-	logChan    <-chan server.LogEntry
+	logChan    <-chan types.LogEntry
 }
 
 // NewWindow создает новое окно
-func NewWindow(logChan <-chan server.LogEntry) *Window {
+func NewWindow(logChan <-chan types.LogEntry) *Window {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("1C HTTP Server")
 	myWindow.Resize(fyne.NewSize(800, 600))
@@ -136,7 +136,7 @@ func (w *Window) startListeners() {
 }
 
 // updateStats обновляет статистику
-func (w *Window) updateStats(stats server.ServerStats) {
+func (w *Window) updateStats(stats types.ServerStats) {
 	statsText := fmt.Sprintf(`Статус: %s
 Последняя активность: %s
 
@@ -213,6 +213,6 @@ func (w *Window) AddLog(message string) {
 }
 
 // UpdateStatsFromMain обновляет статистику из main.go
-func (w *Window) UpdateStatsFromMain(stats server.ServerStats) {
+func (w *Window) UpdateStatsFromMain(stats types.ServerStats) {
 	w.updateStats(stats)
 }

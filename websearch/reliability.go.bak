@@ -1,0 +1,244 @@
+package websearch
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"httpserver/internal/infrastructure/persistence"
+)
+
+// ReliabilityManager управляет статистикой надежности провайдеров
+type ReliabilityManager struct {
+	repo   *persistence.WebSearchRepository
+	stats  map[string]*ProviderStats
+	mutex  sync.RWMutex
+}
+
+// ProviderStats статистика провайдера
+type ProviderStats struct {
+	ProviderName      string
+	RequestsTotal     int64
+	RequestsSuccess   int64
+	RequestsFailed    int64
+	FailureRate       float64
+	AvgResponseTimeMs int64
+	LastSuccess       *time.Time
+	LastFailure       *time.Time
+	LastError         string
+	UpdatedAt         time.Time
+}
+
+// NewReliabilityManager создает новый менеджер надежности
+func NewReliabilityManager(repo *persistence.WebSearchRepository) (*ReliabilityManager, error) {
+	rm := &ReliabilityManager{
+		repo:  repo,
+		stats: make(map[string]*ProviderStats),
+	}
+
+	// Загружаем статистику из базы данных
+	if err := rm.loadStats(); err != nil {
+		return nil, fmt.Errorf("failed to load stats: %w", err)
+	}
+
+	return rm, nil
+}
+
+// loadStats загружает статистику из базы данных
+func (rm *ReliabilityManager) loadStats() error {
+	// Получаем всех провайдеров из репозитория
+	providers, err := rm.repo.GetAllProviders()
+	if err != nil {
+		// Игнорируем ошибку при первом запуске
+		return nil
+	}
+
+	rm.mutex.Lock()
+	defer rm.mutex.Unlock()
+
+	for _, provider := range providers {
+		stats, err := rm.repo.GetProviderStats(provider.Name)
+		if err != nil {
+			continue
+		}
+
+		rm.stats[provider.Name] = &ProviderStats{
+			ProviderName:      stats.ProviderName,
+			RequestsTotal:     stats.RequestsTotal,
+			RequestsSuccess:   stats.RequestsSuccess,
+			RequestsFailed:    stats.RequestsFailed,
+			FailureRate:       stats.FailureRate,
+			AvgResponseTimeMs: stats.AvgResponseTimeMs,
+			LastSuccess:       stats.LastSuccess,
+			LastFailure:       stats.LastFailure,
+			LastError:         stats.LastError,
+			UpdatedAt:         stats.UpdatedAt,
+		}
+	}
+
+	return nil
+}
+
+// RecordSuccess записывает успешный запрос
+func (rm *ReliabilityManager) RecordSuccess(providerName string, responseTime time.Duration) error {
+	return rm.recordRequest(providerName, true, responseTime, "")
+}
+
+// RecordFailure записывает неуспешный запрос
+func (rm *ReliabilityManager) RecordFailure(providerName string, err error) error {
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	return rm.recordRequest(providerName, false, 0, errMsg)
+}
+
+// recordRequest записывает результат запроса
+func (rm *ReliabilityManager) recordRequest(providerName string, success bool, responseTime time.Duration, errMsg string) error {
+	rm.mutex.Lock()
+	defer rm.mutex.Unlock()
+
+	stat, exists := rm.stats[providerName]
+	if !exists {
+		stat = &ProviderStats{
+			ProviderName:      providerName,
+			RequestsTotal:     0,
+			RequestsSuccess:   0,
+			RequestsFailed:    0,
+			FailureRate:       0.0,
+			AvgResponseTimeMs:  0,
+			UpdatedAt:         time.Now(),
+		}
+		rm.stats[providerName] = stat
+	}
+
+	stat.RequestsTotal++
+	now := time.Now()
+
+	if success {
+		stat.RequestsSuccess++
+		stat.LastSuccess = &now
+		// Обновляем среднее время ответа
+		if stat.RequestsSuccess == 1 {
+			stat.AvgResponseTimeMs = responseTime.Milliseconds()
+		} else {
+			// Экспоненциальное скользящее среднее
+			alpha := 0.1
+			stat.AvgResponseTimeMs = int64(float64(stat.AvgResponseTimeMs)*(1-alpha) + float64(responseTime.Milliseconds())*alpha)
+		}
+	} else {
+		stat.RequestsFailed++
+		stat.LastFailure = &now
+		stat.LastError = errMsg
+	}
+
+	// Пересчитываем failure_rate
+	if stat.RequestsTotal > 0 {
+		stat.FailureRate = float64(stat.RequestsFailed) / float64(stat.RequestsTotal)
+	}
+
+	stat.UpdatedAt = now
+
+	// Асинхронно обновляем в базе данных
+	go rm.updateStatsInDB(stat)
+
+	return nil
+}
+
+// updateStatsInDB обновляет статистику в базе данных
+func (rm *ReliabilityManager) updateStatsInDB(stat *ProviderStats) {
+	dbStats := &persistence.ProviderStats{
+		ProviderName:      stat.ProviderName,
+		RequestsTotal:     stat.RequestsTotal,
+		RequestsSuccess:   stat.RequestsSuccess,
+		RequestsFailed:    stat.RequestsFailed,
+		FailureRate:       stat.FailureRate,
+		AvgResponseTimeMs: stat.AvgResponseTimeMs,
+		LastSuccess:       stat.LastSuccess,
+		LastFailure:       stat.LastFailure,
+		LastError:         stat.LastError,
+		UpdatedAt:         stat.UpdatedAt,
+	}
+
+	if err := rm.repo.UpdateProviderStats(dbStats); err != nil {
+		// Логируем ошибку, но не блокируем основной поток
+		fmt.Printf("Failed to update stats for provider %s: %v\n", stat.ProviderName, err)
+	}
+}
+
+// GetWeight вычисляет эффективный вес провайдера на основе его надежности
+func (rm *ReliabilityManager) GetWeight(providerName string, basePriority int) float64 {
+	rm.mutex.RLock()
+	defer rm.mutex.RUnlock()
+
+	stat, exists := rm.stats[providerName]
+	if !exists {
+		// Если статистики нет, возвращаем базовый приоритет
+		return float64(basePriority)
+	}
+
+	// Провайдеры с failure_rate >= 0.9 временно исключаются
+	if stat.FailureRate >= 0.9 {
+		return 0.0
+	}
+
+	// Вес = базовый_приоритет * (1 - failure_rate)
+	weight := float64(basePriority) * (1.0 - stat.FailureRate)
+	if weight < 0 {
+		weight = 0
+	}
+
+	return weight
+}
+
+// GetStats возвращает статистику для провайдера
+func (rm *ReliabilityManager) GetStats(providerName string) *ProviderStats {
+	rm.mutex.RLock()
+	defer rm.mutex.RUnlock()
+
+	stat, exists := rm.stats[providerName]
+	if !exists {
+		return nil
+	}
+
+	// Возвращаем копию, чтобы избежать гонок данных
+	statCopy := *stat
+	return &statCopy
+}
+
+// GetAllStats возвращает статистику для всех провайдеров
+func (rm *ReliabilityManager) GetAllStats() map[string]*ProviderStats {
+	rm.mutex.RLock()
+	defer rm.mutex.RUnlock()
+
+	result := make(map[string]*ProviderStats)
+	for name, stat := range rm.stats {
+		// Создаем копию, чтобы избежать гонок данных
+		statCopy := *stat
+		result[name] = &statCopy
+	}
+
+	return result
+}
+
+// ResetStats сбрасывает статистику для провайдера (для тестирования)
+func (rm *ReliabilityManager) ResetStats(ctx context.Context, providerName string) error {
+	rm.mutex.Lock()
+	defer rm.mutex.Unlock()
+
+	delete(rm.stats, providerName)
+
+	// Сбрасываем статистику в базе данных
+	dbStats := &persistence.ProviderStats{
+		ProviderName:      providerName,
+		RequestsTotal:     0,
+		RequestsSuccess:   0,
+		RequestsFailed:    0,
+		FailureRate:       0.0,
+		AvgResponseTimeMs: 0,
+		UpdatedAt:         time.Now(),
+	}
+
+	return rm.repo.UpdateProviderStats(dbStats)
+}

@@ -8,11 +8,11 @@ import (
 
 // CodeValidationResult результат валидации кода КПВЭД
 type CodeValidationResult struct {
-	ValidatedCode     string  // Валидированный код
-	ValidatedName     string  // Название из классификатора
-	RefinedConfidence float64 // Уточненная уверенность
-	ValidationReason  string  // Причина изменения/ошибки
-	IsValid           bool    // Валиден ли код
+	ValidatedCode     string   // Валидированный код
+	ValidatedName     string   // Название из классификатора
+	RefinedConfidence float64  // Уточненная уверенность
+	ValidationReason  string   // Причина изменения/ошибки
+	IsValid           bool     // Валиден ли код
 	SuggestedCodes    []string // Альтернативные коды
 }
 
@@ -192,11 +192,11 @@ func (v *CodeValidator) checkTypeMatch(node *KpvedNode, expectedType string) boo
 		"55", "56", // Услуги по предоставлению жилья и питания
 		"58", "59", "60", "61", "62", "63", // Информация и связь
 		"64", "65", "66", // Финансовые услуги
-		"68", // Операции с недвижимым имуществом
+		"68",                                     // Операции с недвижимым имуществом
 		"69", "70", "71", "72", "73", "74", "75", // Профессиональные услуги
 		"77", "78", "79", "80", "81", "82", // Административные услуги
-		"84", // Государственное управление
-		"85", // Образование
+		"84",             // Государственное управление
+		"85",             // Образование
 		"86", "87", "88", // Здравоохранение и социальные услуги
 		"90", "91", "92", "93", // Культура, спорт, развлечения
 		"94", "95", "96", // Прочие услуги
@@ -318,10 +318,10 @@ func (v *CodeValidator) ValidateBatch(codes []string, itemTypes []string, attrib
 // GetValidationStatistics возвращает статистику валидации
 func (v *CodeValidator) GetValidationStatistics(results []CodeValidationResult) map[string]interface{} {
 	stats := map[string]interface{}{
-		"total":            len(results),
-		"valid":            0,
-		"invalid":          0,
-		"avg_confidence":   0.0,
+		"total":              len(results),
+		"valid":              0,
+		"invalid":            0,
+		"avg_confidence":     0.0,
 		"validation_reasons": make(map[string]int),
 	}
 

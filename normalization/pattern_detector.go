@@ -13,42 +13,42 @@ import (
 type PatternType string
 
 const (
-	PatternTypo              PatternType = "typo"                // Опечатка
-	PatternExtraSpaces       PatternType = "extra_spaces"        // Лишние пробелы
-	PatternTechnicalCode     PatternType = "technical_code"     // Технический код
-	PatternArticul           PatternType = "articul"            // Артикул
-	PatternDimension         PatternType = "dimension"          // Размеры
-	PatternMixedCase         PatternType = "mixed_case"          // Смешанный регистр
-	PatternSpecialChars       PatternType = "special_chars"      // Специальные символы
-	PatternAbbreviation      PatternType = "abbreviation"       // Аббревиатура
-	PatternIncompleteWord    PatternType = "incomplete_word"    // Незавершенное слово
-	PatternDuplicateWords    PatternType = "duplicate_words"    // Дублирующиеся слова
+	PatternTypo               PatternType = "typo"                // Опечатка
+	PatternExtraSpaces        PatternType = "extra_spaces"        // Лишние пробелы
+	PatternTechnicalCode      PatternType = "technical_code"      // Технический код
+	PatternArticul            PatternType = "articul"             // Артикул
+	PatternDimension          PatternType = "dimension"           // Размеры
+	PatternMixedCase          PatternType = "mixed_case"          // Смешанный регистр
+	PatternSpecialChars       PatternType = "special_chars"       // Специальные символы
+	PatternAbbreviation       PatternType = "abbreviation"        // Аббревиатура
+	PatternIncompleteWord     PatternType = "incomplete_word"     // Незавершенное слово
+	PatternDuplicateWords     PatternType = "duplicate_words"     // Дублирующиеся слова
 	PatternInconsistentFormat PatternType = "inconsistent_format" // Несогласованный формат
-	PatternNumbersInName      PatternType = "numbers_in_name"   // Числа в названии
-	PatternUnitsOfMeasure     PatternType = "units_of_measure"   // Единицы измерения
-	PatternPrefixSuffix       PatternType = "prefix_suffix"      // Префиксы/суффиксы
-	PatternBrand             PatternType = "brand"              // Бренд
-	PatternModel             PatternType = "model"              // Модель товара
+	PatternNumbersInName      PatternType = "numbers_in_name"     // Числа в названии
+	PatternUnitsOfMeasure     PatternType = "units_of_measure"    // Единицы измерения
+	PatternPrefixSuffix       PatternType = "prefix_suffix"       // Префиксы/суффиксы
+	PatternBrand              PatternType = "brand"               // Бренд
+	PatternModel              PatternType = "model"               // Модель товара
 )
 
 // PatternMatch найденный паттерн в названии
 type PatternMatch struct {
-	Type           PatternType `json:"type"`            // Тип паттерна
-	Position       int         `json:"position"`       // Позиция в строке
-	Length         int         `json:"length"`          // Длина совпадения
-	MatchedText    string      `json:"matched_text"`   // Найденный текст
-	SuggestedFix   string      `json:"suggested_fix"`  // Предлагаемое исправление
-	Confidence     float64     `json:"confidence"`     // Уверенность (0-1)
-	Description    string      `json:"description"`    // Описание проблемы
-	Severity       string      `json:"severity"`       // Серьезность: low, medium, high, critical
-	AutoFixable    bool        `json:"auto_fixable"`   // Можно ли исправить автоматически
+	Type         PatternType `json:"type"`          // Тип паттерна
+	Position     int         `json:"position"`      // Позиция в строке
+	Length       int         `json:"length"`        // Длина совпадения
+	MatchedText  string      `json:"matched_text"`  // Найденный текст
+	SuggestedFix string      `json:"suggested_fix"` // Предлагаемое исправление
+	Confidence   float64     `json:"confidence"`    // Уверенность (0-1)
+	Description  string      `json:"description"`   // Описание проблемы
+	Severity     string      `json:"severity"`      // Серьезность: low, medium, high, critical
+	AutoFixable  bool        `json:"auto_fixable"`  // Можно ли исправить автоматически
 }
 
 // PatternDetector детектор паттернов в названиях
 type PatternDetector struct {
 	patterns []PatternRule
-	parser   *StatefulParser   // Stateful парсер для контекстной детекции
-	analyzer *PatternAnalyzer  // Анализатор статистики паттернов
+	parser   *StatefulParser  // Stateful парсер для контекстной детекции
+	analyzer *PatternAnalyzer // Анализатор статистики паттернов
 }
 
 // PatternRule правило для обнаружения паттерна
@@ -137,7 +137,7 @@ func (pd *PatternDetector) registerDefaultPatterns() {
 		Description: "Смешанный регистр",
 		Severity:    "medium",
 		AutoFixable: true,
-		FixFunc:     func(s string, r *regexp.Regexp) string {
+		FixFunc: func(s string, r *regexp.Regexp) string {
 			// Приводим к нижнему регистру, но сохраняем первую букву заглавной для каждого слова
 			words := strings.Fields(s)
 			for i, word := range words {
@@ -676,14 +676,14 @@ func (pd *PatternDetector) FormatStatisticsReport() string {
 // AnalyzeStructureInfo анализирует структуру названия товара
 // Возвращает информацию о токенах, скобках, глубине вложенности
 type StructureAnalysis struct {
-	TotalTokens      int
-	TextTokens       int
-	NumberTokens     int
-	BracketPairs     int
-	MaxDepth         int
-	HasQuotes        bool
-	DelimiterCount   int
-	TokensByDepth    map[int][]string
+	TotalTokens       int
+	TextTokens        int
+	NumberTokens      int
+	BracketPairs      int
+	MaxDepth          int
+	HasQuotes         bool
+	DelimiterCount    int
+	TokensByDepth     map[int][]string
 	DepthDistribution map[int]int
 }
 
@@ -702,15 +702,14 @@ func (pd *PatternDetector) AnalyzeStructure(name string) *StructureAnalysis {
 	}
 
 	return &StructureAnalysis{
-		TotalTokens:      structInfo.TotalTokens,
-		TextTokens:       structInfo.TextTokens,
-		NumberTokens:     structInfo.NumberTokens,
-		BracketPairs:     structInfo.BracketPairs,
-		MaxDepth:         structInfo.MaxDepth,
-		HasQuotes:        structInfo.HasQuotes,
-		DelimiterCount:   structInfo.DelimiterCount,
-		TokensByDepth:    tokensByDepth,
+		TotalTokens:       structInfo.TotalTokens,
+		TextTokens:        structInfo.TextTokens,
+		NumberTokens:      structInfo.NumberTokens,
+		BracketPairs:      structInfo.BracketPairs,
+		MaxDepth:          structInfo.MaxDepth,
+		HasQuotes:         structInfo.HasQuotes,
+		DelimiterCount:    structInfo.DelimiterCount,
+		TokensByDepth:     tokensByDepth,
 		DepthDistribution: structInfo.DepthDistribution,
 	}
 }
-

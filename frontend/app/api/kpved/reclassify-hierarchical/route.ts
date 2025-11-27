@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { kpvedReclassifySchema, validateRequest, formatValidationError } from '@/lib/validation'
+import { getBackendUrl } from '@/lib/api-config'
 
-// Используем 127.0.0.1 вместо localhost для более надежного подключения
-const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:9999'
+const BACKEND_URL = getBackendUrl()
 
 // Увеличиваем максимальное время выполнения для длительных операций классификации
 // Это важно для Vercel и других платформ с ограничениями времени выполнения
@@ -43,9 +43,10 @@ export async function POST(request: NextRequest) {
         if (!healthCheck.ok) {
           throw new Error('Backend health check failed')
         }
-      } catch (healthError: any) {
+      } catch (healthError: unknown) {
         console.error('Backend health check failed:', healthError)
-        const isTimeout = healthError.name === 'AbortError' || healthError.code === 'ECONNREFUSED'
+        const err = healthError as { name?: string; code?: string };
+        const isTimeout = err.name === 'AbortError' || err.code === 'ECONNREFUSED'
         return NextResponse.json(
           { 
             error: isTimeout 
@@ -95,11 +96,12 @@ export async function POST(request: NextRequest) {
 
       const data = await response.json()
       return NextResponse.json(data)
-    } catch (fetchError: any) {
+    } catch (fetchError: unknown) {
       clearTimeout(timeoutId)
+      const err = fetchError as { name?: string; message?: string; code?: string };
       
       // Проверяем, был ли это таймаут
-      if (fetchError.name === 'AbortError' || controller.signal.aborted) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
         console.error('Timeout during KPVED reclassification')
         return NextResponse.json(
           { error: 'Таймаут при выполнении классификации. Операция может занять много времени для большого количества групп.' },
@@ -108,12 +110,12 @@ export async function POST(request: NextRequest) {
       }
       
       // Проверяем тип ошибки подключения
-      if (fetchError.code === 'ECONNREFUSED' || fetchError.message?.includes('fetch failed') || fetchError.message?.includes('ECONNREFUSED')) {
-        console.error('Connection refused to backend:', fetchError)
+      if (err.code === 'ECONNREFUSED' || err.message?.includes('fetch failed') || err.message?.includes('ECONNREFUSED')) {
+        console.error('Connection refused to backend:', err)
         return NextResponse.json(
           { 
             error: 'Не удалось подключиться к бэкенду. Убедитесь, что сервер запущен на порту 9999.',
-            details: fetchError.message || 'Connection refused'
+            details: err.message || 'Connection refused'
           },
           { status: 503 } // Service Unavailable
         )

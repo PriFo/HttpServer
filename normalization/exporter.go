@@ -146,8 +146,8 @@ func (e *Exporter) ExportToExcel(filename string, filters map[string]interface{}
 
 	// Стиль заголовков
 	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Bold: true, Size: 11},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#4472C4"}, Pattern: 1},
+		Font:      &excelize.Font{Bold: true, Size: 11},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#4472C4"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
 	if err != nil {

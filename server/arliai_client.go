@@ -88,11 +88,22 @@ func NewArliaiClient() *ArliaiClient {
 		log.Printf("Warning: Arliai configuration validation failed: %v", err)
 	}
 
+	// Оптимизированный HTTP Transport с connection pooling для переиспользования соединений
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		MaxConnsPerHost:     5,
+		IdleConnTimeout:     90 * time.Second,
+		DisableKeepAlives:   false,
+		DisableCompression:  false,
+		MaxIdleConnsPerHost: 5,
+	}
+
 	return &ArliaiClient{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
 		},
 		retryConfig: RetryConfig{
 			MaxRetries:       3,
@@ -182,10 +193,18 @@ func (c *ArliaiClient) CheckConnection(ctx context.Context, requestID string) (*
 }
 
 // GetModels получает список моделей с повторными попытками
-func (c *ArliaiClient) GetModels(ctx context.Context, requestID string) ([]ArliaiModel, error) {
+// queryParams - опциональные query параметры (например, "status=all" для получения всех моделей)
+func (c *ArliaiClient) GetModels(ctx context.Context, requestID string, queryParams ...string) ([]ArliaiModel, error) {
 	startTime := time.Now()
 	
 	url := fmt.Sprintf("%s/models", c.baseURL)
+	// Добавляем query параметры, если они указаны
+	if len(queryParams) > 0 {
+		url += "?" + queryParams[0]
+		for i := 1; i < len(queryParams); i++ {
+			url += "&" + queryParams[i]
+		}
+	}
 	
 	var lastErr error
 	delay := c.retryConfig.InitialDelay
@@ -241,28 +260,63 @@ func (c *ArliaiClient) GetModels(ctx context.Context, requestID string) ([]Arlia
 				// Пробуем альтернативный формат (прямой массив)
 				var models []ArliaiModel
 				if err2 := json.Unmarshal(body, &models); err2 != nil {
+					// Логируем начало ответа для отладки
+					bodyPreview := string(body)
+					if len(bodyPreview) > 500 {
+						bodyPreview = bodyPreview[:500] + "..."
+					}
 					lastErr = fmt.Errorf("failed to decode response: %w (also tried array format: %v)", err, err2)
 					log.Printf("[%s] Failed to decode models response: %v", requestID, lastErr)
+					log.Printf("[%s] Response preview (first 500 chars): %s", requestID, bodyPreview)
 					continue
 				}
 				modelsResp.Models = models
 			}
 
-			log.Printf("[%s] Models fetched successfully (duration: %v, count: %d)", requestID, duration, len(modelsResp.Models))
+			log.Printf("[%s] Models fetched successfully (duration: %v, count: %d, url: %s)", requestID, duration, len(modelsResp.Models), url)
+			// Логируем первые несколько моделей для отладки
+			if len(modelsResp.Models) > 0 {
+				previewCount := 5
+				if len(modelsResp.Models) < previewCount {
+					previewCount = len(modelsResp.Models)
+				}
+				modelNames := make([]string, 0, previewCount)
+				for i := 0; i < previewCount; i++ {
+					modelName := modelsResp.Models[i].ID
+					if modelsResp.Models[i].Name != "" {
+						modelName = modelsResp.Models[i].Name
+					}
+					modelNames = append(modelNames, fmt.Sprintf("%s(status:%s)", modelName, modelsResp.Models[i].Status))
+				}
+				log.Printf("[%s] First models: %v", requestID, modelNames)
+			}
 			return modelsResp.Models, nil
 		}
 
 		resp.Body.Close()
 		
-		if resp.StatusCode >= 500 {
+		// Детальная обработка различных HTTP статусов
+		if resp.StatusCode == http.StatusTooManyRequests {
+			lastErr = fmt.Errorf("rate limit exceeded (429)")
+			log.Printf("[%s] Rate limit exceeded (429), will retry", requestID)
+			continue
+		} else if resp.StatusCode == http.StatusUnauthorized {
+			lastErr = fmt.Errorf("unauthorized (401): invalid API key")
+			log.Printf("[%s] Unauthorized (401): check API key", requestID)
+			break // Не повторяем для 401
+		} else if resp.StatusCode == http.StatusForbidden {
+			lastErr = fmt.Errorf("forbidden (403): API key may not have required permissions")
+			log.Printf("[%s] Forbidden (403): check API key permissions", requestID)
+			break // Не повторяем для 403
+		} else if resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("server error: %d", resp.StatusCode)
 			log.Printf("[%s] Server error %d, will retry", requestID, resp.StatusCode)
 			continue
+		} else if resp.StatusCode >= 400 {
+			lastErr = fmt.Errorf("client error: %d", resp.StatusCode)
+			log.Printf("[%s] Client error %d, not retrying", requestID, resp.StatusCode)
+			break
 		}
-
-		lastErr = fmt.Errorf("client error: %d", resp.StatusCode)
-		log.Printf("[%s] Client error %d, not retrying", requestID, resp.StatusCode)
-		break
 	}
 
 	return nil, fmt.Errorf("all retry attempts failed: %w", lastErr)
@@ -270,6 +324,9 @@ func (c *ArliaiClient) GetModels(ctx context.Context, requestID string) ([]Arlia
 
 // GenerateTraceID генерирует уникальный trace ID
 func GenerateTraceID() string {
-	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), time.Now().Unix())
+	// Используем UnixNano для наносекундной точности
+	// Добавляем небольшую задержку для гарантии уникальности при быстрых вызовах
+	now := time.Now()
+	return fmt.Sprintf("%d-%d", now.UnixNano(), now.Unix()%1000000)
 }
 

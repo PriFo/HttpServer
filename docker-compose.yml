@@ -31,7 +31,8 @@ services:
       - ./КПВЭД.txt:/app/КПВЭД.txt:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9999/health"]
+      # Используем wget если доступен, иначе curl
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9999/health || curl -f http://localhost:9999/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

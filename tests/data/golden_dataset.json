@@ -1,0 +1,236 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-11-23T00:25:27+03:00",
+  "entries": [
+    {
+      "id": 1,
+      "entity_type": "counterparty",
+      "reference": "ref1",
+      "code": "code1",
+      "name": "ООО Ромашка",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e\u003cКПП\u003e123456789\u003c/КПП\u003e\u003cАдрес\u003eг. Москва, ул. Тестовая, д. 1\u003c/Адрес\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "kpp": "123456789",
+        "quality_score": 0.95,
+        "duplicate_group": 1,
+        "is_master": true,
+        "extracted_attrs": {
+          "legal_address": "г. Москва, ул. Тестовая, д. 1"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "entity_type": "counterparty",
+      "reference": "ref2",
+      "code": "code2",
+      "name": "Ромашка ООО",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e\u003cКПП\u003e123456789\u003c/КПП\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "kpp": "123456789",
+        "quality_score": 0.9,
+        "duplicate_group": 1
+      }
+    },
+    {
+      "id": 3,
+      "entity_type": "counterparty",
+      "reference": "ref3",
+      "code": "code3",
+      "name": "ИП Ромашка",
+      "attributes": "\u003cИНН\u003e123456789012\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ИП Ромашка",
+        "inn": "123456789012",
+        "quality_score": 0.85,
+        "is_master": true
+      }
+    },
+    {
+      "id": 4,
+      "entity_type": "counterparty",
+      "reference": "ref4",
+      "code": "code4",
+      "name": "OOO Ромашка",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "quality_score": 0.8,
+        "duplicate_group": 1
+      }
+    },
+    {
+      "id": 5,
+      "entity_type": "counterparty",
+      "reference": "ref5",
+      "code": "code5",
+      "name": "ИНН 1234567890",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "quality_score": 0.75,
+        "duplicate_group": 1
+      }
+    },
+    {
+      "id": 6,
+      "entity_type": "counterparty",
+      "reference": "ref6",
+      "code": "code6",
+      "name": "Ромашка",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "Ромашка",
+        "inn": "1234567890",
+        "quality_score": 0.7,
+        "is_master": true
+      }
+    },
+    {
+      "id": 7,
+      "entity_type": "counterparty",
+      "reference": "ref7",
+      "code": "code7",
+      "name": "ООО РОМАШКА",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "quality_score": 0.9,
+        "duplicate_group": 1
+      }
+    },
+    {
+      "id": 8,
+      "entity_type": "counterparty",
+      "reference": "ref8",
+      "code": "code8",
+      "name": " Ромашка ",
+      "attributes": "\u003cИНН\u003e1234567890\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "Ромашка",
+        "inn": "1234567890",
+        "quality_score": 0.85,
+        "is_master": true
+      }
+    },
+    {
+      "id": 9,
+      "entity_type": "counterparty",
+      "reference": "ref9",
+      "code": "code9",
+      "name": "ООО Ромашка",
+      "attributes": "\u003cИНН\u003e12345\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "12345",
+        "quality_score": 0.6,
+        "is_master": true
+      }
+    },
+    {
+      "id": 10,
+      "entity_type": "counterparty",
+      "reference": "ref10",
+      "code": "code10",
+      "name": "ООО Ромашка",
+      "attributes": "\u003cИНН\u003e9876543210\u003c/ИНН\u003e",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "9876543210",
+        "quality_score": 0.9,
+        "duplicate_group": 2,
+        "is_master": true
+      }
+    },
+    {
+      "id": 11,
+      "entity_type": "nomenclature",
+      "reference": "ref11",
+      "code": "АРТ: 123",
+      "name": "Винт Винтажный",
+      "attributes": "\u003cАртикул\u003e123\u003c/Артикул\u003e\u003cКатегория\u003eКрепеж\u003c/Категория\u003e",
+      "expected": {
+        "normalized_name": "Винт Винтажный",
+        "category": "Крепеж",
+        "quality_score": 0.95,
+        "duplicate_group": 3,
+        "is_master": true,
+        "extracted_attrs": {
+          "артикул": "123"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "entity_type": "nomenclature",
+      "reference": "ref12",
+      "code": "АРТ: 321",
+      "name": "Винт винтажный",
+      "attributes": "\u003cАртикул\u003e321\u003c/Артикул\u003e\u003cКатегория\u003eКрепеж\u003c/Категория\u003e",
+      "expected": {
+        "normalized_name": "Винт Винтажный",
+        "category": "Крепеж",
+        "quality_score": 0.9,
+        "duplicate_group": 3,
+        "extracted_attrs": {
+          "артикул": "321"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "entity_type": "nomenclature",
+      "reference": "ref13",
+      "code": "",
+      "name": "Гайка М8",
+      "attributes": "\u003cКатегория\u003eКрепеж\u003c/Категория\u003e",
+      "expected": {
+        "normalized_name": "Гайка М8",
+        "category": "Крепеж",
+        "quality_score": 0.8,
+        "is_master": true
+      }
+    },
+    {
+      "id": 14,
+      "entity_type": "nomenclature",
+      "reference": "ref14",
+      "code": "АРТ: 456",
+      "name": "Болт М10",
+      "attributes": "\u003cАртикул\u003e456\u003c/Артикул\u003e\u003cКатегория\u003eИнструмент\u003c/Категория\u003e",
+      "expected": {
+        "normalized_name": "Болт М10",
+        "category": "Крепеж",
+        "quality_score": 0.75,
+        "is_master": true,
+        "extracted_attrs": {
+          "артикул": "456"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "entity_type": "nomenclature",
+      "reference": "ref15",
+      "code": "АРТ: 789",
+      "name": "Шайба М8",
+      "attributes": "\u003cАртикул\u003e789\u003c/Артикул\u003e\u003cКатегория\u003eКрепеж\u003c/Категория\u003e",
+      "expected": {
+        "normalized_name": "Шайба М8",
+        "category": "Крепеж",
+        "quality_score": 0.85,
+        "is_master": true,
+        "extracted_attrs": {
+          "артикул": "789"
+        }
+      }
+    }
+  ]
+}

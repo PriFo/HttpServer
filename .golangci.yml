@@ -1,0 +1,49 @@
+run:
+  skip-dirs:
+    - utils_backup
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.pb\\.gw\\.go$"
+
+linters:
+  enable:
+    - staticcheck
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - unused
+    - gosimple
+    - structcheck
+    - varcheck
+    - ineffassign
+    - deadcode
+    - typecheck
+
+linters-settings:
+  staticcheck:
+    checks: ["all"]
+  unused:
+    check-exported: false
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    - path: utils_backup
+      linters:
+        - all
+    - path: server/server_gisp_nomenclatures\.go
+      linters:
+        - staticcheck
+      text: "S1039"
+    - path: server/server_quality\.go
+      linters:
+        - unused
+      text: "handleQualityMetrics|handleCompareProjectsQuality"
+  exclude:
+    - "unnecessary use of fmt.Sprintf"
+    - "func \\(\\*Server\\).handleQualityMetrics is unused"
+    - "func \\(\\*Server\\).handleCompareProjectsQuality is unused"
+

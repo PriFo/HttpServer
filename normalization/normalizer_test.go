@@ -153,7 +153,7 @@ func TestNormalizerGrouping(t *testing.T) {
 	// Тестируем группировку через ProcessNormalization
 	// Но сначала нужно проверить, что метод работает
 	// Для полного теста нужны данные в таблице catalog_items
-	err = normalizer.ProcessNormalization()
+	err = normalizer.ProcessNormalization(0) // uploadID: 0 = не указан
 	if err != nil {
 		// Это нормально, если таблица пустая или нет данных
 		t.Logf("ProcessNormalization returned error (expected for empty table): %v", err)
@@ -171,7 +171,7 @@ func TestNormalizerWithEmptyData(t *testing.T) {
 	normalizer := NewNormalizer(db, events, nil)
 
 	// Очистка должна работать даже с пустой таблицей
-	err = normalizer.ProcessNormalization()
+	err = normalizer.ProcessNormalization(0) // uploadID: 0 = не указан
 	if err != nil {
 		// Ожидаем ошибку, так как таблица пустая
 		t.Logf("ProcessNormalization with empty data returned error (expected): %v", err)
@@ -190,14 +190,14 @@ func TestNormalizerErrorHandling(t *testing.T) {
 
 	// Тест с несуществующей таблицей
 	normalizer.SetSourceConfig("non_existent_table", "ref", "code", "name")
-	err = normalizer.ProcessNormalization()
+	err = normalizer.ProcessNormalization(0) // uploadID: 0 = не указан
 	if err == nil {
 		t.Error("Expected error for non-existent table")
 	}
 
 	// Тест с неправильными именами колонок
 	normalizer.SetSourceConfig("catalog_items", "wrong_ref", "wrong_code", "wrong_name")
-	err = normalizer.ProcessNormalization()
+	err = normalizer.ProcessNormalization(0) // uploadID: 0 = не указан
 	if err == nil {
 		t.Error("Expected error for wrong column names")
 	}
@@ -243,7 +243,7 @@ func TestNormalizerCountGroups(t *testing.T) {
 	normalizer := NewNormalizer(db, events, nil)
 
 	groups := make(map[groupKey]*groupValue)
-	
+
 	// Пустая группа
 	count := normalizer.countGroups(groups)
 	if count != 0 {
@@ -266,4 +266,3 @@ func TestNormalizerCountGroups(t *testing.T) {
 		t.Errorf("Expected 2 groups, got %d", count)
 	}
 }
-

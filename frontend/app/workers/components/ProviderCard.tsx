@@ -89,6 +89,8 @@ export const ProviderCard = memo<ProviderCardProps>(({
       arliai: 'Arli AI',
       openai: 'OpenAI',
       anthropic: 'Anthropic',
+      openrouter: 'OpenRouter',
+      huggingface: 'Hugging Face',
     }
     return names[name] || name
   }

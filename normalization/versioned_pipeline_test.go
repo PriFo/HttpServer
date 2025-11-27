@@ -385,4 +385,3 @@ func TestCompleteSession(t *testing.T) {
 		t.Fatalf("CompleteSession failed: %v", err)
 	}
 }
-

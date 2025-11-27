@@ -52,7 +52,7 @@ frontend/dist
 test_*.xml
 test_*.db
 
-# Documentation
+# Documentation (кроме README)
 *.md
 docs/
 !README.md
@@ -72,3 +72,14 @@ nul
 coverage/
 *.coverprofile
 
+# Data directory (будет создан в контейнере)
+data/
+
+# Chaos tests
+chaos_tests/
+
+# Checkpoints
+checkpoints/
+
+# Binaries
+bin/

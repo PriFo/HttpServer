@@ -1,0 +1,171 @@
+Промпт для генерации интеграционных тестов для новых роутов нормализации
+
+Скопируй этот промпт в новый чат для автоматической генерации интеграционных тестов:
+
+---
+
+## Роль
+
+Ты — Senior Go Developer и QA Automation Engineer. Твоя задача — создать исчерпывающий набор интеграционных тестов для проверки всех изменений, описанных в отчете NORMALIZATION_ROUTES_CODE_REVIEW.md.
+
+## Контекст
+
+Ты только что сгенерировал подробный отчет NORMALIZATION_ROUTES_CODE_REVIEW.md, в котором описано добавление 7 новых роутов для API нормализации в приложении на Go/Gin:
+
+1. POST /api/normalization/stop - остановка нормализации
+2. GET /api/normalization/pipeline/stage-details - детали этапа pipeline
+3. GET /api/normalization/export - экспорт нормализованных данных
+4. GET /api/normalization/config - получение конфигурации
+5. PUT /api/normalization/config - обновление конфигурации
+6. POST /api/normalization/config - создание/обновление конфигурации
+7. GET /api/normalization/databases - список баз данных
+8. GET /api/normalization/tables - список таблиц
+9. GET /api/normalization/columns - список колонок
+
+Твоя цель — написать тесты, которые подтвердят, что все эти изменения реализованы корректно и работают как положено.
+
+## Основная задача
+
+Сгенерируй один Go-файл normalization_routes_integration_test.go, который будет содержать полный набор интеграционных тестов для проверки роутов нормализации. Тесты должны использовать testify/suite для организации и httptest для HTTP-запросов.
+
+## Детальные требования к тестам
+
+### 1. Настройка тестового окружения
+
+Создай структуру NormalizationRoutesIntegrationTestSuite со следующими полями:
+- router *gin.Engine
+- normalizationHandler *handlers.NormalizationHandler
+- normalizationService *services.NormalizationService
+- baseHandler *handlers.BaseHandler
+
+В методе SetupSuite():
+1. Инициализируй Gin роутер: gin.SetMode(gin.TestMode), suite.router = gin.New()
+2. Создай моки или реальные зависимости (NormalizationService, BaseHandler, NormalizationHandler)
+3. Зарегистрируй все роуты нормализации, включая 7 новых:
+   - Создай группу /api/normalization
+   - Зарегистрируй все существующие роуты (17 штук)
+   - Зарегистрируй все 7 новых роутов из отчета
+
+В методе SetupTest():
+- Создай httptest.NewRecorder() для каждого теста (или создавай в самом тесте)
+- Инициализируй тестовые данные, если необходимо
+
+### 2. Тестирование 7 новых роутов (Позитивные и негативные сценарии)
+
+Для каждого из 7 новых роутов напиши отдельный тестовый метод:
+
+#### 2.1. POST /api/normalization/stop
+Тест: TestRoute_PostNormalizationStop
+Позитивные: Успешная остановка (200), проверка структуры ответа (was_running, success, message)
+Негативные: Неправильный метод (GET) - должен вернуть 405
+
+#### 2.2. GET /api/normalization/pipeline/stage-details
+Тест: TestRoute_GetPipelineStageDetails
+Позитивные: Успешное получение (200), проверка структуры JSON (stage, current_step, is_running, processed, success, errors)
+Негативные: Неправильный метод (POST) - 405, сервис недоступен - 503
+
+#### 2.3. GET /api/normalization/export
+Тест: TestRoute_GetNormalizationExport
+Позитивные: 
+- Экспорт CSV: проверка 200, Content-Type: text/csv, Content-Disposition, UTF-8 BOM
+- Экспорт JSON: проверка 200, Content-Type: application/json, структура JSON
+- Query-параметры: format=json/csv, category, search, kpved_code, limit
+Негативные: Неправильный формат (format=invalid) - 400, неправильный метод - 405
+
+#### 2.4. GET /api/normalization/config
+Тест: TestRoute_GetNormalizationConfig
+Позитивные: Успешное получение (200), проверка структуры (id, database_path, source_table, reference_column, code_column, name_column, created_at, updated_at)
+Негативные: Сервис недоступен - 503, неправильный метод - 405
+
+#### 2.5. PUT /api/normalization/config
+Тест: TestRoute_PutNormalizationConfig
+Позитивные: Успешное обновление с валидным телом (200), проверка ответа (message, config)
+Негативные: Невалидное тело - 400, отсутствие обязательных полей - 400, неправильный метод - 405, сервис недоступен - 503
+
+#### 2.6. POST /api/normalization/config
+Тест: TestRoute_PostNormalizationConfig
+Позитивные и негативные: Аналогично PUT (см. 2.5)
+
+#### 2.7. GET /api/normalization/databases
+Тест: TestRoute_GetNormalizationDatabases
+Позитивные: Успешное получение (200), проверка что ответ - массив объектов с полями (name, path, size)
+Негативные: Неправильный метод - 405
+
+#### 2.8. GET /api/normalization/tables
+Тест: TestRoute_GetNormalizationTables
+Позитивные: Успешное получение с database параметром (200), проверка массива объектов (name, count)
+Негативные: Некорректный путь к БД - 500, неправильный метод - 405
+
+#### 2.9. GET /api/normalization/columns
+Тест: TestRoute_GetNormalizationColumns
+Позитивные: Успешное получение с database и table (200), проверка массива объектов (name, type, nullable, primary, default)
+Негативные: Отсутствие table - 400, некорректное имя таблицы - 400, неправильный метод - 405, некорректный путь к БД - 500
+
+### 3. Тестирование Swagger-документации
+
+Тест: TestSwagger_NewRoutesDocumented
+
+Шаги:
+1. Отправь GET-запрос на /swagger/doc.json
+2. Распарси полученный JSON
+3. Проверь, что в paths присутствуют все новые пути:
+   - /api/normalization/stop (post)
+   - /api/normalization/pipeline/stage-details (get)
+   - /api/normalization/export (get)
+   - /api/normalization/config (get, put, post)
+   - /api/normalization/databases (get)
+   - /api/normalization/tables (get)
+   - /api/normalization/columns (get)
+4. Для каждого пути проверь наличие правильных HTTP-методов и наличие summary, tags
+
+### 4. Регрессионное тестирование существующих роутов
+
+#### 4.1. TestRoute_ExistingStartNormalization
+Проверь POST /api/normalization/start: успешный ответ (200), структура содержит session_id, неправильный метод - 405
+
+#### 4.2. TestRoute_ExistingNormalizationStatus
+Проверь GET /api/normalization/status: успешный ответ (200), структура содержит (is_running, progress, processed, total), типы данных корректные
+
+#### 4.3. TestRoute_ExistingNormalizationHistory
+Проверь GET /api/normalization/history: успешный ответ с session_id (200), отсутствие session_id - 400, структура ответа корректна
+
+## Технические детали
+
+Фреймворк: testify/suite, testify/assert
+HTTP-тестирование: net/http/httptest
+JSON-парсинг: encoding/json
+Имя файла: normalization_routes_integration_test.go
+Пакет: server_test или integration
+
+## Ожидаемый результат
+
+Предоставь один готовый к запуску Go-файл normalization_routes_integration_test.go, содержащий:
+
+1. Структуру NormalizationRoutesIntegrationTestSuite с методами SetupSuite и SetupTest
+2. Набор тестовых методов для проверки 7 новых роутов (позитивные и негативные сценарии)
+3. Специальный тест для проверки наличия новых роутов в Swagger-спецификации
+4. Несколько регрессионных тестов для существующих роутов
+5. Необходимые импорты
+6. Хорошо прокомментированный код, следующий лучшим практикам Go
+
+Код должен быть готов к запуску командой:
+go test -v ./server_test -run TestNormalizationRoutesIntegrationSuite
+или
+go test -v ./integration -run TestNormalizationRoutesIntegrationSuite
+
+---
+
+## Инструкция по использованию:
+
+1. Скопируй промпт выше (текст между "---" и "---")
+2. Вставь в новый чат с AI
+3. AI автоматически сгенерирует полный файл интеграционных тестов
+
+## Что будет создано:
+
+- normalization_routes_integration_test.go - полный файл с интеграционными тестами
+- Тесты для всех 7 новых роутов (позитивные и негативные сценарии)
+- Тест для проверки Swagger-документации
+- Регрессионные тесты для существующих роутов
+- Готовый к запуску код с необходимыми зависимостями
+

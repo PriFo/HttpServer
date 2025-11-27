@@ -2,6 +2,7 @@ package normalization
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,21 +19,21 @@ type AIConfig struct {
 	RateLimitDelay time.Duration
 	MaxRetries     int
 	// Batch processing settings
-	BatchEnabled      bool          // Включить батчевую обработку AI запросов
-	BatchSize         int           // Размер батча (количество элементов для одновременной обработки)
+	BatchEnabled       bool          // Включить батчевую обработку AI запросов
+	BatchSize          int           // Размер батча (количество элементов для одновременной обработки)
 	BatchFlushInterval time.Duration // Интервал автоматической обработки накопленных запросов
 }
 
 // NormalizationCheckpoint сохраненное состояние прогресса нормализации
 // Позволяет возобновить обработку после сбоя
 type NormalizationCheckpoint struct {
-	ProcessedCount  int       `json:"processed_count"`  // Количество обработанных записей
+	ProcessedCount  int       `json:"processed_count"`   // Количество обработанных записей
 	LastProcessedID int       `json:"last_processed_id"` // ID последней обработанной записи
-	TotalCount      int       `json:"total_count"`      // Общее количество записей
-	StartTime       time.Time `json:"start_time"`       // Время начала обработки
-	LastSaveTime    time.Time `json:"last_save_time"`   // Время последнего сохранения checkpoint
-	UploadID        int       `json:"upload_id"`        // ID выгрузки
-	BatchSize       int       `json:"batch_size"`       // Размер батча
+	TotalCount      int       `json:"total_count"`       // Общее количество записей
+	StartTime       time.Time `json:"start_time"`        // Время начала обработки
+	LastSaveTime    time.Time `json:"last_save_time"`    // Время последнего сохранения checkpoint
+	UploadID        int       `json:"upload_id"`         // ID выгрузки
+	BatchSize       int       `json:"batch_size"`        // Размер батча
 }
 
 // Normalizer основной процессор нормализации данных
@@ -54,6 +55,17 @@ type Normalizer struct {
 	enableCheckpoints bool
 	checkpointDir     string
 	currentCheckpoint *NormalizationCheckpoint // Текущий checkpoint для мониторинга
+	// Сессия нормализации
+	sessionID *int // ID сессии нормализации для связи с project_database
+	// Pipeline нормализации (опционально)
+	normalizationPipeline    interface{} // *pipeline_normalization.NormalizationPipeline
+	useNormalizationPipeline bool
+	// Функция проверки остановки
+	stopCheck func() bool
+	// Поиск эталонов
+	benchmarkFinder BenchmarkFinder
+	// Движок валидации (для проверки элементов перед обработкой)
+	validationEngine *ValidationEngine
 }
 
 // groupKey ключ для группировки записей
@@ -76,13 +88,19 @@ type groupValue struct {
 
 // NewNormalizer создает новый нормализатор
 func NewNormalizer(db *database.DB, events chan<- string, aiConfig *AIConfig) *Normalizer {
+	return NewNormalizerWithStopCheck(db, events, aiConfig, nil, nil)
+}
+
+// NewNormalizerWithStopCheck создает новый нормализатор с функцией проверки остановки
+func NewNormalizerWithStopCheck(db *database.DB, events chan<- string, aiConfig *AIConfig, stopCheck func() bool, getAPIKey func() string) *Normalizer {
 	normalizer := &Normalizer{
-		db:              db,
-		categorizer:     NewCategorizer(),
-		nameNormalizer:  NewNameNormalizer(),
-		events:          events,
-		useAI:           aiConfig != nil && aiConfig.Enabled,
-		aiConfig:        aiConfig,
+		db:             db,
+		categorizer:    NewCategorizer(),
+		nameNormalizer: NewNameNormalizer(),
+		events:         events,
+		useAI:          aiConfig != nil && aiConfig.Enabled,
+		aiConfig:       aiConfig,
+		stopCheck:      stopCheck,
 		// Дефолтные значения
 		sourceTable:     "catalog_items",
 		referenceColumn: "reference",
@@ -91,11 +109,21 @@ func NewNormalizer(db *database.DB, events chan<- string, aiConfig *AIConfig) *N
 		// Включаем checkpoints по умолчанию
 		enableCheckpoints: true,
 		checkpointDir:     "./checkpoints",
+		// Pipeline нормализации по умолчанию не используется
+		useNormalizationPipeline: false,
 	}
 
 	// Инициализация AI нормализатора, если включен
 	if normalizer.useAI {
-		apiKey := os.Getenv("ARLIAI_API_KEY")
+		var apiKey string
+		// Сначала пытаемся получить из функции, если она предоставлена
+		if getAPIKey != nil {
+			apiKey = getAPIKey()
+		}
+		// Fallback на переменную окружения
+		if apiKey == "" {
+			apiKey = os.Getenv("ARLIAI_API_KEY")
+		}
 		if apiKey != "" {
 			normalizer.aiNormalizer = NewAINormalizer(apiKey)
 			normalizer.sendEvent("✓ AI нормализация включена")
@@ -127,13 +155,18 @@ func NewNormalizer(db *database.DB, events chan<- string, aiConfig *AIConfig) *N
 				log.Println("Иерархический КПВЭД классификатор включен")
 			}
 		} else {
-			normalizer.sendEvent("⚠ ARLIAI_API_KEY не установлен, AI отключен")
-			log.Println("ARLIAI_API_KEY не установлен, AI нормализация отключена")
+			normalizer.sendEvent("⚠ API ключ не установлен, AI отключен. Установите API ключ в разделе 'Воркеры' или через переменную окружения ARLIAI_API_KEY")
+			log.Println("API ключ не установлен (ни в конфигурации воркеров, ни в переменной окружения ARLIAI_API_KEY), AI нормализация отключена")
 			normalizer.useAI = false
 		}
 	}
 
 	return normalizer
+}
+
+// SetStopCheck устанавливает функцию проверки остановки
+func (n *Normalizer) SetStopCheck(stopCheck func() bool) {
+	n.stopCheck = stopCheck
 }
 
 // SetSourceConfig устанавливает конфигурацию источника данных
@@ -152,6 +185,20 @@ func (n *Normalizer) SetHierarchicalClassifier(classifier *HierarchicalClassifie
 	log.Println("Иерархический КПВЭД классификатор установлен")
 }
 
+// SetBenchmarkFinder устанавливает поисковик эталонов
+func (n *Normalizer) SetBenchmarkFinder(finder BenchmarkFinder) {
+	n.benchmarkFinder = finder
+	log.Println("Поисковик эталонов установлен")
+}
+
+// SetValidationEngine устанавливает движок валидации
+func (n *Normalizer) SetValidationEngine(engine *ValidationEngine) {
+	n.validationEngine = engine
+	if engine != nil {
+		log.Println("ValidationEngine установлен в Normalizer")
+	}
+}
+
 // sendEvent отправляет событие в канал, если он доступен
 func (n *Normalizer) sendEvent(message string) {
 	if n.events != nil {
@@ -164,7 +211,8 @@ func (n *Normalizer) sendEvent(message string) {
 }
 
 // ProcessNormalization выполняет полный процесс нормализации данных
-func (n *Normalizer) ProcessNormalization() error {
+// uploadID - ID выгрузки для привязки checkpoint (0 = не указан, используется значение по умолчанию)
+func (n *Normalizer) ProcessNormalization(uploadID int) error {
 	startTime := time.Now()
 	n.sendEvent("Начало нормализации данных...")
 	log.Printf("Начало нормализации данных...")
@@ -192,13 +240,25 @@ func (n *Normalizer) ProcessNormalization() error {
 	log.Printf("Получено %d записей из %s", len(items), n.sourceTable)
 
 	// CHECKPOINT: Инициализация checkpoint для отслеживания прогресса
+	// Используем переданный uploadID или значение по умолчанию
+	checkpointUploadID := uploadID
+	if checkpointUploadID == 0 {
+		// Пытаемся использовать sessionID как uploadID, если он установлен
+		if n.sessionID != nil && *n.sessionID > 0 {
+			checkpointUploadID = *n.sessionID
+			log.Printf("Info: upload_id not specified, using session_id %d as checkpoint identifier", checkpointUploadID)
+		} else {
+			checkpointUploadID = 1 // Значение по умолчанию, если не указано
+			log.Printf("Warning: upload_id not specified and no session_id available, using default value 1 for checkpoint")
+		}
+	}
 	checkpoint := &NormalizationCheckpoint{
 		ProcessedCount:  0,
 		LastProcessedID: 0,
 		TotalCount:      len(items),
 		StartTime:       startTime,
 		LastSaveTime:    startTime,
-		UploadID:        1, // TODO: использовать реальный upload_id из контекста
+		UploadID:        checkpointUploadID,
 		BatchSize:       1000,
 	}
 	n.currentCheckpoint = checkpoint // Сохраняем для мониторинга
@@ -211,7 +271,27 @@ func (n *Normalizer) ProcessNormalization() error {
 	processedCount := 0
 	aiProcessedCount := 0
 
-	for _, item := range items {
+	// Константа для интервала проверки остановки
+	const stopCheckInterval = 50
+
+	for i, item := range items {
+		// Проверка остановки каждые N записей
+		if i > 0 && i%stopCheckInterval == 0 && n.stopCheck != nil && n.stopCheck() {
+			n.sendEvent(fmt.Sprintf("Нормализация остановлена пользователем на записи %d из %d", i, len(items)))
+			log.Printf("Нормализация остановлена пользователем на записи %d из %d", i, len(items))
+			return fmt.Errorf("normalization stopped by user at item %d of %d", i, len(items))
+		}
+
+		// Валидация элемента (если настроен ValidationEngine)
+		if n.validationEngine != nil {
+			if !n.validationEngine.ValidateItem(item) {
+				// Элемент не прошел валидацию (критические ошибки)
+				// Пропускаем элемент и продолжаем со следующим
+				log.Printf("Элемент %d (%s) не прошел валидацию, пропускаем", item.ID, item.Name)
+				continue
+			}
+		}
+
 		// Базовая нормализация (правила) с извлечением атрибутов
 		category := n.categorizer.Categorize(item.Name)
 		normalizedName, attributes := n.nameNormalizer.ExtractAttributes(item.Name)
@@ -222,8 +302,21 @@ func (n *Normalizer) ProcessNormalization() error {
 		aiReasoning := ""
 		processingLevel := "basic"
 
-		// AI обработка если требуется
-		if n.useAI && n.aiNormalizer != nil && n.aiNormalizer.RequiresAI(item.Name, category) {
+		// Сначала проверяем эталоны перед AI-обработкой
+		benchmarkFound := false
+		if n.benchmarkFinder != nil {
+			benchmarkName, found, err := n.benchmarkFinder.FindBestMatch(item.Name, "nomenclature")
+			if err == nil && found {
+				normalizedName = benchmarkName
+				processingLevel = "benchmark"
+				aiConfidence = 1.0 // Эталон имеет максимальную уверенность
+				aiReasoning = "Найдено в эталонах"
+				benchmarkFound = true
+			}
+		}
+
+		// AI обработка если требуется (только если эталон не найден)
+		if !benchmarkFound && n.useAI && n.aiNormalizer != nil && n.aiNormalizer.RequiresAI(item.Name, category) {
 			aiResult, err := n.processWithAI(item.Name)
 			if err != nil {
 				n.sendEvent(fmt.Sprintf("⚠ AI ошибка для '%s': %v, используем правила", item.Name, err))
@@ -244,7 +337,6 @@ func (n *Normalizer) ProcessNormalization() error {
 				n.sendEvent(fmt.Sprintf("⚠ AI низкая уверенность (%.2f) для '%s', используем правила", aiResult.Confidence, item.Name))
 			}
 		}
-
 		// Создаем ключ группы ДО КПВЭД классификации, чтобы избежать изменения ключа
 		// Сначала определяем базовую категорию и нормализованное имя
 		key := groupKey{category: category, normalizedName: normalizedName}
@@ -267,7 +359,7 @@ func (n *Normalizer) ProcessNormalization() error {
 					kpvedCode = kpvedResult.FinalCode
 					kpvedName = kpvedResult.FinalName
 					kpvedConfidence = kpvedResult.FinalConfidence
-					
+
 					// Используем название из КПВЭД как категорию, если уверенность достаточна
 					// Но только если это не изменит ключ группы (чтобы не создавать дубликаты)
 					if kpvedName != "" && kpvedConfidence >= 0.5 {
@@ -279,7 +371,7 @@ func (n *Normalizer) ProcessNormalization() error {
 							key = newKey
 						}
 					}
-					
+
 					log.Printf("📊 KPVED (иерархический): %s -> %s (%s) [%.2f] за %dms (%d шагов, %d AI вызовов)",
 						normalizedName, kpvedCode, kpvedName, kpvedConfidence,
 						kpvedResult.TotalDuration, len(kpvedResult.Steps), kpvedResult.AICallsCount)
@@ -406,7 +498,7 @@ func (n *Normalizer) ProcessNormalization() error {
 
 				// АТОМАРНАЯ вставка: items + attributes в ОДНОЙ транзакции
 				// Если любая часть упадет - откатится ВСЕ (предотвращает частичную вставку)
-				_, err = n.db.InsertNormalizedItemsWithAttributesBatch(filteredBatch, batchAttributes)
+				_, err = n.db.InsertNormalizedItemsWithAttributesBatch(filteredBatch, batchAttributes, n.sessionID, nil)
 				if err != nil {
 					n.sendEvent(fmt.Sprintf("Ошибка вставки пакета: %v", err))
 					return fmt.Errorf("failed to insert batch: %w", err)
@@ -470,7 +562,7 @@ func (n *Normalizer) ProcessNormalization() error {
 		}
 
 		// АТОМАРНАЯ вставка: items + attributes в ОДНОЙ транзакции
-		_, err = n.db.InsertNormalizedItemsWithAttributesBatch(filteredBatch, batchAttributes)
+		_, err = n.db.InsertNormalizedItemsWithAttributesBatch(filteredBatch, batchAttributes, n.sessionID, nil)
 		if err != nil {
 			n.sendEvent(fmt.Sprintf("Ошибка вставки финального пакета: %v", err))
 			return fmt.Errorf("failed to insert final batch: %w", err)
@@ -542,10 +634,8 @@ func (n *Normalizer) processWithAI(name string) (*AIResult, error) {
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			// Задержка перед повторной попыткой
-			time.Sleep(n.aiConfig.RateLimitDelay)
-		}
+		// Rate limiter в AIClient уже контролирует частоту запросов
+		// Дополнительная задержка не нужна - rate limiter сам будет ждать
 
 		result, err := n.aiNormalizer.NormalizeWithAI(name)
 		if err == nil {
@@ -568,6 +658,7 @@ func (n *Normalizer) GetAINormalizer() *AINormalizer {
 // Для дубликатов с высокой уверенностью (confidence >= 0.95):
 //   - Удаляет из батча
 //   - Увеличивает merged_count существующей записи в БД
+//
 // Возвращает очищенный батч без дубликатов
 func (n *Normalizer) filterDuplicatesFromBatch(batch []*database.NormalizedItem) ([]*database.NormalizedItem, error) {
 	if len(batch) == 0 {
@@ -671,9 +762,9 @@ func (n *Normalizer) filterDuplicatesFromBatch(batch []*database.NormalizedItem)
 						// Увеличиваем merged_count существующей записи
 						err := n.db.IncrementMergedCount(existingItem.ID)
 						if err != nil {
-							log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось увеличить merged_count для записи %d: %v", existingItem.ID, err)
+							log.Printf("[filterDuplicatesFromBatch] WARNING: Failed to increment merged_count for item ID=%d: %v", existingItem.ID, err)
 						} else {
-							log.Printf("Найден дубликат: '%s' (батч) совпадает с записью ID=%d в БД (confidence=%.2f). Merged_count увеличен.", batchItem.NormalizedName, existingItem.ID, group.Confidence)
+							log.Printf("[filterDuplicatesFromBatch] Found duplicate: '%s' (batch) matches existing item ID=%d in DB (confidence=%.2f). Merged_count incremented.", batchItem.NormalizedName, existingItem.ID, group.Confidence)
 						}
 
 						// Прерываем внутренний цикл, т.к. дубликат уже найден
@@ -689,7 +780,34 @@ func (n *Normalizer) filterDuplicatesFromBatch(batch []*database.NormalizedItem)
 		}
 	}
 
-	// 5. Фильтруем батч, удаляя дубликаты
+	// 5. Дополнительная проверка: проверяем дубликаты по code (UNIQUE constraint в БД)
+	// Это дополнительная защита на случай, если два воркера обрабатывают один и тот же элемент
+	for batchIdx, batchItem := range batch {
+		if toRemove[batchIdx] {
+			continue // Уже помечен на удаление
+		}
+		if batchItem.Code == "" {
+			continue // Нет code для проверки
+		}
+
+		// Проверяем, есть ли в БД запись с таким же code
+		for _, existingItem := range existingDupItems {
+			if existingItem.Code == batchItem.Code {
+				// Найден дубликат по code - помечаем на удаление
+				toRemove[batchIdx] = true
+				duplicatesFound++
+				log.Printf("[filterDuplicatesFromBatch] Found duplicate by code '%s': batch item matches existing item ID=%d. Skipping batch item.", batchItem.Code, existingItem.ID)
+				// Увеличиваем merged_count существующей записи
+				err := n.db.IncrementMergedCount(existingItem.ID)
+				if err != nil {
+					log.Printf("WARNING: Failed to increment merged_count for item ID=%d: %v", existingItem.ID, err)
+				}
+				break
+			}
+		}
+	}
+
+	// 6. Фильтруем батч, удаляя дубликаты
 	if len(toRemove) == 0 {
 		return batch, nil
 	}
@@ -701,8 +819,10 @@ func (n *Normalizer) filterDuplicatesFromBatch(batch []*database.NormalizedItem)
 		}
 	}
 
-	log.Printf("Фильтрация дубликатов: найдено %d дубликатов, удалено из батча. Осталось %d записей для вставки.", duplicatesFound, len(filtered))
-	n.sendEvent(fmt.Sprintf("Найдено и отфильтровано %d дубликатов", duplicatesFound))
+	if duplicatesFound > 0 {
+		log.Printf("[filterDuplicatesFromBatch] Filtered %d duplicate(s) from batch (was %d, now %d)", duplicatesFound, len(batch), len(filtered))
+		n.sendEvent(fmt.Sprintf("Найдено и отфильтровано %d дубликатов", duplicatesFound))
+	}
 
 	return filtered, nil
 }
@@ -756,8 +876,11 @@ func (n *Normalizer) loadCheckpoint(uploadID int) (*NormalizationCheckpoint, err
 	checkpointPath := n.getCheckpointPath(uploadID)
 
 	// Проверяем существование файла
-	if _, err := os.Stat(checkpointPath); os.IsNotExist(err) {
-		return nil, nil // Checkpoint не найден - начинаем с начала
+	if _, err := os.Stat(checkpointPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil // Checkpoint не найден - начинаем с начала
+		}
+		return nil, fmt.Errorf("failed to check checkpoint file: %w", err)
 	}
 
 	// Читаем файл
@@ -788,8 +911,11 @@ func (n *Normalizer) deleteCheckpoint(uploadID int) error {
 
 	checkpointPath := n.getCheckpointPath(uploadID)
 
-	if err := os.Remove(checkpointPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete checkpoint file: %w", err)
+	if err := os.Remove(checkpointPath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to delete checkpoint file: %w", err)
+		}
+		// ErrNotExist - это нормально, файл уже удален
 	}
 
 	log.Printf("Checkpoint удален после успешного завершения обработки")
@@ -844,13 +970,29 @@ func (n *Normalizer) GetCheckpointStatus() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"enabled":           true,
-		"active":            active,
-		"processed_count":   n.currentCheckpoint.ProcessedCount,
-		"total_count":       n.currentCheckpoint.TotalCount,
-		"progress_percent":  progressPercent,
+		"enabled":              true,
+		"active":               active,
+		"processed_count":      n.currentCheckpoint.ProcessedCount,
+		"total_count":          n.currentCheckpoint.TotalCount,
+		"progress_percent":     progressPercent,
 		"last_checkpoint_time": lastCheckpointTime,
-		"current_batch_id":    currentBatchID,
+		"current_batch_id":     currentBatchID,
 	}
 }
 
+// SetSessionID устанавливает ID сессии нормализации
+func (n *Normalizer) SetSessionID(sessionID int) {
+	n.sessionID = &sessionID
+}
+
+// SetNormalizationPipeline устанавливает pipeline нормализации
+// pipeline должен быть типа *pipeline_normalization.NormalizationPipeline
+func (n *Normalizer) SetNormalizationPipeline(pipeline interface{}) {
+	n.normalizationPipeline = pipeline
+	n.useNormalizationPipeline = pipeline != nil
+}
+
+// GetNormalizationPipeline возвращает pipeline нормализации
+func (n *Normalizer) GetNormalizationPipeline() interface{} {
+	return n.normalizationPipeline
+}

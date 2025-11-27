@@ -1,0 +1,2893 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "API для системы нормализации данных из 1С. Мульти-провайдерная нормализация, AI-классификация, управление качеством данных.",
+        "title": "HTTP Server API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "email": "support@example.com"
+        },
+        "license": {
+            "name": "Internal Use Only",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:9999",
+    "basePath": "/api",
+    "paths": {
+        "/api/benchmarks": {
+            "get": {
+                "description": "Returns a list of all active benchmarks or filtered by type",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "List all benchmarks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Entity type to filter by",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of benchmarks",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Benchmark"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get benchmarks",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/benchmarks/from-upload": {
+            "post": {
+                "description": "Creates a new benchmark from selected items in an upload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "Create benchmark from upload",
+                "parameters": [
+                    {
+                        "description": "Benchmark creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateBenchmarkFromUploadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Benchmark created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/models.Benchmark"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Upload not found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to create benchmark",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/benchmarks/search": {
+            "get": {
+                "description": "Finds the best matching benchmark for a given name and entity type",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "Search for best match benchmark",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name to search for",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Entity type (e.g., counterparty, nomenclature)",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Best matching benchmark",
+                        "schema": {
+                            "$ref": "#/definitions/models.Benchmark"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing required parameter",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Benchmark not found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/benchmarks/{id}": {
+            "get": {
+                "description": "Retrieves a specific benchmark by its ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "Get benchmark by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Benchmark ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Benchmark details",
+                        "schema": {
+                            "$ref": "#/definitions/models.Benchmark"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid benchmark ID",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Benchmark not found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates an existing benchmark with new data",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "Update benchmark",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Benchmark ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Benchmark update request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.UpdateBenchmarkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated benchmark",
+                        "schema": {
+                            "$ref": "#/definitions/models.Benchmark"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Benchmark not found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update benchmark",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Marks a benchmark as deleted (soft delete)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "benchmarks"
+                ],
+                "summary": "Delete benchmark",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Benchmark ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Success message",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid benchmark ID",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete benchmark",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/classification/classify": {
+            "post": {
+                "description": "Классифицирует элемент номенклатуры по справочнику КПВЭД",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "classification"
+                ],
+                "summary": "Классифицировать элемент",
+                "parameters": [
+                    {
+                        "description": "Данные для классификации",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ClassifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Результат классификации",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ClassifyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/classification/stats": {
+            "get": {
+                "description": "Возвращает статистику процесса классификации",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "classification"
+                ],
+                "summary": "Получить статистику классификации",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID базы данных",
+                        "name": "database_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Статистика классификации",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ClassificationStatsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/clients/{clientId}/projects/{projectId}/normalization/preview-stats": {
+            "get": {
+                "description": "Возвращает агрегированные показатели по выбранным базам перед запуском нормализации.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить превью статистику нормализации проекта",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID клиента",
+                        "name": "clientId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID проекта",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Предварительная статистика",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Клиент или проект не найдены",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/clients/{clientId}/projects/{projectId}/normalization/start": {
+            "post": {
+                "description": "Запускает процесс нормализации контрагентов для заданного клиента и проекта.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Запустить нормализацию проекта клиента",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID клиента",
+                        "name": "clientId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID проекта",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Дополнительные опции запуска",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Статус запуска",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Клиент или проект не найдены",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Не удалось запустить нормализацию",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/clients/{clientId}/projects/{projectId}/normalization/status": {
+            "get": {
+                "description": "Возвращает прогресс и состояние текущей сессии нормализации.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить статус нормализации проекта клиента",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID клиента",
+                        "name": "clientId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID проекта",
+                        "name": "projectId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NormalizationStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Клиент или проект не найдены",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/database/info": {
+            "get": {
+                "description": "Возвращает детальную информацию о базе данных",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "databases"
+                ],
+                "summary": "Получить информацию о базе данных",
+                "responses": {
+                    "200": {
+                        "description": "Информация о базе данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DatabaseInfoResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/databases/find": {
+            "get": {
+                "description": "Ищет базы данных по запросу",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "databases"
+                ],
+                "summary": "Найти базы данных",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Поисковый запрос",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Найденные базы данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DatabaseListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/databases/list": {
+            "get": {
+                "description": "Возвращает список всех доступных баз данных в системе",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "databases"
+                ],
+                "summary": "Получить список всех баз данных",
+                "responses": {
+                    "200": {
+                        "description": "Список баз данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DatabaseListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts": {
+            "get": {
+                "description": "Возвращает список ГОСТов с фильтрацией и пагинацией",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Получить список ГОСТов",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Количество записей на странице",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Смещение для пагинации",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по статусу",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по типу источника",
+                        "name": "source_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Поисковый запрос",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Дата принятия с (ГГГГ-ММ-ДД)",
+                        "name": "adoption_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Дата принятия по (ГГГГ-ММ-ДД)",
+                        "name": "adoption_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Дата вступления с (ГГГГ-ММ-ДД)",
+                        "name": "effective_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Дата вступления по (ГГГГ-ММ-ДД)",
+                        "name": "effective_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список ГОСТов",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/:id": {
+            "get": {
+                "description": "Возвращает детальную информацию о ГОСТе по ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Получить детальную информацию о ГОСТе",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID ГОСТа",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Детальная информация о ГОСТе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "ГОСТ не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/:id/document": {
+            "get": {
+                "description": "Возвращает файл документа ГОСТа",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/pdf",
+                    "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Получить документ ГОСТа",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID ГОСТа",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID документа (если не указан, возвращается последний)",
+                        "name": "doc_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Файл документа"
+                    },
+                    "404": {
+                        "description": "Документ не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Загружает полный текст ГОСТа (PDF/Word)",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Загрузить документ для ГОСТа",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID ГОСТа",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "Файл документа (PDF/Word)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Информация о загруженном документе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "ГОСТ не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/import": {
+            "post": {
+                "description": "Загружает и импортирует ГОСТы из CSV файла",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Импортировать ГОСТы из CSV",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "CSV файл с ГОСТами",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Тип источника данных",
+                        "name": "source_type",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "URL источника данных",
+                        "name": "source_url",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Результат импорта",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/number/:number": {
+            "get": {
+                "description": "Возвращает информацию о ГОСТе по его номеру",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Получить ГОСТ по номеру",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Номер ГОСТа",
+                        "name": "number",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Информация о ГОСТе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "ГОСТ не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/search": {
+            "get": {
+                "description": "Выполняет поиск ГОСТов по номеру, названию или ключевым словам",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Поиск ГОСТов",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Поисковый запрос",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Количество записей на странице",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "Смещение для пагинации",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Результаты поиска",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/gosts/statistics": {
+            "get": {
+                "description": "Возвращает статистику по базе ГОСТов",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gosts"
+                ],
+                "summary": "Получить статистику по базе ГОСТов",
+                "responses": {
+                    "200": {
+                        "description": "Статистика",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitoring/providers": {
+            "get": {
+                "description": "Возвращает текущий статус и метрики всех AI-провайдеров",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitoring"
+                ],
+                "summary": "Получить статус AI-провайдеров",
+                "responses": {
+                    "200": {
+                        "description": "Данные мониторинга провайдеров",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.MonitoringDataResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitoring/providers/{id}": {
+            "get": {
+                "description": "Возвращает детальные метрики конкретного AI-провайдера",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitoring"
+                ],
+                "summary": "Получить метрики провайдера",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID провайдера",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Метрики провайдера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProviderMetricsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Провайдер не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitoring/providers/{id}/start": {
+            "post": {
+                "description": "Запускает указанный AI-провайдер",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitoring"
+                ],
+                "summary": "Запустить провайдер",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID провайдера",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Успешный запуск",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Провайдер не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/monitoring/providers/{id}/stop": {
+            "post": {
+                "description": "Останавливает указанный AI-провайдер",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "monitoring"
+                ],
+                "summary": "Остановить провайдер",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID провайдера",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Успешная остановка",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Провайдер не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/apply-ai": {
+            "post": {
+                "description": "Запускает AI-коррекцию для текущей сессии нормализации и фиксирует результат.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Применить AI-коррекцию",
+                "parameters": [
+                    {
+                        "description": "Параметры AI-коррекции",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NormalizationAIRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Обновленная информация о сессии",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/apply-categorization": {
+            "post": {
+                "description": "Позволяет вручную задать категорию для результатов нормализации в рамках указанной сессии.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Применить категорию для сессии нормализации",
+                "parameters": [
+                    {
+                        "description": "Идентификатор сессии и категория",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NormalizationCategoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Обновленная информация",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/apply-patterns": {
+            "post": {
+                "description": "Применяет корректирующие паттерны к текущей сессии нормализации и сохраняет результат.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Применить алгоритмические паттерны",
+                "parameters": [
+                    {
+                        "description": "Идентификатор сессии",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NormalizationSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Обновленная информация о сессии",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/columns": {
+            "get": {
+                "description": "Возвращает список всех колонок указанной таблицы с информацией о типе данных и других атрибутах.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить список колонок таблицы",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Имя таблицы",
+                        "name": "table",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список колонок с их атрибутами",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Отсутствует имя таблицы или некорректные параметры",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка при запросе к базе данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/config": {
+            "get": {
+                "description": "Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает GET (получение), PUT/POST (обновление).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить/Обновить конфигурацию нормализации",
+                "parameters": [
+                    {
+                        "description": "Конфигурация нормализации (для PUT/POST)",
+                        "name": "config",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Конфигурация или сообщение об успехе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Сервис недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает GET (получение), PUT/POST (обновление).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить/Обновить конфигурацию нормализации",
+                "parameters": [
+                    {
+                        "description": "Конфигурация нормализации (для PUT/POST)",
+                        "name": "config",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Конфигурация или сообщение об успехе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Сервис недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает GET (получение), PUT/POST (обновление).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить/Обновить конфигурацию нормализации",
+                "parameters": [
+                    {
+                        "description": "Конфигурация нормализации (для PUT/POST)",
+                        "name": "config",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Конфигурация или сообщение об успехе",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Сервис недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/databases": {
+            "get": {
+                "description": "Возвращает список доступных баз данных для нормализации с информацией о размере и пути.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить список баз данных",
+                "responses": {
+                    "200": {
+                        "description": "Список баз данных",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": true
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/events": {
+            "get": {
+                "description": "Возвращает Server-Sent Events (SSE) поток с событиями процесса нормализации в реальном времени.",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить поток событий нормализации",
+                "responses": {
+                    "200": {
+                        "description": "SSE поток событий",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/export": {
+            "get": {
+                "description": "Экспортирует нормализованные данные с возможностью фильтрации по категории, поисковому запросу, коду КПВЭД и другим параметрам.",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Экспортировать нормализованные данные",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Формат экспорта (csv, json). По умолчанию csv",
+                        "name": "format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по категории",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Поисковый запрос",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по коду КПВЭД",
+                        "name": "kpved_code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Лимит записей (по умолчанию 10000)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Экспортированные данные",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные параметры запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/export-group": {
+            "get": {
+                "description": "Экспортирует указанную группу нормализованных данных в выбранном формате (CSV, JSON и т.д.).",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Экспортировать группу нормализованных данных",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Нормализованное название группы",
+                        "name": "normalized_name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Категория группы",
+                        "name": "category",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Формат экспорта (csv, json)",
+                        "name": "format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Экспортированные данные",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Отсутствуют обязательные параметры",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/group-items": {
+            "get": {
+                "description": "Возвращает все исходные записи, объединенные в указанную группу.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить элементы группы нормализованных данных",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Нормализованное название группы",
+                        "name": "normalized_name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Категория группы",
+                        "name": "category",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список элементов группы",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Отсутствуют обязательные параметры",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/groups": {
+            "get": {
+                "description": "Возвращает список всех групп нормализованных данных с агрегированной информацией по каждой группе.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить группы нормализованных данных",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по категории",
+                        "name": "category",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список групп нормализованных данных",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/history": {
+            "get": {
+                "description": "Возвращает стадии нормализации и список примененных шагов для указанной сессии.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить историю сессии нормализации",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Идентификатор сессии",
+                        "name": "session_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "История стадий",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/item-attributes/{id}": {
+            "get": {
+                "description": "Возвращает детальную информацию об атрибутах указанного элемента нормализации по его ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить атрибуты элемента нормализации",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID элемента нормализации",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Атрибуты элемента",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный ID",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Элемент не найден",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/pipeline/stage-details": {
+            "get": {
+                "description": "Возвращает подробную информацию о текущем этапе pipeline нормализации, включая прогресс и статус обработки.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить детали текущего этапа нормализации",
+                "responses": {
+                    "200": {
+                        "description": "Детали этапа нормализации",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Сервис недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/pipeline/stats": {
+            "get": {
+                "description": "Возвращает детальную статистику по этапам pipeline нормализации, включая информацию о стадиях обработки.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить статистику pipeline нормализации",
+                "responses": {
+                    "200": {
+                        "description": "Статистика pipeline",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Сервис недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/revert": {
+            "post": {
+                "description": "Откатывает указанную стадию и восстанавливает предыдущее значение в normalized_data.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Откатить стадию нормализации",
+                "parameters": [
+                    {
+                        "description": "Параметры отката",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NormalizationRevertRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Актуальное состояние сессии",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/start": {
+            "post": {
+                "description": "Создает новую сессию нормализации для указанного элемента и возвращает session_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Запустить версионированную нормализацию",
+                "parameters": [
+                    {
+                        "description": "Параметры запуска нормализации",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.NormalizationStartRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Информация о сессии",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/stats": {
+            "get": {
+                "description": "Возвращает агрегированную статистику по процессу нормализации: количество обработанных записей, групп, успешных операций и ошибок.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить статистику нормализации",
+                "responses": {
+                    "200": {
+                        "description": "Статистика нормализации",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/status": {
+            "get": {
+                "description": "Возвращает агрегированную информацию о текущем состоянии нормализационной сессии.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить общий статус нормализации",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/types.NormalizationStatus"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/stop": {
+            "post": {
+                "description": "Останавливает текущий процесс нормализации и возвращает статус операции.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Остановить нормализацию",
+                "responses": {
+                    "200": {
+                        "description": "Статус остановки с полем was_running",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalization/tables": {
+            "get": {
+                "description": "Возвращает список всех таблиц в указанной базе данных, исключая системные таблицы SQLite.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "Получить список таблиц базы данных",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Путь к базе данных",
+                        "name": "database",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список имен таблиц",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные параметры запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Метод не поддерживается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка при запросе к базе данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/normalize/start": {
+            "post": {
+                "description": "Устаревший метод. Рекомендуется использовать POST /api/clients/:clientId/projects/:projectId/normalization/start",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "normalization"
+                ],
+                "summary": "(Legacy) Запустить нормализацию для проекта клиента",
+                "deprecated": true,
+                "responses": {
+                    "200": {
+                        "description": "Результат запуска нормализации",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quality/report": {
+            "get": {
+                "description": "Возвращает детальный отчет о качестве данных для указанной базы данных",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quality"
+                ],
+                "summary": "Получить отчет о качестве данных",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID базы данных",
+                        "name": "database_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID клиента",
+                        "name": "client_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Отчет о качестве данных",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.QualityReportResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "База данных не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/quality/score/{database_id}": {
+            "get": {
+                "description": "Возвращает оценку качества данных для указанной базы данных",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quality"
+                ],
+                "summary": "Получить оценку качества базы данных",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "ID базы данных",
+                        "name": "database_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Оценка качества",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.QualityScoreResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "База данных не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handlers.ClassificationStatsResponse": {
+            "type": "object",
+            "properties": {
+                "average_confidence": {
+                    "type": "number"
+                },
+                "classified_items": {
+                    "type": "integer"
+                },
+                "pendingItems": {
+                    "type": "integer"
+                },
+                "total_items": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.ClassifyRequest": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "classifier": {
+                    "type": "string"
+                },
+                "context": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "item_code": {
+                    "type": "string"
+                },
+                "item_id": {
+                    "type": "integer"
+                },
+                "item_name": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "strategy_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.ClassifyResponse": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "category": {
+                    "type": "string"
+                },
+                "classifier": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "item_code": {
+                    "type": "string"
+                },
+                "item_id": {
+                    "type": "integer"
+                },
+                "item_name": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "result": {},
+                "subcategory": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.DatabaseInfoResponse": {
+            "type": "object",
+            "properties": {
+                "info": {}
+            }
+        },
+        "handlers.DatabaseListResponse": {
+            "type": "object",
+            "properties": {
+                "aggregated_stats": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "databases": {
+                    "type": "array",
+                    "items": {}
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.MonitoringDataResponse": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.ProviderMetricsResponse"
+                    }
+                },
+                "system": {
+                    "$ref": "#/definitions/handlers.SystemStatsResponse"
+                }
+            }
+        },
+        "handlers.NormalizationAIRequest": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "\"Предыдущие варианты\""
+                    ]
+                },
+                "session_id": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "use_chat": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "handlers.NormalizationCategoryRequest": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "example": "materials"
+                },
+                "session_id": {
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "handlers.NormalizationRevertRequest": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "stage_index": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "handlers.NormalizationSessionRequest": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "handlers.NormalizationStartRequest": {
+            "type": "object",
+            "properties": {
+                "item_id": {
+                    "type": "integer",
+                    "example": 1001
+                },
+                "original_name": {
+                    "type": "string",
+                    "example": "Труба стальная 20мм"
+                }
+            }
+        },
+        "handlers.ProviderMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "active_channels": {
+                    "type": "integer"
+                },
+                "average_latency_ms": {
+                    "type": "number"
+                },
+                "current_requests": {
+                    "type": "integer"
+                },
+                "failed_requests": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_request_time": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "requests_per_second": {
+                    "type": "number"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "successful_requests": {
+                    "type": "integer"
+                },
+                "total_requests": {
+                    "type": "integer"
+                }
+            }
+        },
+        "handlers.QualityReportResponse": {
+            "type": "object",
+            "properties": {
+                "accuracy": {
+                    "type": "number"
+                },
+                "completeness": {
+                    "type": "number"
+                },
+                "consistency": {
+                    "type": "number"
+                },
+                "database_id": {
+                    "type": "integer"
+                },
+                "database_name": {
+                    "type": "string"
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "overall_score": {
+                    "type": "number"
+                },
+                "recommendations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "statistics": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "uniqueness": {
+                    "type": "number"
+                }
+            }
+        },
+        "handlers.QualityScoreResponse": {
+            "type": "object",
+            "properties": {
+                "accuracy": {
+                    "type": "number"
+                },
+                "completeness": {
+                    "type": "number"
+                },
+                "consistency": {
+                    "type": "number"
+                },
+                "database_id": {
+                    "type": "integer"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "uniqueness": {
+                    "type": "number"
+                }
+            }
+        },
+        "handlers.SystemStatsResponse": {
+            "type": "object",
+            "properties": {
+                "active_providers": {
+                    "type": "integer"
+                },
+                "system_requests_per_second": {
+                    "type": "number"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "total_failed": {
+                    "type": "integer"
+                },
+                "total_providers": {
+                    "type": "integer"
+                },
+                "total_requests": {
+                    "type": "integer"
+                },
+                "total_successful": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.Benchmark": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "entity_type": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source_client_id": {
+                    "type": "integer"
+                },
+                "source_upload_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "variations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.CreateBenchmarkFromUploadRequest": {
+            "type": "object",
+            "required": [
+                "entity_type",
+                "item_ids",
+                "upload_id"
+            ],
+            "properties": {
+                "entity_type": {
+                    "type": "string"
+                },
+                "item_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "upload_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.UpdateBenchmarkRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "entity_type": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "variations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "types.NormalizationStatus": {
+            "type": "object",
+            "properties": {
+                "currentStep": {
+                    "type": "string"
+                },
+                "elapsedTime": {
+                    "type": "string"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "isRunning": {
+                    "type": "boolean"
+                },
+                "kpvedClassified": {
+                    "description": "количество классифицированных групп по КПВЭД",
+                    "type": "integer"
+                },
+                "kpvedProgress": {
+                    "description": "процент классифицированных групп по КПВЭД",
+                    "type": "number"
+                },
+                "kpvedTotal": {
+                    "description": "общее количество групп для КПВЭД",
+                    "type": "integer"
+                },
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "processed": {
+                    "type": "integer"
+                },
+                "progress": {
+                    "type": "number"
+                },
+                "rate": {
+                    "description": "записей в секунду",
+                    "type": "number"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        }
+    }
+}

@@ -21,16 +21,16 @@ const (
 
 // ValidationError ошибка валидации
 type ValidationError struct {
-	ItemID       int                `json:"item_id"`
-	ItemName     string             `json:"item_name"`
-	ItemCode     string             `json:"item_code"`
-	ErrorType    string             `json:"error_type"`
-	ErrorMessage string             `json:"error_message"`
-	Severity     ValidationSeverity `json:"severity"`
-	FieldName    string             `json:"field_name,omitempty"`
-	ExpectedValue string            `json:"expected_value,omitempty"`
-	ActualValue  string             `json:"actual_value,omitempty"`
-	Timestamp    time.Time          `json:"timestamp"`
+	ItemID        int                `json:"item_id"`
+	ItemName      string             `json:"item_name"`
+	ItemCode      string             `json:"item_code"`
+	ErrorType     string             `json:"error_type"`
+	ErrorMessage  string             `json:"error_message"`
+	Severity      ValidationSeverity `json:"severity"`
+	FieldName     string             `json:"field_name,omitempty"`
+	ExpectedValue string             `json:"expected_value,omitempty"`
+	ActualValue   string             `json:"actual_value,omitempty"`
+	Timestamp     time.Time          `json:"timestamp"`
 }
 
 // ValidationWarning предупреждение валидации

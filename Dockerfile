@@ -15,14 +15,17 @@ RUN go mod download
 COPY . .
 
 # Собираем приложение без GUI зависимостей (используем build tag no_gui)
-# Компилируем только main_no_gui.go, чтобы избежать конфликта с main_docker.go
-RUN CGO_ENABLED=1 GOOS=linux go build -tags no_gui -o httpserver -ldflags="-w -s" main_no_gui.go
+# Используем main_no_gui.go из корня проекта
+RUN CGO_ENABLED=1 GOOS=linux go build -tags no_gui -o httpserver -ldflags="-w -s" ./main_no_gui.go
+
+# Проверяем, что бинарник создан
+RUN ls -lh httpserver || (echo "ERROR: Binary not found after build" && exit 1)
 
 # Финальный образ
 FROM alpine:latest
 
-# Устанавливаем необходимые пакеты для SQLite
-RUN apk add --no-cache ca-certificates sqlite
+# Устанавливаем необходимые пакеты для SQLite и утилиты для healthcheck
+RUN apk add --no-cache ca-certificates sqlite wget curl
 
 # Создаем пользователя для запуска приложения
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

@@ -9,11 +9,11 @@ import (
 type SuggestionType string
 
 const (
-	SuggestionTypeSetValue      SuggestionType = "set_value"       // Установить значение
-	SuggestionTypeCorrectFormat SuggestionType = "correct_format"  // Исправить формат
-	SuggestionTypeReprocess     SuggestionType = "reprocess"       // Повторно обработать
-	SuggestionTypeMerge         SuggestionType = "merge"           // Объединить с другой записью
-	SuggestionTypeReview        SuggestionType = "review"          // Требует ручной проверки
+	SuggestionTypeSetValue      SuggestionType = "set_value"      // Установить значение
+	SuggestionTypeCorrectFormat SuggestionType = "correct_format" // Исправить формат
+	SuggestionTypeReprocess     SuggestionType = "reprocess"      // Повторно обработать
+	SuggestionTypeMerge         SuggestionType = "merge"          // Объединить с другой записью
+	SuggestionTypeReview        SuggestionType = "review"         // Требует ручной проверки
 )
 
 // SuggestionPriority приоритет предложения
@@ -259,11 +259,11 @@ func (se *SuggestionEngine) GetAutoApplyableSuggestions(suggestions []Suggestion
 func (se *SuggestionEngine) EstimateImpact(suggestion Suggestion, currentQuality float64) float64 {
 	// Оценка потенциального улучшения в зависимости от типа
 	baseImpact := map[SuggestionType]float64{
-		SuggestionTypeSetValue:      0.05,  // +5%
-		SuggestionTypeCorrectFormat: 0.03,  // +3%
-		SuggestionTypeReprocess:     0.15,  // +15%
-		SuggestionTypeMerge:         0.10,  // +10%
-		SuggestionTypeReview:        0.08,  // +8%
+		SuggestionTypeSetValue:      0.05, // +5%
+		SuggestionTypeCorrectFormat: 0.03, // +3%
+		SuggestionTypeReprocess:     0.15, // +15%
+		SuggestionTypeMerge:         0.10, // +10%
+		SuggestionTypeReview:        0.08, // +8%
 	}
 
 	impact := baseImpact[suggestion.Type]

@@ -250,4 +250,3 @@ func TestWordBasedSingleWord(t *testing.T) {
 		t.Error("Expected to find word-based group for items with same word")
 	}
 }
-

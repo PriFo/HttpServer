@@ -271,29 +271,29 @@ func (p *ClassificationPrompt) GetPromptSize() int {
 // getClassificationRules возвращает универсальные правила классификации
 func (pb *PromptBuilder) getClassificationRules(objectType string) string {
 	rules := strings.Builder{}
-	
+
 	rules.WriteString("1. РАЗГРАНИЧЕНИЕ ТОВАР/УСЛУГА:\n")
 	rules.WriteString("   - ТОВАРЫ: физические объекты, материалы, оборудование, изделия, комплектующие\n")
 	rules.WriteString("   - УСЛУГИ: работы, действия, консультации, техническое обслуживание, испытания\n")
 	rules.WriteString("   - КРИТИЧНО: если объект является товаром, НЕ выбирай категории услуг (разделы 33-99)\n\n")
-	
+
 	rules.WriteString("2. ПРИЗНАКИ ТОВАРА (физический объект):\n")
 	rules.WriteString("   - Наличие марки, модели, артикула (например: AKS, HELUKABEL, MQ)\n")
 	rules.WriteString("   - Указание размеров, технических характеристик (диаметр, длина, давление)\n")
 	rules.WriteString("   - Названия материалов, компонентов, элементов (кабель, датчик, панель, элемент)\n")
 	rules.WriteString("   - Возможность поставки, хранения, инвентаризации\n\n")
-	
+
 	rules.WriteString("3. ПРИЗНАКИ УСЛУГИ (действие, работа):\n")
 	rules.WriteString("   - Описание действий (монтаж, установка, ремонт, испытание, консультация)\n")
 	rules.WriteString("   - Упоминание работ, услуг, обслуживания\n")
 	rules.WriteString("   - Отсутствие физических характеристик товара\n\n")
-	
+
 	rules.WriteString("4. ТИПИЧНЫЕ ОШИБКИ (ИЗБЕГАТЬ):\n")
 	rules.WriteString("   - Классифицировать оборудование/датчики как услуги по испытаниям\n")
 	rules.WriteString("   - Классифицировать материалы/компоненты как прочие услуги\n")
 	rules.WriteString("   - Классифицировать кабели как электронные платы\n")
 	rules.WriteString("   - Классифицировать строительные элементы как прочие изделия\n\n")
-	
+
 	rules.WriteString("5. ПРАВИЛА КЛАССИФИКАЦИИ СТРОИТЕЛЬНЫХ МАТЕРИАЛОВ:\n")
 	rules.WriteString("   - СЭНДВИЧ-ПАНЕЛИ (металлическая обшивка + утеплитель):\n")
 	rules.WriteString("     * Содержат \"isowall\", \"сэндвич\", \"sandwich\", \"isopan\" → 25.11.1 (Металлические конструкции)\n")
@@ -306,7 +306,7 @@ func (pb *PromptBuilder) getClassificationRules(objectType string) string {
 	rules.WriteString("     * Металлические конструкции → 25.11.1\n")
 	rules.WriteString("     * Пластмассовые → 23.62.1\n")
 	rules.WriteString("     * Из минеральных материалов → 23.69.19\n\n")
-	
+
 	rules.WriteString("6. ПРИМЕРЫ ПРАВИЛЬНОЙ КЛАССИФИКАЦИИ:\n")
 	rules.WriteString("   - \"кабель контрольный helukabel\" → Кабели (27.32), НЕ Платы (26.12)\n")
 	rules.WriteString("   - \"преобразователь давления aks\" → Приборы измерения (26.51), НЕ Услуги испытаний (71.20)\n")
@@ -314,13 +314,13 @@ func (pb *PromptBuilder) getClassificationRules(objectType string) string {
 	rules.WriteString("   - \"болт м10\" → Метизы (25.93), НЕ Услуги\n")
 	rules.WriteString("   - \"панель isowall box\" → Металлические конструкции (25.11.1), НЕ Изделия из гипса (23.69.19)\n")
 	rules.WriteString("   - \"сэндвич панель\" → Металлические конструкции (25.11.1), НЕ Изделия из гипса (23.69.19)\n\n")
-	
+
 	if objectType == "product" {
 		rules.WriteString("ВАЖНО: Объект определен как ТОВАР. Исключи все категории услуг из рассмотрения.\n")
 	} else if objectType == "service" {
 		rules.WriteString("ВАЖНО: Объект определен как УСЛУГА. Выбирай только категории услуг.\n")
 	}
-	
+
 	return rules.String()
 }
 

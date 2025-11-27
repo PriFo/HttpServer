@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { qualityAnalyzeSchema, validateRequest, formatValidationError } from '@/lib/validation'
+import { getBackendUrl } from '@/lib/api-config'
+import { fetchJsonServer, getServerErrorMessage, getServerErrorStatus } from '@/lib/fetch-utils-server'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+const BACKEND_URL = getBackendUrl()
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,50 +24,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const response = await fetch(`${BACKEND_URL}/api/quality/analyze`, {
+    const data = await fetchJsonServer(`${BACKEND_URL}/api/quality/analyze`, {
       method: 'POST',
+      timeout: QUALITY_TIMEOUTS.VERY_LONG,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(validation.data),
     })
 
-    if (!response.ok) {
-      let errorMessage = 'Failed to start analysis'
-      try {
-        const errorText = await response.text()
-        console.error(`Backend responded with status ${response.status}:`, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorMessage
-        } catch {
-          errorMessage = `Backend error: ${response.status} - ${errorText}`
-        }
-      } catch {
-        errorMessage = `Backend responded with status ${response.status}`
-      }
-      
-      return NextResponse.json(
-        { 
-          error: errorMessage,
-          details: errorMessage
-        },
-        { status: response.status }
-      )
-    }
-
-    const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
     console.error('Error starting quality analysis:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    const errorMessage = getServerErrorMessage(error, 'Failed to connect to backend')
+    const status = getServerErrorStatus(error, 500)
+
     return NextResponse.json(
       { 
-        error: 'Failed to connect to backend',
+        error: errorMessage,
         details: errorMessage
       },
-      { status: 500 }
+      { status }
     )
   }
-}
+  }
 

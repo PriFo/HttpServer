@@ -13,14 +13,22 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { Menu, Database } from 'lucide-react'
+import { 
+  Menu, Database, Home, Users, PlayCircle, 
+  CheckCircle2, BarChart3, FolderOpen, Clock, 
+  Activity, Settings, Gauge, TrendingUp, FileText 
+} from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 
+interface NavigationItem {
+  name: string
+  href: string
+  icon?: React.ComponentType<{ className?: string }>
+  description?: string
+}
+
 interface MobileNavProps {
-  navigation: Array<{
-    name: string
-    href: string
-  }>
+  navigation: NavigationItem[]
 }
 
 export function MobileNav({ navigation }: MobileNavProps) {
@@ -34,15 +42,26 @@ export function MobileNav({ navigation }: MobileNavProps) {
       try {
         const response = await fetch('/api/database/info')
         if (response.ok) {
-          const data = await response.json()
-          setDbName(data.name || 'Сервисная БД')
-          setDbStatus(data.status || 'disconnected')
+          try {
+            const data = await response.json()
+            setDbName(data.name || 'Сервисная БД')
+            setDbStatus(data.status || 'disconnected')
+          } catch (parseError) {
+            // Если не удалось распарсить JSON, используем дефолтные значения
+            setDbName('Сервисная БД')
+            setDbStatus('disconnected')
+          }
         } else {
           setDbName('Сервисная БД')
           setDbStatus('disconnected')
         }
       } catch (error) {
-        console.error('Error fetching database info:', error)
+        // Логируем ошибку только если она содержит полезную информацию
+        if (error instanceof Error && error.message) {
+          console.error('Error fetching database info:', error.message)
+        } else if (error && typeof error === 'object' && Object.keys(error).length > 0) {
+          console.error('Error fetching database info:', error)
+        }
         setDbName('Сервисная БД')
         setDbStatus('disconnected')
       }
@@ -92,20 +111,31 @@ export function MobileNav({ navigation }: MobileNavProps) {
 
           {/* Навигационные ссылки */}
           <nav className="flex flex-col gap-2">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`}
-              >
-                {item.name}
-              </Link>
-            ))}
+            {navigation.map((item) => {
+              const Icon = item.icon || Database
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all group ${
+                    isActive(item.href)
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 flex-shrink-0 transition-transform ${isActive(item.href) ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{item.name}</div>
+                    {item.description && (
+                      <div className="text-xs opacity-75 mt-0.5 line-clamp-1">
+                        {item.description}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
           </nav>
 
           {/* Информация */}

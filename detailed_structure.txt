@@ -1,0 +1,159 @@
+=== ╨Ф╨Х╨в╨Р╨Ы╨м╨Э╨л╨Щ ╨Р╨Э╨Р╨Ы╨Ш╨Ч ╨б╨в╨а╨г╨Ъ╨в╨г╨а╨л ╨С╨Ф ===
+
+╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е: data/uploads/╨Т╤Л╨│╤А╤Г╨╖╨║╨░_╨Ъ╨╛╨╜╤В╤А╨░╨│╨╡╨╜╤В╤Л_╨С╤Г╤Е╨│╨░╨╗╤В╨╡╤А╨╕╤П╨Ф╨╗╤П╨Ъ╨░╨╖╨░╤Е╤Б╤В╨░╨╜╨░_Unknown_Unknown_2025.db
+
+1. ╨б╨в╨а╨г╨Ъ╨в╨г╨а╨Р ╨в╨Р╨С╨Ы╨Ш╨ж╨л catalog_items:
+   тФМтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФмтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФмтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФР
+   тФВ ╨Ъ╨╛╨╗╨╛╨╜╨║╨░                          тФВ ╨в╨╕╨┐             тФВ NOT NULL тФВ
+   тФЬтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ╝тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ╝тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФд
+   тФВ id                               тФВ INTEGER         тФВ ╨Э╨Х╨в      тФВ
+   тФВ catalog_id                       тФВ INTEGER         тФВ ╨Ф╨Р       тФВ
+   тФВ reference                        тФВ TEXT            тФВ ╨Ф╨Р       тФВ
+   тФВ code                             тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ name                             тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ attributes_xml                   тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ table_parts_xml                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ created_at                       тФВ TIMESTAMP       тФВ ╨Э╨Х╨в      тФВ
+   тФВ normalized_name                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ kpved_code                       тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ kpved_name                       тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ processing_status                тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ processed_at                     тФВ TIMESTAMP       тФВ ╨Э╨Х╨в      тФВ
+   тФВ error_message                    тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ ai_response_raw                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ processing_attempts              тФВ INTEGER         тФВ ╨Э╨Х╨в      тФВ
+   тФВ last_processed_at                тФВ TIMESTAMP       тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_original                тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_level1                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_level2                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_level3                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_level4                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ category_level5                  тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФВ classification_confidence        тФВ REAL            тФВ ╨Э╨Х╨в      тФВ
+   тФВ classification_strategy          тФВ TEXT            тФВ ╨Э╨Х╨в      тФВ
+   тФФтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ┤тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ┤тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФШ
+
+2. ╨Я╨Х╨а╨Т╨л╨Х 3 ╨Ч╨Р╨Я╨Ш╨б╨Ш (╨▓ JSON):
+
+   ╨Ч╨░╨┐╨╕╤Б╤М 1:
+   {
+     "ai_response_raw": null,
+     "attributes_xml": "",
+     "catalog_id": 1,
+     "category_level1": null,
+     "category_level2": null,
+     "category_level3": null,
+     "category_level4": null,
+     "category_level5": null,
+     "category_original": null,
+     "classification_confidence": 0,
+     "classification_strategy": null,
+     "code": "╤П╤З╤Б206145",
+     "created_at": "2025-11-20T07:11:00Z",
+     "error_message": null,
+     "id": 1,
+     "kpved_code": null,
+     "kpved_name": null,
+     "last_processed_at": null,
+     "name": "╨С╨╡╨╗╤Л╨╣ ╨Т╨╡╤В╨╡╤А KZ ╨в╨Ю╨Ю",
+     "normalized_name": null,
+     "processed_at": null,
+     "processing_attempts": 0,
+     "processing_status": "pending",
+     "reference": "╨С╨╡╨╗╤Л╨╣ ╨Т╨╡╤В╨╡╤А KZ ╨в╨Ю╨Ю",
+     "table_parts_xml": ""
+   }
+
+   ╨Ч╨░╨┐╨╕╤Б╤М 2:
+   {
+     "ai_response_raw": null,
+     "attributes_xml": "",
+     "catalog_id": 1,
+     "category_level1": null,
+     "category_level2": null,
+     "category_level3": null,
+     "category_level4": null,
+     "category_level5": null,
+     "category_original": null,
+     "classification_confidence": 0,
+     "classification_strategy": null,
+     "code": "╤П╤З╤Б206150",
+     "created_at": "2025-11-20T07:11:00Z",
+     "error_message": null,
+     "id": 2,
+     "kpved_code": null,
+     "kpved_name": null,
+     "last_processed_at": null,
+     "name": "╨д╨╕╤А╨╝╨░ ╨Р╨╗╤В╤Л╨╜ ╨б╨г ╨в╨Ю╨Ю",
+     "normalized_name": null,
+     "processed_at": null,
+     "processing_attempts": 0,
+     "processing_status": "pending",
+     "reference": "╨д╨╕╤А╨╝╨░ ╨Р╨╗╤В╤Л╨╜ ╨б╨г ╨в╨Ю╨Ю",
+     "table_parts_xml": ""
+   }
+
+   ╨Ч╨░╨┐╨╕╤Б╤М 3:
+   {
+     "ai_response_raw": null,
+     "attributes_xml": "",
+     "catalog_id": 1,
+     "category_level1": null,
+     "category_level2": null,
+     "category_level3": null,
+     "category_level4": null,
+     "category_level5": null,
+     "category_original": null,
+     "classification_confidence": 0,
+     "classification_strategy": null,
+     "code": "000000053",
+     "created_at": "2025-11-20T07:11:00Z",
+     "error_message": null,
+     "id": 3,
+     "kpved_code": null,
+     "kpved_name": null,
+     "last_processed_at": null,
+     "name": "╨и╨░╤А╨╕╨┐╨╛╨▓ ╨б╨╡╤А╨╕╨║ ╨Р╤А╨║╨░╤И╨╡╨▓╨╕╤З",
+     "normalized_name": null,
+     "processed_at": null,
+     "processing_attempts": 0,
+     "processing_status": "pending",
+     "reference": "╨и╨░╤А╨╕╨┐╨╛╨▓ ╨б╨╡╤А╨╕╨║ ╨Р╤А╨║╨░╤И╨╡╨▓╨╕╤З",
+     "table_parts_xml": ""
+   }
+
+3. ╨Р╨Э╨Р╨Ы╨Ш╨Ч ╨Я╨Ю╨Ы╨п 'attributes' (╨╡╤Б╨╗╨╕ ╨╡╤Б╤В╤М):
+   тЭМ ╨Я╨╛╨╗╨╡ attributes ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜╨╛
+
+4. ╨б╨в╨Р╨в╨Ш╨б╨в╨Ш╨Ъ╨Р ╨Я╨Ю ╨Ч╨Р╨Я╨Ю╨Ы╨Э╨Х╨Э╨Э╨Ю╨б╨в╨Ш:
+   тФМтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФмтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФмтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФР
+   тФВ ╨Ъ╨╛╨╗╨╛╨╜╨║╨░                          тФВ ╨Ч╨░╨┐╨╛╨╗╨╜╨╡╨╜╨╛тФВ ╨Я╤А╨╛╤Ж╨╡╨╜╤В    тФВ
+   тФЬтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ╝тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ╝тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФд
+   тФВ id                               тФВ     4627 тФВ     100.0% тФВ
+   тФВ catalog_id                       тФВ     4627 тФВ     100.0% тФВ
+   тФВ reference                        тФВ     4627 тФВ     100.0% тФВ
+   тФВ code                             тФВ     4627 тФВ     100.0% тФВ
+   тФВ name                             тФВ     4618 тФВ      99.8% тФВ
+   тФВ attributes_xml                   тФВ        0 тФВ       0.0% тФВ
+   тФВ table_parts_xml                  тФВ        0 тФВ       0.0% тФВ
+   тФВ created_at                       тФВ     4627 тФВ     100.0% тФВ
+   тФВ normalized_name                  тФВ        0 тФВ       0.0% тФВ
+   тФВ kpved_code                       тФВ        0 тФВ       0.0% тФВ
+   тФВ kpved_name                       тФВ        0 тФВ       0.0% тФВ
+   тФВ processing_status                тФВ     4627 тФВ     100.0% тФВ
+   тФВ processed_at                     тФВ        0 тФВ       0.0% тФВ
+   тФВ error_message                    тФВ        0 тФВ       0.0% тФВ
+   тФВ ai_response_raw                  тФВ        0 тФВ       0.0% тФВ
+   тФВ processing_attempts              тФВ     4627 тФВ     100.0% тФВ
+   тФВ last_processed_at                тФВ        0 тФВ       0.0% тФВ
+   тФВ category_original                тФВ        0 тФВ       0.0% тФВ
+   тФВ category_level1                  тФВ        0 тФВ       0.0% тФВ
+   тФВ category_level2                  тФВ        0 тФВ       0.0% тФВ
+   тФВ category_level3                  тФВ        0 тФВ       0.0% тФВ
+   тФВ category_level4                  тФВ        0 тФВ       0.0% тФВ
+   тФВ category_level5                  тФВ        0 тФВ       0.0% тФВ
+   тФВ classification_confidence        тФВ     4627 тФВ     100.0% тФВ
+   тФВ classification_strategy          тФВ        0 тФВ       0.0% тФВ
+   тФФтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ┤тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФ┤тФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФАтФШ
+
+   ╨Т╤Б╨╡╨│╨╛ ╨╖╨░╨┐╨╕╤Б╨╡╨╣: 4627

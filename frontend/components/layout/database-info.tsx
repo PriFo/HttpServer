@@ -19,8 +19,16 @@ export function DatabaseInfo() {
       try {
         const response = await fetch('/api/database/info')
         if (response.ok) {
-          const data = await response.json()
-          setDbInfo(data)
+          try {
+            const data = await response.json()
+            setDbInfo(data)
+          } catch (parseError) {
+            // Если не удалось распарсить JSON, используем дефолтные значения
+            setDbInfo({
+              name: 'Сервисная БД',
+              status: 'disconnected'
+            })
+          }
         } else {
           // Если ошибка, устанавливаем дефолтные значения для сервисной БД
           setDbInfo({
@@ -29,7 +37,12 @@ export function DatabaseInfo() {
           })
         }
       } catch (error) {
-        console.error('Error fetching database info:', error)
+        // Логируем ошибку только если она содержит полезную информацию
+        if (error instanceof Error && error.message) {
+          console.error('Error fetching database info:', error.message)
+        } else if (error && typeof error === 'object' && Object.keys(error).length > 0) {
+          console.error('Error fetching database info:', error)
+        }
         // При ошибке устанавливаем дефолтные значения для сервисной БД
         setDbInfo({
           name: 'Сервисная БД',

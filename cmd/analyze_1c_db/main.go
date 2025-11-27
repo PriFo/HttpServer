@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -64,8 +65,11 @@ func main() {
 	dbPath := os.Args[1]
 	
 	// Проверяем существование файла
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		log.Fatalf("Файл базы данных не найден: %s", dbPath)
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Fatalf("Файл базы данных не найден: %s", dbPath)
+		}
+		log.Fatalf("Ошибка проверки файла базы данных %s: %v", dbPath, err)
 	}
 
 	db, err := sql.Open("sqlite3", dbPath)

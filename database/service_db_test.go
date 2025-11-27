@@ -18,6 +18,7 @@ func TestCreateClient(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -53,6 +54,7 @@ func TestCreateProject(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -101,6 +103,7 @@ func TestCreateDatabase(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -161,6 +164,7 @@ func TestGetQualityMetrics(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -209,6 +213,7 @@ func TestCompareProjectsQuality(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -268,6 +273,7 @@ func TestGetClient(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {
@@ -306,6 +312,7 @@ func TestGetClientProject(t *testing.T) {
 		"test@example.com",
 		"+1234567890",
 		"TAX123",
+		"US",
 		"test_user",
 	)
 	if err != nil {

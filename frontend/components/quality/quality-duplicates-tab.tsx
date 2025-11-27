@@ -1,15 +1,34 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { normalizePercentage } from '@/lib/locale'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, CheckCircle, GitMerge, Star, TrendingUp } from 'lucide-react'
-import { LoadingState } from '@/components/common/loading-state'
+import { AlertCircle, CheckCircle, GitMerge, Star, TrendingUp, Copy, ArrowRight, Loader2, BookmarkPlus } from 'lucide-react'
+import { CreateBenchmarkDialog } from './CreateBenchmarkDialog'
 import { EmptyState } from '@/components/common/empty-state'
+import { ErrorState } from '@/components/common/error-state'
 import { Pagination } from '@/components/ui/pagination'
 import { FilterBar, type FilterConfig } from '@/components/common/filter-bar'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { Skeleton } from '@/components/ui/skeleton'
+import { fetchJson, getErrorMessage } from '@/lib/fetch-utils'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
+import { useProjectState } from '@/hooks/useProjectState'
 
 interface DuplicateItem {
   id: number
@@ -81,13 +100,20 @@ const methodConfig: Record<string, { label: string; color: string; icon: string 
   }
 }
 
-export function QualityDuplicatesTab({ database }: { database: string }) {
-  const [groups, setGroups] = useState<DuplicateGroup[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+interface AnalysisStatus {
+  is_running: boolean
+  progress: number
+  current_step: string
+  duplicates_found: number
+}
+
+export function QualityDuplicatesTab({ database, project }: { database: string; project?: string }) {
+  const [actionError, setActionError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [mergingId, setMergingId] = useState<number | null>(null)
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus | null>(null)
+  const [createBenchmarkOpen, setCreateBenchmarkOpen] = useState(false)
+  const [selectedGroupForBenchmark, setSelectedGroupForBenchmark] = useState<DuplicateGroup | null>(null)
   const itemsPerPage = 10
 
   const [filters, setFilters] = useState({ showMerged: false })
@@ -100,90 +126,141 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
     },
   ]
 
-  const fetchDuplicates = useCallback(async () => {
-    if (!database) return
+  const stateClientKey = database ? `quality-db:${database}` : project ? `quality-project:${project}` : 'quality'
+  const stateProjectKey = `${filters.showMerged ? 'merged' : 'unmerged'}:${currentPage}`
 
-    setLoading(true)
-    setError(null)
+  const {
+    data: duplicatesData,
+    loading,
+    error,
+    refetch: refetchDuplicates,
+  } = useProjectState<DuplicatesResponse>(
+    async (_cid, _pid, signal) => {
+      if (!database && !project) {
+        return { groups: [], total: 0, limit: itemsPerPage, offset: 0 }
+      }
 
-    try {
       const params = new URLSearchParams({
-        database,
         limit: itemsPerPage.toString(),
-        offset: ((currentPage - 1) * itemsPerPage).toString()
+        offset: ((currentPage - 1) * itemsPerPage).toString(),
       })
 
-      if (!filters.showMerged) {
-        params.append('unmerged', 'true')
-      }
+      if (database) params.append('database', database)
+      if (project) params.append('project', project)
+      if (!filters.showMerged) params.append('unmerged', 'true')
 
-      const response = await fetch(
-        `/api/quality/duplicates?${params.toString()}`
-      )
-
+      const response = await fetch(`/api/quality/duplicates?${params.toString()}`, {
+        cache: 'no-store',
+        signal,
+      })
       if (!response.ok) {
-        throw new Error('Failed to fetch duplicates')
-      }
-
-      const data: DuplicatesResponse = await response.json()
-      setGroups(data.groups || [])
-      setTotal(data.total)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
-    }
-  }, [database, filters.showMerged, currentPage])
-
-  useEffect(() => {
-    if (database) {
-      fetchDuplicates()
-    }
-  }, [database, fetchDuplicates])
-
-  // Автоматическое обновление каждые 5 секунд, если есть активный анализ
-  useEffect(() => {
-    if (!database) return
-
-    const interval = setInterval(() => {
-      // Проверяем статус анализа
-      fetch('/api/quality/analyze/status')
-        .then(res => res.json())
-        .then(status => {
-          // Если анализ завершен недавно (в последние 30 секунд), обновляем данные
-          if (!status.is_running && status.current_step === 'completed') {
-            fetchDuplicates()
+        // Для 404 возвращаем пустые данные вместо ошибки
+        if (response.status === 404) {
+          return {
+            groups: [],
+            total: 0,
+            limit: itemsPerPage,
+            offset: (currentPage - 1) * itemsPerPage,
           }
-        })
-        .catch(() => {
-          // Игнорируем ошибки проверки статуса
-        })
-    }, 5000)
+        }
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || 'Не удалось загрузить дубликаты')
+      }
+      return response.json()
+    },
+    stateClientKey,
+    stateProjectKey,
+    [database, project, filters.showMerged, currentPage],
+    {
+      enabled: Boolean(database || project),
+      keepPreviousData: true,
+    }
+  )
 
-    return () => clearInterval(interval)
-  }, [database, fetchDuplicates])
+  const groups = duplicatesData?.groups || []
+  const total = duplicatesData?.total || 0
+  const combinedError = error || actionError
+  const isInitialLoading = loading && !duplicatesData
+
+  if (!database && !project) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <EmptyState
+            icon={GitMerge}
+            title="Выберите источник данных"
+            description="Чтобы просмотреть дубликаты, выберите базу данных или проект в параметрах качества."
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  useEffect(() => {
+    setActionError(null)
+  }, [database, project, filters.showMerged, currentPage])
+
+  // Fetch analysis status
+  const fetchAnalysisStatus = useCallback(async () => {
+    try {
+      const data = await fetchJson<AnalysisStatus>(
+        '/api/quality/analyze/status',
+        {
+          timeout: QUALITY_TIMEOUTS.FAST,
+          cache: 'no-store',
+        }
+      )
+      setAnalysisStatus(data)
+    } catch {
+      // Ignore errors, status is optional
+    }
+  }, [])
+
+  useEffect(() => {
+    if (database || project) {
+      fetchAnalysisStatus()
+    }
+  }, [database, project, fetchAnalysisStatus])
+
+  // Auto-refresh during analysis
+  useEffect(() => {
+    if (!database && !project) return
+    
+    if (analysisStatus?.is_running && (analysisStatus.current_step === 'duplicates' || analysisStatus.current_step === 'violations' || analysisStatus.current_step === 'suggestions')) {
+      const interval = setInterval(() => {
+        refetchDuplicates()
+        fetchAnalysisStatus()
+      }, 2000) // Refresh every 2 seconds during analysis
+      return () => clearInterval(interval)
+    } else if (analysisStatus?.is_running) {
+      // Refresh less frequently during other steps
+      const interval = setInterval(() => {
+        fetchAnalysisStatus()
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [database, project, analysisStatus?.is_running, analysisStatus?.current_step, refetchDuplicates, fetchAnalysisStatus])
 
   const handleMergeGroup = async (groupId: number) => {
     setMergingId(groupId)
 
     try {
-      const response = await fetch(
+      await fetchJson(
         `/api/quality/duplicates/${groupId}/merge`,
         {
           method: 'POST',
+          timeout: QUALITY_TIMEOUTS.LONG,
           headers: {
             'Content-Type': 'application/json'
           }
         }
       )
 
-      if (!response.ok) {
-        throw new Error('Failed to merge duplicate group')
-      }
-
-      await fetchDuplicates()
+      await refetchDuplicates()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to merge group')
+      const errorMessage = getErrorMessage(err, 'Не удалось объединить группу дубликатов')
+      console.error(errorMessage)
+      throw err
     } finally {
       setMergingId(null)
     }
@@ -191,7 +268,7 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
 
   const getMethodBadge = (method: string) => {
     const config = methodConfig[method as keyof typeof methodConfig]
-    if (!config) return null
+    if (!config) return <Badge variant="secondary">{method}</Badge>
 
     return (
       <Badge className={config.color}>
@@ -202,7 +279,8 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
   }
 
   const getSimilarityBadge = (score: number) => {
-    const percentage = Math.round(score * 100)
+    const safeScore = isNaN(score) || score === null || score === undefined ? 0 : score
+    const percentage = Math.round(Math.max(0, Math.min(100, safeScore * 100)))
     let color = 'bg-gray-500'
 
     if (percentage >= 95) color = 'bg-red-500'
@@ -218,7 +296,8 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
   }
 
   const getQualityBadge = (score: number) => {
-    const percentage = Math.round(score * 100)
+    const safeScore = isNaN(score) || score === null || score === undefined ? 0 : score
+    const percentage = Math.round(normalizePercentage(safeScore))
     let variant: 'default' | 'destructive' | 'outline' = 'outline'
 
     if (percentage >= 90) variant = 'default'
@@ -251,7 +330,7 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
     )
   }
 
-  const totalPages = Math.ceil(total / itemsPerPage)
+  const totalPages = itemsPerPage > 0 ? Math.ceil(Math.max(0, total) / itemsPerPage) : 1
 
   if (!database) {
     return (
@@ -260,19 +339,6 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
         title="Выберите базу данных"
         description="Для просмотра дубликатов необходимо выбрать базу данных"
       />
-    )
-  }
-
-  if (loading && groups.length === 0) {
-    return <LoadingState message="Загрузка дубликатов..." size="lg" fullScreen />
-  }
-
-  if (error && groups.length === 0) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
     )
   }
 
@@ -287,7 +353,10 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
           <FilterBar
             filters={filterConfigs}
             values={filters}
-            onChange={(values) => setFilters(values as { showMerged: boolean })}
+            onChange={(values) => {
+                setFilters(values as { showMerged: boolean })
+                setCurrentPage(1)
+            }}
             onReset={() => {
               setFilters({ showMerged: false })
               setCurrentPage(1)
@@ -297,207 +366,295 @@ export function QualityDuplicatesTab({ database }: { database: string }) {
       </Card>
 
       {/* Summary */}
-      {!loading && (
+      {!isInitialLoading && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Найдено групп: <span className="font-bold text-foreground">{total}</span>
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Найдено групп: <span className="font-bold text-foreground">{total}</span>
+                </p>
+                {analysisStatus?.is_running && analysisStatus.current_step === 'duplicates' && (
+                  <Badge variant="outline" className="text-xs">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Анализ выполняется...
+                  </Badge>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Error Alert */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {/* Error State */}
+      {combinedError && !loading && (
+        <ErrorState
+          title="Ошибка загрузки дубликатов"
+          message={combinedError}
+          action={{
+            label: 'Повторить',
+            onClick: () => refetchDuplicates(),
+          }}
+          variant="destructive"
+          className="mt-4"
+        />
       )}
 
       {/* Duplicates List */}
-      {loading && groups.length === 0 ? (
-        <LoadingState message="Загрузка дубликатов..." size="lg" fullScreen />
+      {isInitialLoading ? (
+        <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+                <Card key={i}>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-1/3" />
+                        <Skeleton className="h-4 w-1/4 mt-2" />
+                    </CardHeader>
+                    <CardContent>
+                        <Skeleton className="h-24 w-full" />
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
       ) : groups.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
-            <EmptyState
-              icon={CheckCircle}
-              title="Дубликатов не найдено"
-              description={
-                filters.showMerged
-                  ? 'В базе данных нет дубликатов'
-                  : 'Все дубликаты были объединены'
-              }
-            />
+            {analysisStatus?.is_running && analysisStatus.current_step === 'duplicates' ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div className="text-center space-y-2">
+                  <p className="font-medium">Выполняется поиск дубликатов</p>
+                  <p className="text-sm text-muted-foreground">
+                    Прогресс: {(isNaN(analysisStatus.progress) ? 0 : analysisStatus.progress).toFixed(1)}%
+                  </p>
+                  {analysisStatus.duplicates_found > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Найдено групп дубликатов: {analysisStatus.duplicates_found}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                icon={CheckCircle}
+                title="Дубликатов не найдено"
+                description={
+                  filters.showMerged
+                    ? 'В базе данных нет дубликатов. Все записи уникальны.'
+                    : 'Все дубликаты были объединены или не найдены. Если анализ еще не выполнялся, запустите анализ качества для поиска дубликатов.'
+                }
+              />
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
-          {groups.map((group) => {
+        <div className="space-y-4">
+          {groups.map((group, groupIndex) => {
             const masterItem = group.items?.find(item => item.id === group.suggested_master_id)
 
             return (
-              <Card
-                key={group.id}
-                className={`border-l-4 ${
-                  group.merged ? 'border-green-500 opacity-60' : 'border-orange-500'
-                }`}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {getMethodBadge(group.duplicate_type || group.detection_method || 'unknown')}
-                        {getSimilarityBadge(group.similarity_score)}
-                        <Badge variant="outline">
-                          {group.item_count} записей
-                        </Badge>
-                        {group.merged && (
-                          <Badge className="bg-green-500 text-white">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Объединено
-                          </Badge>
-                        )}
-                      </div>
-                      <CardTitle className="text-lg">
-                        Группа дубликатов #{group.id}
-                      </CardTitle>
-                      <CardDescription>
-                        Создано: {new Date(group.created_at).toLocaleString('ru-RU')}
-                        {group.merged_at && ` • Объединено: ${new Date(group.merged_at).toLocaleString('ru-RU')}`}
-                      </CardDescription>
-                    </div>
-                    {!group.merged && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleMergeGroup(group.id)}
-                        disabled={mergingId === group.id}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <GitMerge className="w-4 h-4 mr-2" />
-                        {mergingId === group.id ? 'Объединение...' : 'Объединить'}
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Master Record */}
-                  {masterItem && (
-                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Star className="w-5 h-5 text-yellow-600 fill-yellow-600" />
-                        <h4 className="font-semibold text-yellow-900">Рекомендуемая мастер-запись</h4>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">ID:</span>{' '}
-                          <span className="font-mono">#{masterItem.id}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Код:</span>{' '}
-                          <code className="bg-yellow-100 px-2 py-0.5 rounded">
-                            {masterItem.code || 'N/A'}
-                          </code>
-                        </div>
-                        <div className="md:col-span-2">
-                          <span className="text-muted-foreground">Название:</span>{' '}
-                          <span className="font-medium">{masterItem.normalized_name}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Категория:</span>{' '}
-                          <span>{masterItem.category}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">КПВЭД:</span>{' '}
-                          <code className="bg-yellow-100 px-2 py-0.5 rounded">
-                            {masterItem.kpved_code || 'N/A'}
-                          </code>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {getQualityBadge(masterItem.quality_score)}
-                          {getProcessingLevelBadge(masterItem.processing_level)}
-                        </div>
-                        {masterItem.merged_count > 0 && (
-                          <div>
-                            <Badge variant="outline" className="bg-blue-50">
-                              <TrendingUp className="w-3 h-3 mr-1" />
-                              {masterItem.merged_count} объединений
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Duplicate Items */}
-                  <div>
-                    <h4 className="font-semibold mb-3 text-sm text-muted-foreground">
-                      Все записи в группе:
-                    </h4>
-                    <div className="space-y-2">
-                      {group.items?.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`border rounded-lg p-3 ${
-                            item.id === group.suggested_master_id
-                              ? 'bg-yellow-50 border-yellow-200'
-                              : 'bg-white'
-                          }`}
-                        >
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                            <div className="md:col-span-3 flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-mono text-xs text-muted-foreground">
-                                    #{item.id}
-                                  </span>
-                                  {item.id === group.suggested_master_id && (
-                                    <Star className="w-4 h-4 text-yellow-600 fill-yellow-600" />
-                                  )}
+              <Accordion type="single" collapsible key={group.id ? `group-${group.id}-${groupIndex}` : `group-${groupIndex}`} className="bg-card border rounded-lg shadow-sm">
+                <AccordionItem value={`item-${group.id}`} className="border-0">
+                    <div className={`flex flex-col md:flex-row md:items-center justify-between p-4 rounded-t-lg ${group.merged ? 'bg-muted/30' : 'bg-orange-50/30 border-l-4 border-l-orange-500'}`}>
+                        <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {getMethodBadge(group.duplicate_type || group.detection_method || 'unknown')}
+                                {getSimilarityBadge(group.similarity_score)}
+                                <Badge variant="outline" className="bg-background">
+                                    <Copy className="w-3 h-3 mr-1" />
+                                    {group.item_count} записей
+                                </Badge>
+                                {group.merged && (
+                                    <Badge className="bg-green-500 text-white">
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Объединено
+                                    </Badge>
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between md:justify-start gap-4">
+                                <div>
+                                    <h3 className="font-semibold text-lg leading-none">Группа #{group.id}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Создано: {new Date(group.created_at).toLocaleString('ru-RU')}
+                                        {group.merged_at && ` • Объединено: ${new Date(group.merged_at).toLocaleString('ru-RU')}`}
+                                    </p>
                                 </div>
-                                <div className="font-medium">{item.normalized_name}</div>
-                              </div>
                             </div>
-                            <div>
-                              <span className="text-muted-foreground text-xs">Код:</span>{' '}
-                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                                {item.code || 'N/A'}
-                              </code>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 mt-4 md:mt-0">
+                             {!group.merged && (
+                                <>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedGroupForBenchmark(group)
+                                            setCreateBenchmarkOpen(true)
+                                        }}
+                                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                                    >
+                                        <BookmarkPlus className="w-4 h-4 mr-2" />
+                                        Создать эталон
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation() // Prevent accordion toggle
+                                            handleMergeGroup(group.id)
+                                        }}
+                                        disabled={mergingId === group.id}
+                                        className="bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                                    >
+                                        {mergingId === group.id ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Объединение...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <GitMerge className="w-4 h-4 mr-2" />
+                                                Объединить
+                                            </>
+                                        )}
+                                    </Button>
+                                </>
+                            )}
+                            <AccordionTrigger className="p-0 hover:no-underline py-2 px-4" />
+                        </div>
+                    </div>
+
+                  <AccordionContent>
+                    <div className="p-4 space-y-6 border-t">
+                      {/* Master Record */}
+                      {masterItem && (
+                        <div className="bg-yellow-50/50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-3 text-yellow-700 dark:text-yellow-500">
+                            <Star className="w-5 h-5 fill-current" />
+                            <h4 className="font-semibold">Рекомендуемая мастер-запись</h4>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Название</span>
+                                <p className="font-medium text-lg">{masterItem.normalized_name}</p>
                             </div>
-                            <div>
-                              <span className="text-muted-foreground text-xs">КПВЭД:</span>{' '}
-                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                                {item.kpved_code || 'N/A'}
-                              </code>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Код</span>
+                                    <p><code className="bg-background px-2 py-1 rounded border">{masterItem.code || 'N/A'}</code></p>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Категория</span>
+                                    <p>{masterItem.category}</p>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {getQualityBadge(item.quality_score)}
-                              {getProcessingLevelBadge(item.processing_level)}
+                            <div className="md:col-span-2 flex items-center gap-4 pt-2 border-t border-yellow-200/50 dark:border-yellow-800/50">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground">Качество:</span>
+                                    {getQualityBadge(masterItem.quality_score)}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground">Уровень:</span>
+                                    {getProcessingLevelBadge(masterItem.processing_level)}
+                                </div>
+                                {masterItem.merged_count > 0 && (
+                                    <Badge variant="outline" className="ml-auto">
+                                        <TrendingUp className="w-3 h-3 mr-1" />
+                                        {masterItem.merged_count} объединений
+                                    </Badge>
+                                )}
                             </div>
                           </div>
                         </div>
-                      ))}
+                      )}
+
+                      {/* Items Table */}
+                      <div>
+                        <h4 className="font-semibold mb-3 text-sm text-muted-foreground flex items-center gap-2">
+                            <ArrowRight className="w-4 h-4" />
+                            Состав группы ({group.items?.length || 0})
+                        </h4>
+                        <div className="border rounded-md overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="w-[50px]">ID</TableHead>
+                                        <TableHead>Название</TableHead>
+                                        <TableHead>Код</TableHead>
+                                        <TableHead>Категория</TableHead>
+                                        <TableHead>Качество</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {group.items?.map((item, itemIndex) => (
+                                        <TableRow key={item.id ? `item-${item.id}-${itemIndex}` : `item-${itemIndex}`} className={item.id === group.suggested_master_id ? 'bg-yellow-50/30 dark:bg-yellow-900/10' : ''}>
+                                            <TableCell className="font-mono text-xs text-muted-foreground">
+                                                {item.id}
+                                                {item.id === group.suggested_master_id && (
+                                                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 inline-block ml-1" />
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {item.normalized_name}
+                                            </TableCell>
+                                            <TableCell>
+                                                <code className="bg-muted px-1.5 py-0.5 rounded text-xs">{item.code || '-'}</code>
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {item.category}
+                                            </TableCell>
+                                            <TableCell>
+                                                {getQualityBadge(item.quality_score)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             )
           })}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              itemsPerPage={itemsPerPage}
-              totalItems={total}
-            />
+            <div className="py-4">
+                <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                totalItems={total}
+                />
+            </div>
           )}
         </div>
+      )}
+
+      {/* Create Benchmark Dialog */}
+      {selectedGroupForBenchmark && (
+        <CreateBenchmarkDialog
+          isOpen={createBenchmarkOpen}
+          onClose={() => {
+            setCreateBenchmarkOpen(false)
+            setSelectedGroupForBenchmark(null)
+          }}
+          uploadId={selectedGroupForBenchmark.id.toString()}
+          duplicateItems={(selectedGroupForBenchmark.items || []).map(item => ({
+            id: item.id.toString(),
+            name: item.normalized_name,
+            code: item.code,
+            category: item.category
+          }))}
+          onSuccess={() => {
+            refetchDuplicates()
+          }}
+        />
       )}
     </div>
   )

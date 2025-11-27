@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -45,8 +46,11 @@ func main() {
 	}
 
 	// Проверяем существование файла БД
-	if _, err := os.Stat(*dbPath); os.IsNotExist(err) {
-		log.Fatalf("База данных не найдена: %s", *dbPath)
+	if _, err := os.Stat(*dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Fatalf("База данных не найдена: %s", *dbPath)
+		}
+		log.Fatalf("Ошибка проверки базы данных %s: %v", *dbPath, err)
 	}
 
 	log.Printf("Подключение к базе данных: %s", *dbPath)
@@ -147,7 +151,7 @@ func main() {
 	log.Println("\n🚀 Запуск процесса нормализации и классификации...")
 	startTime := time.Now()
 	
-	if err := normalizer.ProcessNormalization(); err != nil {
+	if err := normalizer.ProcessNormalization(0); err != nil { // uploadID: 0 = не указан
 		log.Fatalf("❌ Ошибка нормализации: %v", err)
 	}
 

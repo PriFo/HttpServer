@@ -1,0 +1,39 @@
+name: Refactoring Checks
+
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'internal/**'
+
+jobs:
+  check-server-go-size:
+    runs-on: ubuntu-latest
+    env:
+      SERVER_GO_MAX_LINES: ${{ vars.SERVER_GO_MAX_LINES || '7000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check server.go size
+        run: |
+          SIZE=$(wc -l < server/server.go)
+          echo "server.go has ${SIZE} lines (limit ${SERVER_GO_MAX_LINES})"
+          if [ "$SIZE" -gt "$SERVER_GO_MAX_LINES" ]; then
+            echo "server.go is too large"
+            exit 1
+          fi
+
+  check-legacy-files:
+    runs-on: ubuntu-latest
+    env:
+      MAX_LEGACY_FILES: ${{ vars.MAX_LEGACY_FILES || '23' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count legacy server_*.go files
+        run: |
+          LEGACY_FILES=$(ls server/server_*.go 2>/dev/null | wc -l | tr -d ' ')
+          echo "Found ${LEGACY_FILES} legacy files (limit ${MAX_LEGACY_FILES})"
+          if [ "$LEGACY_FILES" -gt "$MAX_LEGACY_FILES" ]; then
+            echo "Too many legacy server_*.go files"
+            exit 1
+          fi
+

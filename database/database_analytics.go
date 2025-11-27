@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,23 +14,23 @@ import (
 
 // TableStat статистика по таблице
 type TableStat struct {
-	Name        string `json:"name"`
-	RowCount    int64  `json:"row_count"`
-	SizeBytes   int64  `json:"size_bytes"`
-	SizeMB      float64 `json:"size_mb"`
+	Name      string  `json:"name"`
+	RowCount  int64   `json:"row_count"`
+	SizeBytes int64   `json:"size_bytes"`
+	SizeMB    float64 `json:"size_mb"`
 }
 
 // DatabaseAnalytics полная аналитика базы данных
 type DatabaseAnalytics struct {
-	FilePath      string      `json:"file_path"`
-	DatabaseType  string      `json:"database_type"`
-	TotalSize     int64       `json:"total_size"`
-	TotalSizeMB   float64     `json:"total_size_mb"`
-	TableCount    int         `json:"table_count"`
-	TotalRows     int64       `json:"total_rows"`
-	TableStats    []TableStat `json:"table_stats"`
-	TopTables     []TableStat `json:"top_tables"`
-	AnalyzedAt    time.Time   `json:"analyzed_at"`
+	FilePath     string      `json:"file_path"`
+	DatabaseType string      `json:"database_type"`
+	TotalSize    int64       `json:"total_size"`
+	TotalSizeMB  float64     `json:"total_size_mb"`
+	TableCount   int         `json:"table_count"`
+	TotalRows    int64       `json:"total_rows"`
+	TableStats   []TableStat `json:"table_stats"`
+	TopTables    []TableStat `json:"top_tables"`
+	AnalyzedAt   time.Time   `json:"analyzed_at"`
 }
 
 // HistoryEntry запись истории изменений
@@ -43,8 +44,11 @@ type HistoryEntry struct {
 // DetectDatabaseType определяет тип базы данных по наличию таблиц
 func DetectDatabaseType(dbPath string) (string, error) {
 	// Проверяем существование файла
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		return "unknown", fmt.Errorf("database file does not exist: %s", dbPath)
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "unknown", fmt.Errorf("database file does not exist: %s", dbPath)
+		}
+		return "unknown", fmt.Errorf("failed to check database file: %w", err)
 	}
 
 	// Открываем базу данных
@@ -145,6 +149,12 @@ func GetTableStats(dbPath string) ([]TableStat, error) {
 	// Получаем статистику по каждой таблице
 	var stats []TableStat
 	for _, tableName := range tables {
+		// Валидация имени таблицы для безопасности
+		if err := ValidateTableName(tableName, false); err != nil {
+			// Пропускаем таблицы с невалидными именами
+			continue
+		}
+
 		// Количество строк
 		var rowCount int64
 		err := db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&rowCount)
@@ -158,14 +168,14 @@ func GetTableStats(dbPath string) ([]TableStat, error) {
 		// Для разных типов таблиц используем разные оценки
 		var sizeBytes int64
 		avgRowSize := int64(200) // Базовая оценка: 200 байт на строку
-		
+
 		// Для больших таблиц увеличиваем оценку
 		if rowCount > 100000 {
 			avgRowSize = 500
 		} else if rowCount > 10000 {
 			avgRowSize = 300
 		}
-		
+
 		sizeBytes = rowCount * avgRowSize
 
 		stats = append(stats, TableStat{
@@ -322,6 +332,21 @@ func UpdateDatabaseHistory(serviceDB *ServiceDB, dbPath string, size int64, rowC
 
 // GetDatabaseName возвращает читаемое имя базы данных из пути
 func GetDatabaseName(dbPath string) string {
-	return filepath.Base(dbPath)
-}
+	if dbPath == "" {
+		return ""
+	}
 
+	baseName := filepath.Base(dbPath)
+
+	// Если получилось ".", значит путь был пустым или заканчивался на разделитель
+	if baseName == "." || baseName == string(filepath.Separator) {
+		return ""
+	}
+
+	ext := filepath.Ext(baseName)
+	if ext == "" {
+		return baseName
+	}
+
+	return baseName[:len(baseName)-len(ext)]
+}

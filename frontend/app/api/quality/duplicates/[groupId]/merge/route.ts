@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
+import { fetchJsonServer, getServerErrorMessage, getServerErrorStatus } from '@/lib/fetch-utils-server'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+const BACKEND_URL = getBackendUrl()
 
 export async function POST(
   request: NextRequest,
@@ -20,50 +23,28 @@ export async function POST(
     
     console.log(`Proxying POST /api/quality/duplicates/${groupId}/merge to ${backendUrl}`)
 
-    const response = await fetch(backendUrl, {
+    const data = await fetchJsonServer(backendUrl, {
       method: 'POST',
+      timeout: QUALITY_TIMEOUTS.LONG,
       headers: {
         'Content-Type': 'application/json',
       },
     })
 
-    if (!response.ok) {
-      let errorMessage = 'Failed to merge duplicate group'
-      try {
-        const errorText = await response.text()
-        console.error(`Backend responded with status ${response.status}:`, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorMessage
-        } catch {
-          errorMessage = `Backend error: ${response.status} - ${errorText}`
-        }
-      } catch {
-        errorMessage = `Backend responded with status ${response.status}`
-      }
-      
-      console.error('Error merging duplicate group:', errorMessage)
-      return NextResponse.json(
-        { 
-          error: errorMessage,
-          details: errorMessage
-        },
-        { status: response.status }
-      )
-    }
-
-    const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
     console.error('Error in quality duplicates merge API route:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    const errorMessage = getServerErrorMessage(error, 'Failed to connect to backend')
+    const status = getServerErrorStatus(error, 500)
+
     return NextResponse.json(
       { 
-        error: 'Failed to connect to backend',
+        error: errorMessage,
         details: errorMessage
       },
-      { status: 500 }
+      { status }
     )
   }
-}
+  }
 

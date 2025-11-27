@@ -1,98 +1,142 @@
 import { NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
+import { logger, createApiContext, withLogging } from '@/lib/logger'
+import { handleBackendResponse, handleFetchError } from '@/lib/error-handler'
 
-const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+export const runtime = 'nodejs'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  try {
-    const { clientId } = await params
-    const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    })
+  const { clientId } = await params
+  const context = createApiContext('/api/clients/[clientId]', 'GET', { clientId })
+  const startTime = Date.now()
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        return NextResponse.json(
-          { error: 'Client not found' },
-          { status: 404 }
+  return withLogging(
+    'GET /api/clients/[clientId]',
+    async () => {
+      const API_BASE_URL = getBackendUrl()
+      const endpoint = `${API_BASE_URL}/api/clients/${clientId}`
+
+      logger.logRequest('GET', `/api/clients/${clientId}`, context)
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          cache: 'no-store',
+        })
+
+        const duration = Date.now() - startTime
+        logger.logResponse('GET', `/api/clients/${clientId}`, response.status, duration, context)
+
+        return handleBackendResponse(
+          response,
+          endpoint,
+          context,
+          {
+            errorMessage: 'Failed to fetch client',
+          }
         )
+      } catch (error) {
+        const duration = Date.now() - startTime
+        return handleFetchError(error, endpoint, { ...context, duration })
       }
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error fetching client:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch client' },
-      { status: 500 }
-    )
-  }
+    },
+    context
+  )
 }
 
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  try {
-    const { clientId } = await params
-    const body = await request.json()
+  const { clientId } = await params
+  const context = createApiContext('/api/clients/[clientId]', 'PUT', { clientId })
+  const startTime = Date.now()
 
-    const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+  return withLogging(
+    'PUT /api/clients/[clientId]',
+    async () => {
+      const body = await request.json().catch(() => ({}))
+      const API_BASE_URL = getBackendUrl()
+      const endpoint = `${API_BASE_URL}/api/clients/${clientId}`
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-    }
+      logger.logRequest('PUT', `/api/clients/${clientId}`, { ...context, hasBody: !!body })
 
-    const data = await response.json()
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error updating client:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update client' },
-      { status: 500 }
-    )
-  }
+      try {
+        const response = await fetch(endpoint, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        })
+
+        const duration = Date.now() - startTime
+        logger.logResponse('PUT', `/api/clients/${clientId}`, response.status, duration, context)
+
+        return handleBackendResponse(
+          response,
+          endpoint,
+          context,
+          {
+            errorMessage: 'Failed to update client',
+          }
+        )
+      } catch (error) {
+        const duration = Date.now() - startTime
+        return handleFetchError(error, endpoint, { ...context, duration })
+      }
+    },
+    context
+  )
 }
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  try {
-    const { clientId } = await params
-    const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+  const { clientId } = await params
+  const context = createApiContext('/api/clients/[clientId]', 'DELETE', { clientId })
+  const startTime = Date.now()
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
+  return withLogging(
+    'DELETE /api/clients/[clientId]',
+    async () => {
+      const API_BASE_URL = getBackendUrl()
+      const endpoint = `${API_BASE_URL}/api/clients/${clientId}`
 
-    return NextResponse.json({ message: 'Client deleted' })
-  } catch (error) {
-    console.error('Error deleting client:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete client' },
-      { status: 500 }
-    )
-  }
+      logger.logRequest('DELETE', `/api/clients/${clientId}`, context)
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        const duration = Date.now() - startTime
+        logger.logResponse('DELETE', `/api/clients/${clientId}`, response.status, duration, context)
+
+        return handleBackendResponse(
+          response,
+          endpoint,
+          context,
+          {
+            errorMessage: 'Failed to delete client',
+          }
+        )
+      } catch (error) {
+        const duration = Date.now() - startTime
+        return handleFetchError(error, endpoint, { ...context, duration })
+      }
+    },
+    context
+  )
 }
 

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatabaseSelector } from '@/components/database-selector'
+import { getCurrentUser } from '@/lib/auth-utils'
 import {
   AlertCircle,
   AlertTriangle,
@@ -177,7 +178,7 @@ export default function ViolationsPage() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            resolved_by: 'User' // TODO: Get from auth context
+            resolved_by: getCurrentUser() // Получаем текущего пользователя из утилиты аутентификации
           })
         }
       )

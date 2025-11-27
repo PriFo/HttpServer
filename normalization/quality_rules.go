@@ -29,36 +29,36 @@ const (
 
 // Violation нарушение правила качества
 type Violation struct {
-	RuleName    string            `json:"rule_name"`    // Название правила
-	Category    ViolationCategory `json:"category"`     // Категория нарушения
-	Severity    Severity          `json:"severity"`     // Серьезность
-	Description string            `json:"description"`  // Описание проблемы
-	Field       string            `json:"field"`        // Поле с проблемой
-	CurrentValue string           `json:"current_value"` // Текущее значение
-	Recommendation string         `json:"recommendation"` // Рекомендация по исправлению
+	RuleName       string            `json:"rule_name"`      // Название правила
+	Category       ViolationCategory `json:"category"`       // Категория нарушения
+	Severity       Severity          `json:"severity"`       // Серьезность
+	Description    string            `json:"description"`    // Описание проблемы
+	Field          string            `json:"field"`          // Поле с проблемой
+	CurrentValue   string            `json:"current_value"`  // Текущее значение
+	Recommendation string            `json:"recommendation"` // Рекомендация по исправлению
 }
 
 // QualityRule правило проверки качества
 type QualityRule struct {
-	Name        string                        // Название правила
-	Category    ViolationCategory             // Категория
-	Severity    Severity                      // Серьезность нарушения
-	Description string                        // Описание правила
-	Check       func(ItemData) *Violation    // Функция проверки
+	Name        string                    // Название правила
+	Category    ViolationCategory         // Категория
+	Severity    Severity                  // Серьезность нарушения
+	Description string                    // Описание правила
+	Check       func(ItemData) *Violation // Функция проверки
 }
 
 // ItemData данные записи для проверки правилами
 type ItemData struct {
-	ID               int
-	Code             string
-	NormalizedName   string
-	Category         string
-	KpvedCode        string
-	KpvedConfidence  float64
-	ProcessingLevel  string
-	AIConfidence     float64
-	AIReasoning      string
-	MergedCount      int
+	ID              int
+	Code            string
+	NormalizedName  string
+	Category        string
+	KpvedCode       string
+	KpvedConfidence float64
+	ProcessingLevel string
+	AIConfidence    float64
+	AIReasoning     string
+	MergedCount     int
 }
 
 // QualityRulesEngine движок правил качества
@@ -437,9 +437,9 @@ func ruleProcessingLevel() QualityRule {
 		Description: "Уровень обработки должен быть установлен",
 		Check: func(data ItemData) *Violation {
 			validLevels := map[string]bool{
-				"basic":        true,
-				"ai_enhanced":  true,
-				"benchmark":    true,
+				"basic":       true,
+				"ai_enhanced": true,
+				"benchmark":   true,
 			}
 
 			if !validLevels[data.ProcessingLevel] {

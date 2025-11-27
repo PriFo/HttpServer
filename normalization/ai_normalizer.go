@@ -24,12 +24,12 @@ type AIResult struct {
 
 // AIStats статистика работы AI нормализатора
 type AIStats struct {
-	TotalCalls  int64
-	CacheHits   int64
-	CacheMisses int64
-	Errors      int64
+	TotalCalls   int64
+	CacheHits    int64
+	CacheMisses  int64
+	Errors       int64
 	totalLatency int64 // в наносекундах
-	mutex       sync.RWMutex
+	mutex        sync.RWMutex
 }
 
 // AINormalizer использует Arliai API для нормализации
@@ -38,9 +38,9 @@ type AINormalizer struct {
 	cache          *AICache
 	statsCollector *StatsCollector
 	systemPrompt   string
-	stats          *AIStats // старая статистика для совместимости
+	stats          *AIStats        // старая статистика для совместимости
 	batchProcessor *BatchProcessor // Батчевый процессор для группировки AI запросов
-	batchEnabled   bool // Флаг включения батчевой обработки
+	batchEnabled   bool            // Флаг включения батчевой обработки
 }
 
 // NewAINormalizer создает новый AI нормализатор
@@ -358,11 +358,11 @@ func (a *AINormalizer) GetCacheStats() CacheStats {
 func (a *AINormalizer) GetCircuitBreakerState() map[string]interface{} {
 	if a.aiClient == nil {
 		return map[string]interface{}{
-			"enabled":        false,
-			"state":          "unknown",
-			"can_proceed":    false,
-			"failure_count":  0,
-			"success_count":  0,
+			"enabled":           false,
+			"state":             "unknown",
+			"can_proceed":       false,
+			"failure_count":     0,
+			"success_count":     0,
 			"last_failure_time": nil,
 		}
 	}

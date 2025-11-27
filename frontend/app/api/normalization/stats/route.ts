@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
 
-const API_BASE = process.env.BACKEND_URL || 'http://localhost:9999'
+const API_BASE = getBackendUrl()
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_request: NextRequest) {
@@ -35,6 +36,9 @@ export async function GET(_request: NextRequest) {
       total_processed: data.totalItems || data.total_processed || 0,
       total_groups: data.totalGroups || data.total_groups || 0,
       total_merged: data.mergedItems || data.total_merged || 0,
+      nomenclature_groups:
+        data.nomenclatureGroups || data.nomenclature_groups || 0,
+      category_filter: data.categoryFilter || data.category_filter || 'Номенклатура',
       ...data // Сохраняем остальные поля
     })
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -1,0 +1,100 @@
+package websearch
+
+import (
+	"fmt"
+	"time"
+
+	"httpserver/websearch/providers"
+	"httpserver/websearch/types"
+)
+
+// ProviderFactory создает провайдеры на основе конфигурации
+// Вынесен в отдельный файл для разрыва цикла импортов
+type ProviderFactory struct {
+	defaultTimeout time.Duration
+}
+
+// NewProviderFactory создает новую фабрику провайдеров
+func NewProviderFactory(defaultTimeout time.Duration) *ProviderFactory {
+	return &ProviderFactory{
+		defaultTimeout: defaultTimeout,
+	}
+}
+
+// ProviderConfigDB конфигурация провайдера из БД
+type ProviderConfigDB struct {
+	Name             string
+	Enabled          bool
+	APIKey           string
+	SearchID         string
+	User             string
+	BaseURL          string
+	RateLimitSeconds int
+	Priority         int
+	Region           string
+}
+
+// CreateProvider создает провайдер на основе конфигурации
+func (pf *ProviderFactory) CreateProvider(config ProviderConfigDB) (types.SearchProviderInterface, error) {
+	if !config.Enabled {
+		return nil, fmt.Errorf("provider %s is disabled", config.Name)
+	}
+
+	rateLimit := time.Duration(config.RateLimitSeconds) * time.Second
+	if rateLimit == 0 {
+		rateLimit = 1 * time.Second
+	}
+
+	switch config.Name {
+	case "duckduckgo":
+		return providers.NewDuckDuckGoProvider(pf.defaultTimeout, rateLimit), nil
+
+	case "bing":
+		if config.APIKey == "" {
+			return nil, fmt.Errorf("API key is required for Bing")
+		}
+		return providers.NewBingProvider(config.APIKey, pf.defaultTimeout, rateLimit), nil
+
+	case "google":
+		if config.APIKey == "" {
+			return nil, fmt.Errorf("API key is required for Google")
+		}
+		if config.SearchID == "" {
+			return nil, fmt.Errorf("Search ID is required for Google")
+		}
+		return providers.NewGoogleProvider(config.APIKey, config.SearchID, pf.defaultTimeout, rateLimit), nil
+
+	case "yandex":
+		if config.APIKey == "" {
+			return nil, fmt.Errorf("API key is required for Yandex")
+		}
+		if config.User == "" {
+			return nil, fmt.Errorf("User is required for Yandex")
+		}
+		return providers.NewYandexProvider(config.APIKey, config.User, pf.defaultTimeout, rateLimit), nil
+
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", config.Name)
+	}
+}
+
+// CreateProviders создает map провайдеров на основе конфигураций
+func (pf *ProviderFactory) CreateProviders(configs []ProviderConfigDB) (map[string]types.SearchProviderInterface, error) {
+	providerMap := make(map[string]types.SearchProviderInterface)
+
+	for _, config := range configs {
+		if !config.Enabled {
+			continue
+		}
+
+		provider, err := pf.CreateProvider(config)
+		if err != nil {
+			// Пропускаем провайдеры с ошибками конфигурации
+			continue
+		}
+
+		providerMap[config.Name] = provider
+	}
+
+	return providerMap, nil
+}

@@ -4,12 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AlertCircle, AlertTriangle, Info, XCircle, CheckCircle } from 'lucide-react'
-import { LoadingState } from '@/components/common/loading-state'
+import { AlertCircle, AlertTriangle, Info, XCircle, CheckCircle, Loader2, Calendar } from 'lucide-react'
 import { EmptyState } from '@/components/common/empty-state'
+import { ErrorState } from '@/components/common/error-state'
 import { Pagination } from '@/components/ui/pagination'
 import { FilterBar, type FilterConfig } from '@/components/common/filter-bar'
+import { Skeleton } from '@/components/ui/skeleton'
+import { fetchJson, getErrorMessage } from '@/lib/fetch-utils'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
+import { useProjectState } from '@/hooks/useProjectState'
 
 interface Violation {
   id: number
@@ -38,43 +41,52 @@ const severityConfig = {
   critical: {
     label: 'Критический',
     icon: XCircle,
-    color: 'bg-red-500 text-white',
+    color: 'bg-red-500 hover:bg-red-600 text-white',
     borderColor: 'border-red-500',
+    textColor: 'text-red-600',
   },
   error: {
     label: 'Ошибка',
     icon: AlertCircle,
-    color: 'bg-orange-500 text-white',
+    color: 'bg-orange-500 hover:bg-orange-600 text-white',
     borderColor: 'border-orange-500',
+    textColor: 'text-orange-600',
   },
   warning: {
     label: 'Предупреждение',
     icon: AlertTriangle,
-    color: 'bg-yellow-500 text-white',
+    color: 'bg-yellow-500 hover:bg-yellow-600 text-white',
     borderColor: 'border-yellow-500',
+    textColor: 'text-yellow-600',
   },
   info: {
     label: 'Информация',
     icon: Info,
-    color: 'bg-blue-500 text-white',
+    color: 'bg-blue-500 hover:bg-blue-600 text-white',
     borderColor: 'border-blue-500',
+    textColor: 'text-blue-600',
   }
 }
 
-const categoryConfig = {
+const categoryConfig: Record<string, string> = {
   completeness: 'Полнота данных',
   accuracy: 'Точность',
   consistency: 'Согласованность',
   format: 'Формат'
 }
 
-export function QualityViolationsTab({ database }: { database: string }) {
-  const [violations, setViolations] = useState<Violation[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+interface AnalysisStatus {
+  is_running: boolean
+  progress: number
+  current_step: string
+  violations_found: number
+}
+
+export function QualityViolationsTab({ database, project }: { database: string; project?: string }) {
+  const [actionError, setActionError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [resolvingId, setResolvingId] = useState<number | null>(null)
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus | null>(null)
   const itemsPerPage = 20
 
   const [filters, setFilters] = useState({
@@ -122,94 +134,136 @@ export function QualityViolationsTab({ database }: { database: string }) {
     },
   ]
 
-  const fetchViolations = useCallback(async () => {
-    if (!database) return
+  const clientKey = database ? `quality-db:${database}` : project ? `quality-project:${project}` : 'quality'
+  const projectKey = JSON.stringify({
+    page: currentPage,
+    severity: filters.severity,
+    category: filters.category,
+    showResolved: filters.showResolved,
+    search: filters.search,
+  })
 
-    setLoading(true)
-    setError(null)
+  const {
+    data: violationsData,
+    loading,
+    error,
+    refetch: refetchViolations,
+  } = useProjectState<ViolationsResponse>(
+    async (_cid, _pid, signal) => {
+      if (!database && !project) {
+        return { violations: [], total: 0, limit: itemsPerPage, offset: 0 }
+      }
 
-    try {
       const params = new URLSearchParams({
-        database,
         limit: itemsPerPage.toString(),
-        offset: ((currentPage - 1) * itemsPerPage).toString()
+        offset: ((currentPage - 1) * itemsPerPage).toString(),
       })
 
-      if (filters.severity !== 'all') {
-        params.append('severity', filters.severity)
-      }
+      if (database) params.append('database', database)
+      if (project) params.append('project', project)
+      if (filters.severity !== 'all') params.append('severity', filters.severity)
+      if (filters.category !== 'all') params.append('category', filters.category)
+      params.append('show_resolved', filters.showResolved ? 'true' : 'false')
+      if (filters.search.trim()) params.append('search', filters.search.trim())
 
-      if (filters.category !== 'all') {
-        params.append('category', filters.category)
-      }
-
-      const response = await fetch(
-        `/api/quality/violations?${params.toString()}`
-      )
+      const response = await fetch(`/api/quality/violations?${params.toString()}`, {
+        cache: 'no-store',
+        signal,
+        headers: { 'Cache-Control': 'no-cache' },
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to fetch violations')
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || 'Не удалось загрузить нарушения')
       }
 
-      const data: ViolationsResponse = await response.json()
+      return response.json()
+    },
+    clientKey,
+    projectKey,
+    [
+      database,
+      project,
+      filters.severity,
+      filters.category,
+      filters.showResolved,
+      filters.search,
+      currentPage,
+    ],
+    {
+      enabled: Boolean(database || project),
+      keepPreviousData: true,
+    }
+  )
 
-      // Filter out resolved if needed and apply search
-      let filteredViolations = data.violations || []
-      if (!filters.showResolved) {
-        filteredViolations = filteredViolations.filter(v => !v.resolved)
-      }
-      if (filters.search) {
-        filteredViolations = filteredViolations.filter(v =>
-          v.rule_name.toLowerCase().includes(filters.search.toLowerCase()) ||
-          v.message.toLowerCase().includes(filters.search.toLowerCase())
-        )
-      }
+  const violations = violationsData?.violations || []
+  const total = violationsData?.total || 0
+  const combinedError = error || actionError
+  const isInitialLoading = loading && !violationsData
+  const hasSource = Boolean(database || project)
 
-      setViolations(filteredViolations)
-      setTotal(data.total)
+  useEffect(() => {
+    setActionError(null)
+  }, [
+    database,
+    project,
+    filters.severity,
+    filters.category,
+    filters.showResolved,
+    filters.search,
+    currentPage,
+  ])
+
+  // Fetch analysis status
+  const fetchAnalysisStatus = useCallback(async () => {
+    try {
+      const data = await fetchJson<AnalysisStatus>(
+        '/api/quality/analyze/status',
+        {
+          timeout: QUALITY_TIMEOUTS.FAST,
+          cache: 'no-store',
+        }
+      )
+      setAnalysisStatus(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
+      // Ignore errors, status is optional
     }
-  }, [database, filters, currentPage])
+  }, [])
 
   useEffect(() => {
-    if (database) {
-      fetchViolations()
+    if (hasSource) {
+      fetchAnalysisStatus()
     }
-  }, [database, fetchViolations])
+  }, [hasSource, fetchAnalysisStatus])
 
-  // Автоматическое обновление каждые 5 секунд, если есть активный анализ
+  // Auto-refresh during analysis
   useEffect(() => {
-    if (!database) return
-
-    const interval = setInterval(() => {
-      // Проверяем статус анализа
-      fetch('/api/quality/analyze/status')
-        .then(res => res.json())
-        .then(status => {
-          // Если анализ завершен недавно (в последние 30 секунд), обновляем данные
-          if (!status.is_running && status.current_step === 'completed') {
-            fetchViolations()
-          }
-        })
-        .catch(() => {
-          // Игнорируем ошибки проверки статуса
-        })
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [database, fetchViolations])
+    if (!hasSource) return
+    
+    if (analysisStatus?.is_running && (analysisStatus.current_step === 'violations' || analysisStatus.current_step === 'suggestions')) {
+      const interval = setInterval(() => {
+        refetchViolations()
+        fetchAnalysisStatus()
+      }, 2000) // Refresh every 2 seconds during analysis
+      return () => clearInterval(interval)
+    } else if (analysisStatus?.is_running) {
+      // Refresh less frequently during other steps
+      const interval = setInterval(() => {
+        fetchAnalysisStatus()
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [hasSource, analysisStatus?.is_running, analysisStatus?.current_step, refetchViolations, fetchAnalysisStatus])
 
   const handleResolveViolation = async (violationId: number) => {
     setResolvingId(violationId)
 
     try {
-      const response = await fetch(
-        `/api/quality/violations/${violationId}`,
+      await fetchJson(
+        `/api/quality/violations/${violationId}/resolve`,
         {
           method: 'POST',
+          timeout: QUALITY_TIMEOUTS.LONG,
           headers: {
             'Content-Type': 'application/json'
           },
@@ -219,13 +273,10 @@ export function QualityViolationsTab({ database }: { database: string }) {
         }
       )
 
-      if (!response.ok) {
-        throw new Error('Failed to resolve violation')
-      }
-
-      await fetchViolations()
+      await refetchViolations()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resolve violation')
+      const errorMessage = getErrorMessage(err, 'Не удалось решить нарушение')
+      setActionError(errorMessage)
     } finally {
       setResolvingId(null)
     }
@@ -233,12 +284,12 @@ export function QualityViolationsTab({ database }: { database: string }) {
 
   const getSeverityBadge = (severity: string) => {
     const config = severityConfig[severity as keyof typeof severityConfig]
-    if (!config) return null
+    if (!config) return <Badge variant="outline">{severity}</Badge>
 
     const Icon = config.icon
 
     return (
-      <Badge className={config.color}>
+      <Badge className={`${config.color} border-transparent shadow-sm`}>
         <Icon className="w-3 h-3 mr-1" />
         {config.label}
       </Badge>
@@ -246,36 +297,23 @@ export function QualityViolationsTab({ database }: { database: string }) {
   }
 
   const getCategoryBadge = (category: string) => {
-    const label = categoryConfig[category as keyof typeof categoryConfig] || category
+    const label = categoryConfig[category] || category
     return (
-      <Badge variant="outline">
+      <Badge variant="secondary" className="bg-muted text-muted-foreground hover:bg-muted/80">
         {label}
       </Badge>
     )
   }
 
-  const totalPages = Math.ceil(total / itemsPerPage)
+  const totalPages = itemsPerPage > 0 ? Math.ceil(Math.max(0, total) / itemsPerPage) : 1
 
-  if (!database) {
+  if (!hasSource) {
     return (
       <EmptyState
         icon={AlertCircle}
-        title="Выберите базу данных"
-        description="Для просмотра нарушений необходимо выбрать базу данных"
+        title="Выберите источник данных"
+        description="Для просмотра нарушений выберите базу данных или проект."
       />
-    )
-  }
-
-  if (loading && violations.length === 0) {
-    return <LoadingState message="Загрузка нарушений..." size="lg" fullScreen />
-  }
-
-  if (error && violations.length === 0) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
     )
   }
 
@@ -303,62 +341,112 @@ export function QualityViolationsTab({ database }: { database: string }) {
       </Card>
 
       {/* Summary */}
-      {!loading && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+      {!isInitialLoading && (
+        <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
               <p className="text-sm text-muted-foreground">
-                Найдено нарушений: <span className="font-bold text-foreground">{total}</span>
+                Найдено нарушений: <span className="font-medium text-foreground">{total}</span>
               </p>
-              <p className="text-sm text-muted-foreground">
-                Страница {currentPage} из {totalPages}
-              </p>
+              {analysisStatus?.is_running && analysisStatus.current_step === 'violations' && (
+                <Badge variant="outline" className="text-xs">
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Анализ выполняется...
+                </Badge>
+              )}
+              {loading && !isInitialLoading && (
+                <Badge variant="outline" className="text-xs">
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Обновление данных...
+                </Badge>
+              )}
             </div>
-          </CardContent>
-        </Card>
+            {totalPages > 1 && (
+                <p className="text-sm text-muted-foreground">
+                Страница {currentPage} из {totalPages}
+                </p>
+            )}
+        </div>
       )}
 
       {/* Error Alert */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {combinedError && !isInitialLoading && (
+        <ErrorState
+          title="Ошибка загрузки нарушений"
+          message={combinedError}
+          action={{
+            label: 'Повторить',
+            onClick: () => refetchViolations(),
+          }}
+          variant="destructive"
+          className="mt-4"
+        />
       )}
 
       {/* Violations List */}
-      {loading && violations.length === 0 ? (
-        <LoadingState message="Загрузка нарушений..." size="lg" fullScreen />
+      {isInitialLoading ? (
+        <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+                <Card key={i}>
+                    <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                        <div className="space-y-2">
+                            <Skeleton className="h-5 w-[200px]" />
+                            <Skeleton className="h-4 w-[300px]" />
+                        </div>
+                        <Skeleton className="h-8 w-[100px]" />
+                    </CardHeader>
+                    <CardContent>
+                        <Skeleton className="h-16 w-full" />
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
       ) : violations.length === 0 ? (
         <Card>
           <CardContent className="pt-6">
-            <EmptyState
-              icon={CheckCircle}
-              title="Нарушений не найдено"
-              description={
-                filters.showResolved
-                  ? 'В базе данных нет нарушений качества'
-                  : 'Все нарушения были решены'
-              }
-            />
+            {analysisStatus?.is_running && (analysisStatus.current_step === 'violations' || analysisStatus.current_step === 'suggestions') ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div className="text-center space-y-2">
+                  <p className="font-medium">Выполняется анализ нарушений</p>
+                  <p className="text-sm text-muted-foreground">
+                    Прогресс: {(isNaN(analysisStatus.progress) ? 0 : analysisStatus.progress).toFixed(1)}%
+                  </p>
+                  {analysisStatus.violations_found > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Найдено нарушений: {analysisStatus.violations_found}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                icon={CheckCircle}
+                title="Нарушений не найдено"
+                description={
+                  filters.showResolved
+                    ? 'В базе данных нет нарушений качества. Все данные соответствуют правилам качества.'
+                    : 'Все нарушения были решены или не найдены по заданным фильтрам. Если анализ еще не выполнялся, запустите анализ качества для выявления нарушений.'
+                }
+              />
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-4">
           {violations.map((violation) => {
             const severityConf = severityConfig[violation.severity as keyof typeof severityConfig]
 
             return (
               <Card
                 key={violation.id}
-                className={`border-l-4 ${severityConf?.borderColor || 'border-gray-500'} ${
-                  violation.resolved ? 'opacity-60' : ''
+                className={`transition-all hover:shadow-md ${severityConf?.borderColor ? `border-l-4 ${severityConf.borderColor}` : ''} ${
+                  violation.resolved ? 'opacity-70 bg-muted/30' : ''
                 }`}
               >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {getSeverityBadge(violation.severity)}
                         {getCategoryBadge(violation.category)}
                         {violation.resolved && (
@@ -367,13 +455,22 @@ export function QualityViolationsTab({ database }: { database: string }) {
                             Решено
                           </Badge>
                         )}
+                        <span className="text-xs text-muted-foreground ml-auto md:ml-0 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(violation.created_at).toLocaleDateString('ru-RU')}
+                        </span>
                       </div>
-                      <CardTitle className="text-lg">
+                      <CardTitle className="text-lg font-semibold leading-tight">
                         {violation.rule_name}
                       </CardTitle>
-                      <CardDescription>
-                        ID записи: #{violation.normalized_item_id}
-                        {violation.field_name && ` • Поле: ${violation.field_name}`}
+                      <CardDescription className="flex items-center gap-2 text-xs font-mono">
+                        ID: {violation.normalized_item_id}
+                        {violation.field_name && (
+                            <>
+                                <span className="text-muted-foreground/50">•</span>
+                                <span>Поле: {violation.field_name}</span>
+                            </>
+                        )}
                       </CardDescription>
                     </div>
                     {!violation.resolved && (
@@ -382,46 +479,58 @@ export function QualityViolationsTab({ database }: { database: string }) {
                         variant="outline"
                         onClick={() => handleResolveViolation(violation.id)}
                         disabled={resolvingId === violation.id}
+                        className="shrink-0"
                       >
-                        {resolvingId === violation.id ? 'Решение...' : 'Решить'}
+                        {resolvingId === violation.id ? (
+                            <>
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                Решение...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle className="mr-2 h-3 w-3" />
+                                Решить
+                            </>
+                        )}
                       </Button>
                     )}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-medium mb-1">Сообщение:</h4>
-                    <p className="text-sm text-muted-foreground">{violation.message}</p>
+                <CardContent className="space-y-4 pt-0">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <div>
+                            <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Проблема</h4>
+                            <p className="text-sm">{violation.message}</p>
+                        </div>
+                        {violation.current_value && (
+                            <div>
+                                <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Текущее значение</h4>
+                                <code className="text-sm bg-muted px-2 py-1 rounded border inline-block max-w-full overflow-hidden text-ellipsis">
+                                    {violation.current_value}
+                                </code>
+                            </div>
+                        )}
+                    </div>
+
+                    {violation.recommendation && (
+                        <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-lg p-3 h-fit">
+                            <h4 className="text-xs font-medium uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1">
+                                <Info className="w-3 h-3" />
+                                Рекомендация
+                            </h4>
+                            <p className="text-sm text-blue-900 dark:text-blue-300">{violation.recommendation}</p>
+                        </div>
+                    )}
                   </div>
 
-                  {violation.current_value && (
-                    <div>
-                      <h4 className="text-sm font-medium mb-1">Текущее значение:</h4>
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
-                        {violation.current_value}
-                      </code>
-                    </div>
-                  )}
-
-                  {violation.recommendation && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <h4 className="text-sm font-medium text-blue-900 mb-1">
-                        Рекомендация:
-                      </h4>
-                      <p className="text-sm text-blue-700">{violation.recommendation}</p>
-                    </div>
-                  )}
-
                   {violation.resolved && (
-                    <div className="text-xs text-muted-foreground pt-2 border-t">
-                      Решено {violation.resolved_by}
+                    <div className="text-xs text-muted-foreground pt-3 border-t mt-2 flex items-center gap-2">
+                      <CheckCircle className="w-3 h-3 text-green-600" />
+                      Решено пользователем {violation.resolved_by || 'System'}
                       {violation.resolved_at && ` • ${new Date(violation.resolved_at).toLocaleString('ru-RU')}`}
                     </div>
                   )}
-
-                  <div className="text-xs text-muted-foreground">
-                    Создано: {new Date(violation.created_at).toLocaleString('ru-RU')}
-                  </div>
                 </CardContent>
               </Card>
             )
@@ -429,13 +538,15 @@ export function QualityViolationsTab({ database }: { database: string }) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              itemsPerPage={itemsPerPage}
-              totalItems={total}
-            />
+            <div className="py-4 flex justify-center">
+                <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                totalItems={total}
+                />
+            </div>
           )}
         </div>
       )}

@@ -97,4 +97,3 @@ func (c *Categorizer) Categorize(name string) string {
 	// Если категория не найдена, возвращаем "другое"
 	return "другое"
 }
-

@@ -41,22 +41,22 @@ type NormalizationChanges struct {
 
 // UploadNormalizationResult представляет результат нормализации одной выгрузки в срезе
 type UploadNormalizationResult struct {
-	UploadID       int                  `json:"upload_id"`
-	ProcessedCount int                  `json:"processed_count"`
-	GroupCount     int                  `json:"group_count"`
-	NormalizedData []NormalizedItem     `json:"normalized_data,omitempty"`
+	UploadID       int                   `json:"upload_id"`
+	ProcessedCount int                   `json:"processed_count"`
+	GroupCount     int                   `json:"group_count"`
+	NormalizedData []NormalizedItem      `json:"normalized_data,omitempty"`
 	Changes        *NormalizationChanges `json:"changes,omitempty"`
-	Error          string               `json:"error,omitempty"`
+	Error          string                `json:"error,omitempty"`
 }
 
 // SnapshotNormalizationResult представляет результат нормализации среза
 type SnapshotNormalizationResult struct {
-	SnapshotID      int                                  `json:"snapshot_id"`
-	MasterReference map[string]string                    `json:"master_reference"` // normalized_name -> reference
-	UploadResults   map[int]*UploadNormalizationResult   `json:"upload_results"`
-	TotalProcessed  int                                  `json:"total_processed"`
-	TotalGroups     int                                  `json:"total_groups"`
-	CompletedAt     string                               `json:"completed_at"`
+	SnapshotID      int                                `json:"snapshot_id"`
+	MasterReference map[string]string                  `json:"master_reference"` // normalized_name -> reference
+	UploadResults   map[int]*UploadNormalizationResult `json:"upload_results"`
+	TotalProcessed  int                                `json:"total_processed"`
+	TotalGroups     int                                `json:"total_groups"`
+	CompletedAt     string                             `json:"completed_at"`
 }
 
 // NormalizeSnapshot выполняет сквозную нормализацию среза
@@ -221,4 +221,3 @@ func (sn *SnapshotNormalizer) calculateChanges(original []*database.CatalogItem,
 	}
 	return changes
 }
-

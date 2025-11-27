@@ -1,0 +1,24 @@
+{
+  "Summary": {
+    "FailedSteps": 0,
+    "WarningSteps": 0,
+    "TotalSteps": 0,
+    "FinalStatus": "Failed",
+    "SuccessfulSteps": 0,
+    "Duration": 1.0854248
+  },
+  "TestResults": {
+    "ProjectID": null,
+    "FinalStatus": "Failed",
+    "DatabasePath": null,
+    "Steps": [],
+    "DatabaseID": null,
+    "SessionID": null,
+    "Errors": [
+      "Не удалось создать клиента: Response status code does not indicate success: 502 (Bad Gateway).",
+      "Критическая ошибка: Failed to create client"
+    ],
+    "ClientID": null,
+    "StartTime": "2025-11-25T23:02:33.7375032+03:00"
+  }
+}

@@ -1,7 +1,8 @@
 package server
 
 import (
-	"log"
+	"httpserver/server/middleware"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -36,30 +37,33 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// RequestIDMiddleware добавляет request ID к запросу
-func RequestIDMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get("X-Request-ID")
-		if requestID == "" {
-			requestID = GenerateTraceID()
-		}
-		
-		// Добавляем request ID в контекст запроса
-		r.Header.Set("X-Request-ID", requestID)
-		w.Header().Set("X-Request-ID", requestID)
-		
-		next.ServeHTTP(w, r)
-	})
-}
+// RequestIDMiddleware удален - используйте middleware.RequestIDMiddleware
 
 // LoggingMiddleware логирует входящие запросы
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
-		requestID := r.Header.Get("X-Request-ID")
+		requestID := middleware.GetRequestID(r.Context())
 		
-		// Логируем входящий запрос
-		log.Printf("[%s] %s %s from %s", requestID, r.Method, r.URL.Path, r.RemoteAddr)
+		// Пропускаем логирование для health checks и служебных эндпоинтов
+		skipLogging := false
+		skipPaths := []string{"/health", "/favicon.ico", "/metrics"}
+		for _, path := range skipPaths {
+			if r.URL.Path == path {
+				skipLogging = true
+				break
+			}
+		}
+		
+		if !skipLogging {
+			// Логируем входящий запрос с структурированным форматом
+			slog.Info("Request received",
+				"request_id", requestID,
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr,
+			)
+		}
 		
 		// Обертка для ResponseWriter для отслеживания статуса
 		wrapped := &responseWriter{
@@ -70,9 +74,29 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(wrapped, r)
 		
 		duration := time.Since(startTime)
-		log.Printf("[%s] %s %s - %d (%v)", requestID, r.Method, r.URL.Path, wrapped.statusCode, duration)
+		
+		if !skipLogging {
+			// Логируем завершение запроса с деталями
+			attrs := []interface{}{
+				"request_id", requestID,
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status_code", wrapped.statusCode,
+				"duration_ms", duration.Milliseconds(),
+			}
+			
+			if wrapped.statusCode >= 500 {
+				slog.Error("Request completed with error", attrs...)
+			} else if wrapped.statusCode >= 400 {
+				slog.Warn("Request completed with client error", attrs...)
+			} else {
+				slog.Info("Request completed successfully", attrs...)
+			}
+		}
 	})
 }
+
+// formatDuration удалена - используем duration.Milliseconds() напрямую
 
 // responseWriter обертка для ResponseWriter
 type responseWriter struct {

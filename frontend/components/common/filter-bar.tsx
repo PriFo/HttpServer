@@ -100,19 +100,22 @@ export function FilterBar({
                 <SelectValue placeholder={filter.placeholder || filter.label} />
               </SelectTrigger>
               <SelectContent>
-                {filter.options?.map((option) => {
-                  // Убеждаемся, что значение не пустое
-                  const value = option.value || String(option.value)
-                  if (!value || value === '') {
-                    console.warn(`Filter option with empty value found for filter ${filter.key}`)
-                    return null
-                  }
-                  return (
-                    <SelectItem key={value} value={value}>
-                      {option.label}
-                    </SelectItem>
-                  )
-                })}
+                {filter.options
+                  ?.filter((option) => {
+                    // Фильтруем опции с пустыми значениями
+                    const value = option.value !== null && option.value !== undefined 
+                      ? String(option.value).trim() 
+                      : ''
+                    return value.length > 0
+                  })
+                  .map((option) => {
+                    const value = String(option.value)
+                    return (
+                      <SelectItem key={value} value={value}>
+                        {option.label}
+                      </SelectItem>
+                    )
+                  })}
               </SelectContent>
             </Select>
           </div>

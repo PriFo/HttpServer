@@ -42,7 +42,6 @@ out/
 .vercel
 
 # Environment files
-.env
 .env.local
 .env.development.local
 .env.test.local
@@ -90,4 +89,6 @@ Thumbs.db
 
 # Cursor
 .cursor/
+
+
 

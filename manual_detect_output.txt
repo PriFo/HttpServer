@@ -1,0 +1,7 @@
+=== ╨а╨г╨з╨Э╨Ю╨Щ ╨Ч╨Р╨Я╨г╨б╨Ъ ╨Ф╨Х╨в╨Х╨Ъ╨в╨Ю╨а╨Р ===
+
+2025/11/26 00:43:00 Running migration: creating normalization_sessions table...
+2025/11/26 00:43:00 Normalization sessions migration completed: table and 6 indexes created
+╨Э╨░╨╣╨┤╨╡╨╜╨╛ ╨С╨Ф: 0
+
+тЭМ ╨Э╨╡╤В ╨С╨Ф ╨┤╨╗╤П ╨░╨╜╨░╨╗╨╕╨╖╨░

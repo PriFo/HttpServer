@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Тесты - Нормализатор данных 1С</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .test-header {
+            background: #f5f5f5;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .test-header h2 {
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .test-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .test-button:hover {
+            background: #5568d3;
+        }
+        
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .test-body {
+            padding: 20px;
+        }
+        
+        .api-info {
+            margin-bottom: 15px;
+        }
+        
+        .api-name {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .api-description {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .request-info, .response-info {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .request-info {
+            border-left: 3px solid #667eea;
+        }
+        
+        .response-info {
+            border-left: 3px solid #4caf50;
+        }
+        
+        .response-info.error {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        
+        .label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .status.success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+        
+        .status.pending {
+            background: #ff9800;
+            color: white;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 API Тесты</h1>
+            <p>Нормализатор данных 1С - Тестирование REST API</p>
+        </div>
+        
+        <div class="content">
+            <!-- Тест 1: Dashboard Stats -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>1. Dashboard Statistics</h2>
+                    <button class="test-button" onclick="testDashboardStats()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-1">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/dashboard/stats</div>
+                        <div class="api-description">Получение статистики дашборда: общее количество записей, баз данных, обработанных записей и групп.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/api/dashboard/stats</div>
+                    </div>
+                    <div class="response-info" id="response-1" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-1"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 2: Health Check -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>2. Health Check</h2>
+                    <button class="test-button" onclick="testHealth()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-2">
+                    <div class="api-info">
+                        <div class="api-name">GET /health</div>
+                        <div class="api-description">Проверка состояния сервера и доступности API.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/health</div>
+                    </div>
+                    <div class="response-info" id="response-2" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-2"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 3: Database Info -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>3. Database Information</h2>
+                    <button class="test-button" onclick="testDatabaseInfo()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-3">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/database/info</div>
+                        <div class="api-description">Получение информации о текущей активной базе данных.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/api/database/info</div>
+                    </div>
+                    <div class="response-info" id="response-3" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 4: Databases List -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>4. Databases List</h2>
+                    <button class="test-button" onclick="testDatabasesList()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-4">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/databases/list</div>
+                        <div class="api-description">Получение списка всех доступных баз данных.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/api/databases/list</div>
+                    </div>
+                    <div class="response-info" id="response-4" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-4"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 5: Quality Metrics -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>5. Quality Metrics</h2>
+                    <button class="test-button" onclick="testQualityMetrics()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-5">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/quality/metrics</div>
+                        <div class="api-description">Получение метрик качества данных.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/api/quality/metrics</div>
+                    </div>
+                    <div class="response-info" id="response-5" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-5"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 6: Dashboard Normalization Status -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>6. Normalization Status</h2>
+                    <button class="test-button" onclick="testNormalizationStatus()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test-6">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/dashboard/normalization-status</div>
+                        <div class="api-description">Получение статуса процесса нормализации данных.</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Request:</span>
+                        <div class="code">curl -X GET http://localhost:9999/api/dashboard/normalization-status</div>
+                    </div>
+                    <div class="response-info" id="response-6" style="display: none;">
+                        <span class="label">Response:</span>
+                        <div class="code" id="response-code-6"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:9999';
+        
+        async function makeRequest(endpoint, testId) {
+            const responseDiv = document.getElementById(`response-${testId}`);
+            const codeDiv = document.getElementById(`response-code-${testId}`);
+            const button = event.target;
+            
+            // Показываем загрузку
+            button.disabled = true;
+            button.innerHTML = '<span class="loading"></span>Тестирование...';
+            responseDiv.style.display = 'block';
+            responseDiv.className = 'response-info';
+            codeDiv.textContent = 'Загрузка...';
+            
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                const status = response.status;
+                
+                codeDiv.textContent = JSON.stringify(data, null, 2);
+                
+                if (status >= 200 && status < 300) {
+                    responseDiv.className = 'response-info';
+                    codeDiv.innerHTML = `<span class="status success">✓ Success ${status}</span><br><br>${codeDiv.textContent}`;
+                } else {
+                    responseDiv.className = 'response-info error';
+                    codeDiv.innerHTML = `<span class="status error">✗ Error ${status}</span><br><br>${codeDiv.textContent}`;
+                }
+            } catch (error) {
+                responseDiv.className = 'response-info error';
+                codeDiv.innerHTML = `<span class="status error">✗ Connection Error</span><br><br>${error.message}`;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Запустить тест';
+            }
+        }
+        
+        function testDashboardStats() {
+            makeRequest('/api/dashboard/stats', 1);
+        }
+        
+        function testHealth() {
+            makeRequest('/health', 2);
+        }
+        
+        function testDatabaseInfo() {
+            makeRequest('/api/database/info', 3);
+        }
+        
+        function testDatabasesList() {
+            makeRequest('/api/databases/list', 4);
+        }
+        
+        function testQualityMetrics() {
+            makeRequest('/api/quality/metrics', 5);
+        }
+        
+        function testNormalizationStatus() {
+            makeRequest('/api/dashboard/normalization-status', 6);
+        }
+    </script>
+</body>
+</html>
+

@@ -32,11 +32,11 @@ type BatchResult struct {
 
 // BatchProcessorStats содержит статистику работы батч-процессора
 type BatchProcessorStats struct {
-	TotalBatches    int64
-	TotalItems      int64
+	TotalBatches         int64
+	TotalItems           int64
 	AverageItemsPerBatch float64
-	ProcessingTime  time.Duration
-	LastBatchTime   time.Time
+	ProcessingTime       time.Duration
+	LastBatchTime        time.Time
 }
 
 // BatchProcessor управляет батч-обработкой AI запросов

@@ -86,6 +86,6 @@ func (s *Server) handleKpvedLoadFromFile(w http.ResponseWriter, r *http.Request)
 		"total_codes": totalCodes,
 	}
 
-	s.writeJSONResponse(w, response, http.StatusOK)
+	s.writeJSONResponse(w, r, response, http.StatusOK)
 }
 

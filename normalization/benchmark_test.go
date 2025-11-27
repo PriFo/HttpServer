@@ -101,4 +101,3 @@ func BenchmarkFullNormalization(b *testing.B) {
 		_ = fixed
 	}
 }
-

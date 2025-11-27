@@ -11,6 +11,8 @@ import (
 	"httpserver/database"
 	"httpserver/normalization"
 	"httpserver/server"
+	
+	"github.com/google/uuid"
 )
 
 // TestFullNormalizationFlow тестирует полный поток нормализации
@@ -29,7 +31,8 @@ func TestFullNormalizationFlow(t *testing.T) {
 	defer serviceDB.Close()
 
 	// Создаем тестовые данные
-	upload, err := db.CreateUpload("test-uuid", "8.3", "test-config")
+	uploadUUID := uuid.New().String()
+	upload, err := db.CreateUpload(uploadUUID, "8.3", "test-config")
 	if err != nil {
 		t.Fatalf("Failed to create upload: %v", err)
 	}
@@ -175,7 +178,8 @@ func TestNormalizationWithRevert(t *testing.T) {
 	defer serviceDB.Close()
 
 	// Создаем тестовые данные
-	upload, err := db.CreateUpload("test-uuid", "8.3", "test-config")
+	uploadUUID := uuid.New().String()
+	upload, err := db.CreateUpload(uploadUUID, "8.3", "test-config")
 	if err != nil {
 		t.Fatalf("Failed to create upload: %v", err)
 	}
@@ -287,7 +291,8 @@ func TestClassificationIntegration(t *testing.T) {
 	normalizer := normalization.NewNormalizer(db, events, aiConfig)
 
 	// Создаем тестовые данные
-	upload, err := db.CreateUpload("test-uuid", "8.3", "test-config")
+	uploadUUID := uuid.New().String()
+	upload, err := db.CreateUpload(uploadUUID, "8.3", "test-config")
 	if err != nil {
 		t.Fatalf("Failed to create upload: %v", err)
 	}
@@ -304,7 +309,7 @@ func TestClassificationIntegration(t *testing.T) {
 
 	// Нормализуем данные
 	normalizer.SetSourceConfig("catalog_items", "reference", "code", "name")
-	err = normalizer.ProcessNormalization()
+	err = normalizer.ProcessNormalization(0) // uploadID: 0 = не указан
 	if err != nil {
 		t.Logf("Normalization returned error (expected for empty normalized table): %v", err)
 	}

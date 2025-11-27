@@ -9,7 +9,7 @@ export default function NotFound() {
   const router = useRouter()
 
   return (
-    <div className="container mx-auto px-4 py-16">
+    <div className="container-wide mx-auto px-4 py-16">
       <div className="max-w-2xl mx-auto text-center">
         <EmptyState
           icon={Search}

@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+import { getBackendUrl } from '@/lib/api-config'
 
 export async function GET(request: Request) {
   try {
+    const BACKEND_URL = getBackendUrl()
     const { searchParams } = new URL(request.url)
     const q = searchParams.get('q')
     const limit = searchParams.get('limit')
-    const database = searchParams.get('database')
 
     if (!q) {
       return NextResponse.json(
@@ -19,7 +18,6 @@ export async function GET(request: Request) {
     const params = new URLSearchParams()
     params.append('q', q)
     if (limit) params.append('limit', limit)
-    if (database) params.append('database', database)
 
     const url = `${BACKEND_URL}/api/kpved/search?${params.toString()}`
 
@@ -28,6 +26,14 @@ export async function GET(request: Request) {
     })
 
     if (!response.ok) {
+      // Для 404 возвращаем пустые результаты вместо ошибки
+      if (response.status === 404) {
+        return NextResponse.json({
+          results: [],
+          total: 0,
+        })
+      }
+      
       const errorText = await response.text()
       return NextResponse.json(
         { error: errorText || 'Failed to search KPVED' },

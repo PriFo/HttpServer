@@ -10,7 +10,8 @@ import { Play, Square, RefreshCw, Clock, Zap } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface ReclassificationProcessTabProps {
-  database: string
+  database?: string
+  project?: string // Формат: "clientId:projectId" (пока не используется, но для совместимости)
 }
 
 interface ReclassificationStatus {
@@ -42,12 +43,24 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
 
   const fetchStatus = useCallback(async () => {
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 секунд таймаут
+      
       const response = await fetch('/api/reclassification/status', {
         cache: 'no-store',
+        signal: controller.signal,
       })
       
+      clearTimeout(timeoutId)
+      
       if (!response.ok) {
-        throw new Error('Не удалось получить статус')
+        let errorMessage = 'Не удалось получить статус'
+        if (response.status === 503 || response.status === 504) {
+          errorMessage = 'Сервер временно недоступен. Проверьте подключение к backend серверу на порту 9999'
+        } else if (response.status >= 500) {
+          errorMessage = `Ошибка сервера: ${response.status}`
+        }
+        throw new Error(errorMessage)
       }
       
       const data = await response.json()
@@ -55,7 +68,19 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
       setError(null)
     } catch (err) {
       console.error('Error fetching reclassification status:', err)
-      if (!status.isRunning) {
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          if (!status.isRunning) {
+            setError('Превышено время ожидания ответа от сервера')
+          }
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          if (!status.isRunning) {
+            setError('Не удалось подключиться к серверу. Проверьте подключение к backend серверу на порту 9999')
+          }
+        } else if (!status.isRunning) {
+          setError(err.message || 'Не удалось подключиться к серверу')
+        }
+      } else if (!status.isRunning) {
         setError('Не удалось подключиться к серверу')
       }
     }
@@ -80,6 +105,9 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
     setError(null)
     
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 секунд таймаут для запуска
+      
       const response = await fetch('/api/reclassification/start', {
         method: 'POST',
         headers: {
@@ -90,11 +118,22 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
           strategy_id: 'top_priority',
           limit: 0, // Без лимита
         }),
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Неизвестная ошибка' }))
-        throw new Error(errorData.error || 'Не удалось запустить переклассификацию')
+        let errorMessage = 'Не удалось запустить переклассификацию'
+        if (response.status === 503 || response.status === 504) {
+          errorMessage = 'Сервер временно недоступен. Проверьте подключение к backend серверу на порту 9999'
+        } else if (response.status >= 500) {
+          errorMessage = `Ошибка сервера: ${response.status}`
+        } else {
+          const errorData = await response.json().catch(() => ({ error: errorMessage }))
+          errorMessage = errorData.error || errorMessage
+        }
+        throw new Error(errorMessage)
       }
 
       // Обновляем статус после запуска
@@ -102,7 +141,17 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
         fetchStatus()
       }, 500)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка запуска переклассификации')
+      let errorMessage = 'Ошибка запуска переклассификации'
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = 'Превышено время ожидания ответа от сервера'
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          errorMessage = 'Не удалось подключиться к серверу. Проверьте подключение к backend серверу на порту 9999'
+        } else {
+          errorMessage = err.message || errorMessage
+        }
+      }
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -113,12 +162,24 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
     setError(null)
     
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 секунд таймаут для остановки
+      
       const response = await fetch('/api/reclassification/stop', {
         method: 'POST',
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
-        throw new Error('Не удалось остановить переклассификацию')
+        let errorMessage = 'Не удалось остановить переклассификацию'
+        if (response.status === 503 || response.status === 504) {
+          errorMessage = 'Сервер временно недоступен. Проверьте подключение к backend серверу на порту 9999'
+        } else if (response.status >= 500) {
+          errorMessage = `Ошибка сервера: ${response.status}`
+        }
+        throw new Error(errorMessage)
       }
 
       // Обновляем статус после остановки
@@ -126,7 +187,17 @@ export function ReclassificationProcessTab({ database }: ReclassificationProcess
         fetchStatus()
       }, 500)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка остановки переклассификации')
+      let errorMessage = 'Ошибка остановки переклассификации'
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          errorMessage = 'Превышено время ожидания ответа от сервера'
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          errorMessage = 'Не удалось подключиться к серверу. Проверьте подключение к backend серверу на порту 9999'
+        } else {
+          errorMessage = err.message || errorMessage
+        }
+      }
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }

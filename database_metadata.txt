@@ -1,0 +1,22 @@
+=== ╨б╨Ю╨Ф╨Х╨а╨Ц╨Ш╨Ь╨Ю╨Х database_metadata ===
+
+2025/11/26 00:43:56 Running migration: creating normalization_sessions table...
+2025/11/26 00:43:56 Normalization sessions migration completed: table and 6 indexes created
+╨б╤В╤А╤Г╨║╤В╤Г╤А╨░ ╤В╨░╨▒╨╗╨╕╤Ж╤Л database_metadata:
+  - id (INTEGER)
+  - file_path (TEXT)
+  - database_type (TEXT)
+  - description (TEXT)
+  - first_seen_at (TIMESTAMP)
+  - last_analyzed_at (TIMESTAMP)
+  - metadata_json (TEXT)
+
+1. id=1 file_path=1c_data.db database_type=uploads description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ uploads first_seen_at=2025-11-16 19:14:31 +0000 UTC last_analyzed_at=2025-11-16 20:56:38 +0000 UTC metadata_json={"history":[{"timestamp":"2025-11-16T22:24:28.8849745+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:24:28.9063164+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:24:55.7619901+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:26:10.4104329+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:26:10.4341193+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:26:29.16564+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:26:29.190539+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:31:23.0518487+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:31:23.0732347+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:42:53.060625+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T22:42:53.0855237+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T23:56:38.3699852+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360},{"timestamp":"2025-11-16T23:56:38.3948586+03:00","size":32083968,"size_mb":30.59765625,"row_count":56360}]} 
+2. id=2 file_path=data.db database_type=uploads description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ uploads first_seen_at=2025-11-16 19:14:31 +0000 UTC last_analyzed_at=2025-11-16 19:14:31 +0000 UTC metadata_json={} 
+3. id=3 file_path=normalized_data.db database_type=uploads description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ uploads first_seen_at=2025-11-16 19:14:31 +0000 UTC last_analyzed_at=2025-11-16 19:14:31 +0000 UTC metadata_json={} 
+4. id=4 file_path=service.db database_type=combined description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ combined first_seen_at=2025-11-16 19:14:31 +0000 UTC last_analyzed_at=2025-11-16 19:14:31 +0000 UTC metadata_json={} 
+5. id=18 file_path=data/1c_data.db database_type=uploads description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ uploads first_seen_at=2025-11-16 23:18:17 +0000 UTC last_analyzed_at=2025-11-16 23:18:17 +0000 UTC metadata_json={} 
+6. id=19 file_path=data/normalized_data.db database_type=uploads description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ uploads first_seen_at=2025-11-16 23:18:17 +0000 UTC last_analyzed_at=2025-11-16 23:18:17 +0000 UTC metadata_json={} 
+7. id=20 file_path=data/service.db database_type=combined description=╨С╨░╨╖╨░ ╨┤╨░╨╜╨╜╤Л╤Е ╤В╨╕╨┐╨░ combined first_seen_at=2025-11-16 23:18:17 +0000 UTC last_analyzed_at=2025-11-16 23:18:17 +0000 UTC metadata_json={} 
+
+╨Т╤Б╨╡╨│╨╛ ╨╖╨░╨┐╨╕╤Б╨╡╨╣: 7

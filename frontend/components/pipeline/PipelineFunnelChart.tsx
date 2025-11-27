@@ -1,15 +1,10 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { DynamicBarChart, DynamicBar, DynamicCell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from '@/lib/recharts-dynamic';
+import type { PipelineStatsData } from '@/types/normalization';
 
-interface StageStat {
-  stage_number: string;
-  stage_name: string;
-  completed: number;
-  total: number;
-  progress: number;
-}
+type StageStat = PipelineStatsData['stage_stats'][number];
 
 interface PipelineFunnelChartProps {
   data: StageStat[];
@@ -27,18 +22,37 @@ const COLORS = [
 ];
 
 export function PipelineFunnelChart({ data }: PipelineFunnelChartProps) {
+  // Проверяем наличие данных
+  if (!data || data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Воронка обработки данных</CardTitle>
+          <CardDescription>
+            Прогресс обработки записей по этапам - показывает сколько записей завершило каждый этап
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-96 text-muted-foreground">
+            Нет данных для отображения
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Форматируем данные для графика
   const chartData = data.map((stage, index) => {
     const prevStage = index > 0 ? data[index - 1] : null;
-    const dropoff = prevStage ? prevStage.completed - stage.completed : 0;
+    const dropoff = prevStage ? Math.max(0, prevStage.completed - stage.completed) : 0;
 
     return {
       name: `Этап ${stage.stage_number}`,
       fullName: stage.stage_name,
-      completed: stage.completed,
-      pending: stage.total - stage.completed,
+      completed: stage.completed || 0,
+      pending: Math.max(0, (stage.total || 0) - (stage.completed || 0)),
       dropoff: dropoff,
-      progress: stage.progress,
+      progress: stage.progress || 0,
     };
   });
 
@@ -82,19 +96,19 @@ export function PipelineFunnelChart({ data }: PipelineFunnelChartProps) {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData} layout="vertical">
+          <DynamicBarChart data={chartData} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" />
             <YAxis dataKey="name" type="category" width={100} />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            <Bar dataKey="completed" fill="#22c55e" name="Завершено" radius={[0, 8, 8, 0]}>
+            <DynamicBar dataKey="completed" fill="#22c55e" name="Завершено" radius={[0, 8, 8, 0]}>
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <DynamicCell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
-            </Bar>
-            <Bar dataKey="pending" fill="#fbbf24" name="В процессе" radius={[0, 8, 8, 0]} />
-          </BarChart>
+            </DynamicBar>
+            <DynamicBar dataKey="pending" fill="#fbbf24" name="В процессе" radius={[0, 8, 8, 0]} />
+          </DynamicBarChart>
         </ResponsiveContainer>
 
         {/* Дополнительная статистика */}
@@ -116,8 +130,9 @@ export function PipelineFunnelChart({ data }: PipelineFunnelChartProps) {
           <div>
             <p className="text-sm text-muted-foreground">Коэффициент завершения</p>
             <p className="text-2xl font-bold text-green-600">
-              {chartData.length > 0 ?
-                ((chartData[chartData.length - 1]?.completed / chartData[0]?.completed) * 100).toFixed(1) : 0}%
+              {chartData.length > 0 && chartData[0]?.completed > 0
+                ? ((chartData[chartData.length - 1]?.completed / chartData[0]?.completed) * 100).toFixed(1)
+                : 0}%
             </p>
           </div>
         </div>

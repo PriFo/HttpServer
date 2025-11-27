@@ -44,6 +44,71 @@
 }
 
 :root {
+  /* Design Tokens - Spacing */
+  --token-spacing-xs: 0.25rem;
+  --token-spacing-sm: 0.5rem;
+  --token-spacing-md: 1rem;
+  --token-spacing-lg: 1.5rem;
+  --token-spacing-xl: 2rem;
+  --token-spacing-2xl: 3rem;
+  --token-spacing-3xl: 4rem;
+  --token-spacing-4xl: 6rem;
+  
+  /* Design Tokens - Border Radius */
+  --token-radius-none: 0;
+  --token-radius-sm: 0.25rem;
+  --token-radius-md: 0.5rem;
+  --token-radius-lg: 0.75rem;
+  --token-radius-xl: 1rem;
+  --token-radius-2xl: 1.5rem;
+  --token-radius-full: 9999px;
+  
+  /* Design Tokens - Shadows */
+  --token-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --token-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --token-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --token-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --token-shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --token-shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+  --token-shadow-none: none;
+  
+  /* Design Tokens - Colors (Primary) */
+  --token-color-primary-50: #eff6ff;
+  --token-color-primary-500: #3b82f6;
+  --token-color-primary-900: #1e3a8a;
+  
+  /* Design Tokens - Colors (Gray) */
+  --token-color-gray-50: #f9fafb;
+  --token-color-gray-500: #6b7280;
+  --token-color-gray-900: #111827;
+  
+  /* Design Tokens - Colors (Success) */
+  --token-color-success-50: #f0fdf4;
+  --token-color-success-500: #22c55e;
+  --token-color-success-900: #14532d;
+  
+  /* Design Tokens - Colors (Error) */
+  --token-color-error-50: #fef2f2;
+  --token-color-error-500: #ef4444;
+  --token-color-error-900: #7f1d1d;
+  
+  /* Design Tokens - Typography */
+  --token-font-size-xs: 0.75rem;
+  --token-font-size-sm: 0.875rem;
+  --token-font-size-base: 1rem;
+  --token-font-size-lg: 1.125rem;
+  --token-font-size-xl: 1.25rem;
+  --token-font-size-2xl: 1.5rem;
+  --token-font-size-3xl: 1.875rem;
+  --token-font-size-4xl: 2.25rem;
+  
+  /* Design Tokens - Transitions */
+  --token-transition-duration-fast: 150ms;
+  --token-transition-duration-base: 200ms;
+  --token-transition-duration-slow: 300ms;
+  --token-transition-duration-slower: 400ms;
+  
+  /* Existing variables */
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -118,5 +183,56 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Оптимизация для 1920x1080 - более широкий контейнер */
+  .container-wide {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+  
+  @media (min-width: 640px) {
+    .container-wide {
+      max-width: 100%;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .container-wide {
+      max-width: 100%;
+      padding-left: 3rem;
+      padding-right: 3rem;
+    }
+  }
+  
+  @media (min-width: 1280px) {
+    .container-wide {
+      max-width: 100%;
+      padding-left: 4rem;
+      padding-right: 4rem;
+    }
+  }
+  
+  @media (min-width: 1536px) {
+    .container-wide {
+      max-width: 1850px;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+  
+  @media (min-width: 1920px) {
+    .container-wide {
+      max-width: 1900px;
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+    }
   }
 }

@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -69,8 +72,8 @@ type CatalogItem struct {
 	Reference   string    `json:"reference" xml:"reference"`
 	Code        string    `json:"code" xml:"code"`
 	Name        string    `json:"name" xml:"name"`
-	Attributes  string    `json:"attributes" xml:"attributes"`  // XML строка
-	TableParts  string    `json:"table_parts" xml:"table_parts"`  // XML строка
+	Attributes  string    `json:"attributes" xml:"attributes"`   // XML строка
+	TableParts  string    `json:"table_parts" xml:"table_parts"` // XML строка
 	CreatedAt   time.Time `json:"created_at" xml:"created_at"`
 }
 
@@ -112,7 +115,7 @@ func NewDBWithConfig(dbPath string, config DBConfig) (*DB, error) {
 	}
 
 	db := &DB{conn: conn}
-	
+
 	// Инициализируем схему
 	if err := InitSchema(conn); err != nil {
 		conn.Close()
@@ -161,12 +164,12 @@ func (db *DB) CreateUploadWithDatabase(uploadUUID, version1C, configName string,
 	if iterationNumber <= 0 {
 		iterationNumber = 1
 	}
-	
+
 	query := `
 		INSERT INTO uploads (upload_uuid, version_1c, config_name, status, database_id, client_id, project_id, computer_name, user_name, config_version, iteration_number, iteration_label, programmer_name, upload_purpose, parent_upload_id)
 		VALUES (?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	
+
 	result, err := db.conn.Exec(query, uploadUUID, version1C, configName, databaseID, clientID, projectID, computerName, userName, configVersion, iterationNumber, iterationLabel, programmerName, uploadPurpose, parentUploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create upload: %w", err)
@@ -189,12 +192,12 @@ func (db *DB) GetUploadByID(id int) (*Upload, error) {
 		       iteration_number, iteration_label, programmer_name, upload_purpose, parent_upload_id
 		FROM uploads WHERE id = ?
 	`
-	
+
 	row := db.conn.QueryRow(query, id)
 	upload := &Upload{}
 	var databaseID, clientID, projectID, parentUploadID sql.NullInt64
 	var completedAt sql.NullTime
-	
+
 	err := row.Scan(
 		&upload.ID, &upload.UploadUUID, &upload.StartedAt, &completedAt,
 		&upload.Status, &upload.Version1C, &upload.ConfigName,
@@ -203,11 +206,11 @@ func (db *DB) GetUploadByID(id int) (*Upload, error) {
 		&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		&upload.IterationNumber, &upload.IterationLabel, &upload.ProgrammerName, &upload.UploadPurpose, &parentUploadID,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upload: %w", err)
 	}
-	
+
 	if databaseID.Valid {
 		val := int(databaseID.Int64)
 		upload.DatabaseID = &val
@@ -227,7 +230,7 @@ func (db *DB) GetUploadByID(id int) (*Upload, error) {
 	if completedAt.Valid {
 		upload.CompletedAt = &completedAt.Time
 	}
-	
+
 	return upload, nil
 }
 
@@ -240,13 +243,13 @@ func (db *DB) GetUploadByUUID(uuid string) (*Upload, error) {
 		       iteration_number, iteration_label, programmer_name, upload_purpose, parent_upload_id
 		FROM uploads WHERE upload_uuid = ?
 	`
-	
+
 	row := db.conn.QueryRow(query, uuid)
 	upload := &Upload{}
-	
+
 	var databaseID, clientID, projectID, parentUploadID sql.NullInt64
 	var completedAt sql.NullTime
-	
+
 	err := row.Scan(
 		&upload.ID, &upload.UploadUUID, &upload.StartedAt, &completedAt,
 		&upload.Status, &upload.Version1C, &upload.ConfigName,
@@ -255,11 +258,11 @@ func (db *DB) GetUploadByUUID(uuid string) (*Upload, error) {
 		&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		&upload.IterationNumber, &upload.IterationLabel, &upload.ProgrammerName, &upload.UploadPurpose, &parentUploadID,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upload by UUID: %w", err)
 	}
-	
+
 	if databaseID.Valid {
 		id := int(databaseID.Int64)
 		upload.DatabaseID = &id
@@ -279,7 +282,7 @@ func (db *DB) GetUploadByUUID(uuid string) (*Upload, error) {
 	if completedAt.Valid {
 		upload.CompletedAt = &completedAt.Time
 	}
-	
+
 	return upload, nil
 }
 
@@ -290,12 +293,12 @@ func (db *DB) CompleteUpload(uploadID int) error {
 		SET completed_at = CURRENT_TIMESTAMP, status = 'completed'
 		WHERE id = ?
 	`
-	
+
 	_, err := db.conn.Exec(query, uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to complete upload: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -307,28 +310,28 @@ func (db *DB) AddConstant(uploadID int, name, synonym, constType, value string) 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	query := `
 		INSERT INTO constants (upload_id, name, synonym, type, value)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	
+
 	_, err = tx.Exec(query, uploadID, name, synonym, constType, value)
 	if err != nil {
 		return fmt.Errorf("failed to add constant: %w", err)
 	}
-	
+
 	// Обновляем счетчик в той же транзакции
 	_, err = tx.Exec("UPDATE uploads SET total_constants = total_constants + 1 WHERE id = ?", uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to update constants counter: %w", err)
 	}
-	
+
 	// Подтверждаем транзакцию
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -340,33 +343,33 @@ func (db *DB) AddCatalog(uploadID int, name, synonym string) (*Catalog, error) {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	query := `
 		INSERT INTO catalogs (upload_id, name, synonym)
 		VALUES (?, ?, ?)
 	`
-	
+
 	result, err := tx.Exec(query, uploadID, name, synonym)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add catalog: %w", err)
 	}
-	
+
 	id, err := result.LastInsertId()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get catalog ID: %w", err)
 	}
-	
+
 	// Обновляем счетчик в той же транзакции
 	_, err = tx.Exec("UPDATE uploads SET total_catalogs = total_catalogs + 1 WHERE id = ?", uploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update catalogs counter: %w", err)
 	}
-	
+
 	// Подтверждаем транзакцию
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return &Catalog{
 		ID:       int(id),
 		UploadID: uploadID,
@@ -378,7 +381,7 @@ func (db *DB) AddCatalog(uploadID int, name, synonym string) (*Catalog, error) {
 // AddCatalogItem добавляет элемент справочника
 func (db *DB) AddCatalogItem(catalogID int, reference, code, name string, attributes, tableParts interface{}) error {
 	var attrsXML, partsXML string
-	
+
 	// Преобразуем в строку (уже XML из 1С)
 	if attributes != nil {
 		if str, ok := attributes.(string); ok {
@@ -391,7 +394,7 @@ func (db *DB) AddCatalogItem(catalogID int, reference, code, name string, attrib
 			attrsXML = string(attrsBytes)
 		}
 	}
-	
+
 	if tableParts != nil {
 		if str, ok := tableParts.(string); ok {
 			partsXML = str
@@ -403,62 +406,62 @@ func (db *DB) AddCatalogItem(catalogID int, reference, code, name string, attrib
 			partsXML = string(partsBytes)
 		}
 	}
-	
+
 	// Используем транзакцию для атомарности операций
 	tx, err := db.conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	query := `
 		INSERT INTO catalog_items (catalog_id, reference, code, name, attributes_xml, table_parts_xml)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	
+
 	_, err = tx.Exec(query, catalogID, reference, code, name, attrsXML, partsXML)
 	if err != nil {
 		return fmt.Errorf("failed to add catalog item: %w", err)
 	}
-	
+
 	// Обновляем счетчик в uploads через catalog в той же транзакции
 	var uploadID int
 	err = tx.QueryRow("SELECT upload_id FROM catalogs WHERE id = ?", catalogID).Scan(&uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to get upload_id for catalog: %w", err)
 	}
-	
+
 	_, err = tx.Exec("UPDATE uploads SET total_items = total_items + 1 WHERE id = ?", uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to update items counter: %w", err)
 	}
-	
+
 	// Подтверждаем транзакцию
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
 // NomenclatureItem представляет элемент номенклатуры с характеристикой
 type NomenclatureItem struct {
-	ID                    int       `json:"id"`
-	UploadID              int       `json:"upload_id"`
-	NomenclatureReference string    `json:"nomenclature_reference"`
-	NomenclatureCode      string    `json:"nomenclature_code"`
-	NomenclatureName      string    `json:"nomenclature_name"`
-	CharacteristicReference string  `json:"characteristic_reference,omitempty"`
-	CharacteristicName     string   `json:"characteristic_name,omitempty"`
-	AttributesXML         string    `json:"attributes_xml"`
-	TablePartsXML         string    `json:"table_parts_xml"`
-	CreatedAt             time.Time `json:"created_at"`
+	ID                      int       `json:"id"`
+	UploadID                int       `json:"upload_id"`
+	NomenclatureReference   string    `json:"nomenclature_reference"`
+	NomenclatureCode        string    `json:"nomenclature_code"`
+	NomenclatureName        string    `json:"nomenclature_name"`
+	CharacteristicReference string    `json:"characteristic_reference,omitempty"`
+	CharacteristicName      string    `json:"characteristic_name,omitempty"`
+	AttributesXML           string    `json:"attributes_xml"`
+	TablePartsXML           string    `json:"table_parts_xml"`
+	CreatedAt               time.Time `json:"created_at"`
 }
 
 // AddNomenclatureItem добавляет элемент номенклатуры с характеристикой
 func (db *DB) AddNomenclatureItem(uploadID int, nomenclatureRef, nomenclatureCode, nomenclatureName string, characteristicRef, characteristicName string, attributes, tableParts interface{}) error {
 	var attrsXML, partsXML string
-	
+
 	// Преобразуем в строку (уже XML из 1С)
 	if attributes != nil {
 		if str, ok := attributes.(string); ok {
@@ -471,7 +474,7 @@ func (db *DB) AddNomenclatureItem(uploadID int, nomenclatureRef, nomenclatureCod
 			attrsXML = string(attrsBytes)
 		}
 	}
-	
+
 	if tableParts != nil {
 		if str, ok := tableParts.(string); ok {
 			partsXML = str
@@ -483,35 +486,35 @@ func (db *DB) AddNomenclatureItem(uploadID int, nomenclatureRef, nomenclatureCod
 			partsXML = string(partsBytes)
 		}
 	}
-	
+
 	// Используем транзакцию для атомарности операций
 	tx, err := db.conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	query := `
 		INSERT INTO nomenclature_items (upload_id, nomenclature_reference, nomenclature_code, nomenclature_name, characteristic_reference, characteristic_name, attributes_xml, table_parts_xml)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	
+
 	_, err = tx.Exec(query, uploadID, nomenclatureRef, nomenclatureCode, nomenclatureName, characteristicRef, characteristicName, attrsXML, partsXML)
 	if err != nil {
 		return fmt.Errorf("failed to add nomenclature item: %w", err)
 	}
-	
+
 	// Обновляем счетчик в uploads
 	_, err = tx.Exec("UPDATE uploads SET total_items = total_items + 1 WHERE id = ?", uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to update items counter: %w", err)
 	}
-	
+
 	// Подтверждаем транзакцию
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -520,43 +523,43 @@ func (db *DB) AddNomenclatureItemsBatch(uploadID int, items []NomenclatureItem) 
 	if len(items) == 0 {
 		return nil
 	}
-	
+
 	tx, err := db.conn.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	query := `
 		INSERT INTO nomenclature_items (upload_id, nomenclature_reference, nomenclature_code, nomenclature_name, characteristic_reference, characteristic_name, attributes_xml, table_parts_xml)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	
+
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
-	
+
 	for _, item := range items {
-		_, err = stmt.Exec(uploadID, item.NomenclatureReference, item.NomenclatureCode, item.NomenclatureName, 
+		_, err = stmt.Exec(uploadID, item.NomenclatureReference, item.NomenclatureCode, item.NomenclatureName,
 			item.CharacteristicReference, item.CharacteristicName, item.AttributesXML, item.TablePartsXML)
 		if err != nil {
 			return fmt.Errorf("failed to add nomenclature item: %w", err)
 		}
 	}
-	
+
 	// Обновляем счетчик в uploads
 	_, err = tx.Exec("UPDATE uploads SET total_items = total_items + ? WHERE id = ?", len(items), uploadID)
 	if err != nil {
 		return fmt.Errorf("failed to update items counter: %w", err)
 	}
-	
+
 	// Подтверждаем транзакцию
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -578,7 +581,7 @@ func (db *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
 // GetStats получает статистику по выгрузкам
 func (db *DB) GetStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
-	
+
 	// Общее количество выгрузок
 	var totalUploads int
 	err := db.conn.QueryRow("SELECT COUNT(*) FROM uploads").Scan(&totalUploads)
@@ -586,7 +589,7 @@ func (db *DB) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get total uploads: %w", err)
 	}
 	stats["total_uploads"] = totalUploads
-	
+
 	// Активные выгрузки
 	var activeUploads int
 	err = db.conn.QueryRow("SELECT COUNT(*) FROM uploads WHERE status = 'in_progress'").Scan(&activeUploads)
@@ -594,7 +597,7 @@ func (db *DB) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get active uploads: %w", err)
 	}
 	stats["active_uploads"] = activeUploads
-	
+
 	// Общее количество констант
 	var totalConstants int
 	err = db.conn.QueryRow("SELECT COUNT(*) FROM constants").Scan(&totalConstants)
@@ -602,7 +605,7 @@ func (db *DB) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get total constants: %w", err)
 	}
 	stats["total_constants"] = totalConstants
-	
+
 	// Общее количество справочников
 	var totalCatalogs int
 	err = db.conn.QueryRow("SELECT COUNT(*) FROM catalogs").Scan(&totalCatalogs)
@@ -610,7 +613,7 @@ func (db *DB) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get total catalogs: %w", err)
 	}
 	stats["total_catalogs"] = totalCatalogs
-	
+
 	// Общее количество элементов
 	var totalItems int
 	err = db.conn.QueryRow("SELECT COUNT(*) FROM catalog_items").Scan(&totalItems)
@@ -618,7 +621,7 @@ func (db *DB) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get total items: %w", err)
 	}
 	stats["total_items"] = totalItems
-	
+
 	return stats, nil
 }
 
@@ -632,13 +635,13 @@ func (db *DB) GetAllUploads() ([]*Upload, error) {
 		FROM uploads
 		ORDER BY started_at DESC
 	`
-	
+
 	rows, err := db.conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get uploads: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var uploads []*Upload
 	for rows.Next() {
 		upload := &Upload{}
@@ -655,7 +658,7 @@ func (db *DB) GetAllUploads() ([]*Upload, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan upload: %w", err)
 		}
-		
+
 		if databaseID.Valid {
 			id := int(databaseID.Int64)
 			upload.DatabaseID = &id
@@ -675,15 +678,482 @@ func (db *DB) GetAllUploads() ([]*Upload, error) {
 		if completedAt.Valid {
 			upload.CompletedAt = &completedAt.Time
 		}
-		
+
 		uploads = append(uploads, upload)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating uploads: %w", err)
 	}
-	
+
 	return uploads, nil
+}
+
+// GetUploadsByDatabaseID получает все выгрузки для указанной базы данных.
+// databaseID - ID базы данных.
+// Возвращает список выгрузок или ошибку при неудаче.
+func (db *DB) GetUploadsByDatabaseID(databaseID int) ([]*Upload, error) {
+	query := `
+		SELECT id, upload_uuid, started_at, completed_at, status, 
+		       version_1c, config_name, total_constants, total_catalogs, total_items,
+		       database_id, client_id, project_id, computer_name, user_name, config_version,
+		       iteration_number, iteration_label, programmer_name, upload_purpose, parent_upload_id
+		FROM uploads
+		WHERE database_id = ?
+		ORDER BY started_at DESC
+	`
+
+	rows, err := db.conn.Query(query, databaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get uploads by database id: %w", err)
+	}
+	defer rows.Close()
+
+	var uploads []*Upload
+	for rows.Next() {
+		upload := &Upload{}
+		var databaseIDVal, clientID, projectID, parentUploadID sql.NullInt64
+		var completedAt sql.NullTime
+		err := rows.Scan(
+			&upload.ID, &upload.UploadUUID, &upload.StartedAt, &completedAt,
+			&upload.Status, &upload.Version1C, &upload.ConfigName,
+			&upload.TotalConstants, &upload.TotalCatalogs, &upload.TotalItems,
+			&databaseIDVal, &clientID, &projectID,
+			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
+			&upload.IterationNumber, &upload.IterationLabel, &upload.ProgrammerName, &upload.UploadPurpose, &parentUploadID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan upload: %w", err)
+		}
+
+		if databaseIDVal.Valid {
+			val := int(databaseIDVal.Int64)
+			upload.DatabaseID = &val
+		}
+		if clientID.Valid {
+			val := int(clientID.Int64)
+			upload.ClientID = &val
+		}
+		if projectID.Valid {
+			val := int(projectID.Int64)
+			upload.ProjectID = &val
+		}
+		if parentUploadID.Valid {
+			val := int(parentUploadID.Int64)
+			upload.ParentUploadID = &val
+		}
+		if completedAt.Valid {
+			upload.CompletedAt = &completedAt.Time
+		}
+
+		uploads = append(uploads, upload)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating uploads: %w", err)
+	}
+
+	return uploads, nil
+}
+
+// GetUploadStatsFromDatabaseFile получает статистику напрямую из файла БД проекта
+// Используется когда в основной БД нет записей с database_id
+func GetUploadStatsFromDatabaseFile(dbPath string) (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+	
+	// Проверяем существование файла
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("database file not found: %s", dbPath)
+		}
+		return nil, fmt.Errorf("failed to check database file: %w", err)
+	}
+	
+	// Подключаемся к файлу БД проекта
+	conn, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database file: %w", err)
+	}
+	defer conn.Close()
+	
+	// Устанавливаем таймауты
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
+	
+	// Проверяем существование таблиц и получаем статистику
+	// Используем безопасные запросы с обработкой ошибок
+	
+	// Количество выгрузок
+	var uploadsCount int
+	err = conn.QueryRow("SELECT COUNT(*) FROM uploads").Scan(&uploadsCount)
+	if err != nil {
+		// Если таблица uploads не существует или произошла ошибка, возвращаем нули
+		if !errors.Is(err, sql.ErrNoRows) {
+			// Логируем только если это не просто отсутствие таблицы
+			uploadsCount = 0
+		} else {
+			uploadsCount = 0
+		}
+	}
+	stats["total_uploads"] = uploadsCount
+	stats["uploads_count"] = uploadsCount
+	
+	// Количество справочников
+	var catalogsCount int
+	err = conn.QueryRow("SELECT COUNT(*) FROM catalogs").Scan(&catalogsCount)
+	if err != nil {
+		// Если таблица catalogs не существует, возвращаем нули
+		catalogsCount = 0
+	}
+	stats["total_catalogs"] = catalogsCount
+	stats["catalogs_count"] = catalogsCount
+	
+	// Количество записей (элементов справочников)
+	var itemsCount int
+	err = conn.QueryRow("SELECT COUNT(*) FROM catalog_items").Scan(&itemsCount)
+	if err != nil {
+		// Если таблица catalog_items не существует, возвращаем нули
+		itemsCount = 0
+	}
+	stats["total_items"] = itemsCount
+	stats["items_count"] = itemsCount
+	
+	// Дополнительная статистика: последняя дата выгрузки
+	if uploadsCount > 0 {
+		var lastUploadDate sql.NullTime
+		err = conn.QueryRow("SELECT MAX(started_at) FROM uploads").Scan(&lastUploadDate)
+		if err == nil && lastUploadDate.Valid {
+			stats["last_upload_date"] = lastUploadDate.Time.Format(time.RFC3339)
+		}
+		
+		// Среднее количество записей на выгрузку
+		var avgItemsPerUpload sql.NullFloat64
+		err = conn.QueryRow("SELECT AVG(CAST(total_items AS REAL)) FROM uploads WHERE total_items IS NOT NULL").Scan(&avgItemsPerUpload)
+		if err == nil && avgItemsPerUpload.Valid {
+			stats["avg_items_per_upload"] = avgItemsPerUpload.Float64
+		}
+	}
+	
+	return stats, nil
+}
+
+// GetUploadStatsByDatabaseID получает статистику по выгрузкам для конкретной базы данных.
+// databaseID - ID базы данных из таблицы project_databases.
+// Возвращает статистику по выгрузкам или ошибку при неудаче.
+// Если в основной БД статистика нулевая, пытается получить статистику напрямую из файла БД проекта.
+func (db *DB) GetUploadStatsByDatabaseID(databaseID int) (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+
+	// Количество выгрузок для данной базы данных
+	var uploadsCount int
+	err := db.conn.QueryRow("SELECT COUNT(*) FROM uploads WHERE database_id = ?", databaseID).Scan(&uploadsCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get uploads count: %w", err)
+	}
+	stats["total_uploads"] = uploadsCount
+	stats["uploads_count"] = uploadsCount
+
+	// Общее количество справочников из всех выгрузок данной базы данных
+	var catalogsCount int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(DISTINCT c.id)
+		FROM catalogs c
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id = ?
+	`, databaseID).Scan(&catalogsCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get catalogs count: %w", err)
+	}
+	stats["total_catalogs"] = catalogsCount
+	stats["catalogs_count"] = catalogsCount
+
+	// Общее количество записей (элементов справочников) из всех выгрузок данной базы данных
+	var itemsCount int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(ci.id)
+		FROM catalog_items ci
+		INNER JOIN catalogs c ON ci.catalog_id = c.id
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id = ?
+	`, databaseID).Scan(&itemsCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get items count: %w", err)
+	}
+	stats["total_items"] = itemsCount
+	stats["items_count"] = itemsCount
+
+	// Дополнительная статистика: последняя дата выгрузки и среднее количество записей на выгрузку
+	if uploadsCount > 0 {
+		var lastUploadDate sql.NullTime
+		err = db.conn.QueryRow(`
+			SELECT MAX(started_at)
+			FROM uploads
+			WHERE database_id = ?
+		`, databaseID).Scan(&lastUploadDate)
+		if err == nil && lastUploadDate.Valid {
+			stats["last_upload_date"] = lastUploadDate.Time.Format(time.RFC3339)
+		}
+
+		// Среднее количество записей на выгрузку
+		var avgItemsPerUpload float64
+		err = db.conn.QueryRow(`
+			SELECT AVG(CAST(total_items AS REAL))
+			FROM uploads
+			WHERE database_id = ? AND total_items IS NOT NULL
+		`, databaseID).Scan(&avgItemsPerUpload)
+		if err == nil {
+			stats["avg_items_per_upload"] = avgItemsPerUpload
+		}
+	}
+
+	return stats, nil
+}
+
+// GetUploadStatsByDatabaseIDs получает статистику по выгрузкам для нескольких баз данных одним запросом.
+// databaseIDs - список ID баз данных из таблицы project_databases.
+// Возвращает карту, где ключ - databaseID, значение - статистика по выгрузкам.
+// Оптимизирует N+1 проблему при получении статистики для множества баз данных.
+// Использует три оптимизированных batch-запроса вместо N отдельных запросов.
+func (db *DB) GetUploadStatsByDatabaseIDs(databaseIDs []int) (map[int]map[string]interface{}, error) {
+	if len(databaseIDs) == 0 {
+		return make(map[int]map[string]interface{}), nil
+	}
+
+	result := make(map[int]map[string]interface{})
+
+	// Инициализируем результат для всех баз данных нулевыми значениями
+	for _, id := range databaseIDs {
+		result[id] = map[string]interface{}{
+			"total_uploads":  0,
+			"uploads_count":  0,
+			"total_catalogs": 0,
+			"catalogs_count": 0,
+			"total_items":    0,
+			"items_count":    0,
+		}
+	}
+
+	// Создаем плейсхолдеры для IN запроса
+	placeholders := strings.Repeat("?,", len(databaseIDs)-1) + "?"
+
+	// Преобразуем []int в []interface{} для Query
+	args := make([]interface{}, len(databaseIDs))
+	for i, id := range databaseIDs {
+		args[i] = id
+	}
+
+	// Получаем количество выгрузок для каждой базы данных
+	query := fmt.Sprintf(`
+		SELECT database_id, COUNT(*) as uploads_count
+		FROM uploads
+		WHERE database_id IN (%s)
+		GROUP BY database_id
+	`, placeholders)
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get uploads count: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var dbID, count int
+		if err := rows.Scan(&dbID, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan uploads count: %w", err)
+		}
+		if stats, exists := result[dbID]; exists {
+			stats["total_uploads"] = count
+			stats["uploads_count"] = count
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating uploads count: %w", err)
+	}
+
+	// Получаем количество справочников для каждой базы данных
+	query = fmt.Sprintf(`
+		SELECT u.database_id, COUNT(DISTINCT c.id) as catalogs_count
+		FROM catalogs c
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id IN (%s)
+		GROUP BY u.database_id
+	`, placeholders)
+
+	rows, err = db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get catalogs count: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var dbID, count int
+		if err := rows.Scan(&dbID, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan catalogs count: %w", err)
+		}
+		if stats, exists := result[dbID]; exists {
+			stats["total_catalogs"] = count
+			stats["catalogs_count"] = count
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating catalogs count: %w", err)
+	}
+
+	// Получаем количество записей для каждой базы данных
+	query = fmt.Sprintf(`
+		SELECT u.database_id, COUNT(ci.id) as items_count
+		FROM catalog_items ci
+		INNER JOIN catalogs c ON ci.catalog_id = c.id
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id IN (%s)
+		GROUP BY u.database_id
+	`, placeholders)
+
+	rows, err = db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get items count: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var dbID, count int
+		if err := rows.Scan(&dbID, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan items count: %w", err)
+		}
+		if stats, exists := result[dbID]; exists {
+			stats["total_items"] = count
+			stats["items_count"] = count
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating items count: %w", err)
+	}
+
+	// Получаем дополнительную статистику: последняя дата выгрузки для каждой БД
+	query = fmt.Sprintf(`
+		SELECT database_id, MAX(started_at) as last_upload_date
+		FROM uploads
+		WHERE database_id IN (%s)
+		GROUP BY database_id
+	`, placeholders)
+
+	rows, err = db.conn.Query(query, args...)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var dbID int
+			var lastUploadDate sql.NullTime
+			if err := rows.Scan(&dbID, &lastUploadDate); err == nil {
+				if stats, exists := result[dbID]; exists && lastUploadDate.Valid {
+					stats["last_upload_date"] = lastUploadDate.Time.Format(time.RFC3339)
+				}
+			}
+		}
+	}
+
+	// Получаем среднее количество записей на выгрузку для каждой БД
+	query = fmt.Sprintf(`
+		SELECT database_id, AVG(CAST(total_items AS REAL)) as avg_items_per_upload
+		FROM uploads
+		WHERE database_id IN (%s) AND total_items IS NOT NULL
+		GROUP BY database_id
+	`, placeholders)
+
+	rows, err = db.conn.Query(query, args...)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var dbID int
+			var avgItems sql.NullFloat64
+			if err := rows.Scan(&dbID, &avgItems); err == nil {
+				if stats, exists := result[dbID]; exists && avgItems.Valid {
+					stats["avg_items_per_upload"] = avgItems.Float64
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// GetAggregatedUploadStats получает агрегированную статистику по выгрузкам для всех баз данных.
+// Возвращает общую статистику по всем базам данных одним запросом.
+// Это более эффективно, чем суммирование результатов GetUploadStatsByDatabaseIDs.
+func (db *DB) GetAggregatedUploadStats() (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+
+	// Общее количество выгрузок
+	var totalUploads int
+	err := db.conn.QueryRow("SELECT COUNT(*) FROM uploads WHERE database_id IS NOT NULL").Scan(&totalUploads)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total uploads: %w", err)
+	}
+	stats["total_uploads"] = totalUploads
+	stats["uploads_count"] = totalUploads
+
+	// Общее количество уникальных справочников
+	var totalCatalogs int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(DISTINCT c.id)
+		FROM catalogs c
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id IS NOT NULL
+	`).Scan(&totalCatalogs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total catalogs: %w", err)
+	}
+	stats["total_catalogs"] = totalCatalogs
+	stats["catalogs_count"] = totalCatalogs
+
+	// Общее количество записей
+	var totalItems int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(ci.id)
+		FROM catalog_items ci
+		INNER JOIN catalogs c ON ci.catalog_id = c.id
+		INNER JOIN uploads u ON c.upload_id = u.id
+		WHERE u.database_id IS NOT NULL
+	`).Scan(&totalItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total items: %w", err)
+	}
+	stats["total_items"] = totalItems
+	stats["items_count"] = totalItems
+
+	// Количество баз данных с выгрузками
+	var databasesWithUploads int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(DISTINCT database_id)
+		FROM uploads
+		WHERE database_id IS NOT NULL
+	`).Scan(&databasesWithUploads)
+	if err == nil {
+		stats["databases_with_uploads"] = databasesWithUploads
+	}
+
+	// Последняя дата выгрузки среди всех баз данных
+	var lastUploadDate sql.NullTime
+	err = db.conn.QueryRow(`
+		SELECT MAX(started_at)
+		FROM uploads
+		WHERE database_id IS NOT NULL
+	`).Scan(&lastUploadDate)
+	if err == nil && lastUploadDate.Valid {
+		stats["last_upload_date"] = lastUploadDate.Time.Format(time.RFC3339)
+	}
+
+	// Среднее количество записей на выгрузку
+	var avgItemsPerUpload sql.NullFloat64
+	err = db.conn.QueryRow(`
+		SELECT AVG(CAST(total_items AS REAL))
+		FROM uploads
+		WHERE database_id IS NOT NULL AND total_items IS NOT NULL
+	`).Scan(&avgItemsPerUpload)
+	if err == nil && avgItemsPerUpload.Valid {
+		stats["avg_items_per_upload"] = avgItemsPerUpload.Float64
+	}
+
+	return stats, nil
 }
 
 // FindSimilarUpload ищет похожую выгрузку по косвенным параметрам
@@ -701,7 +1171,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			ORDER BY started_at DESC
 			LIMIT 1
 		`
-		
+
 		upload := &Upload{}
 		var databaseID, clientID, projectID sql.NullInt64
 		err := db.conn.QueryRow(query, computerName, userName, configName, version1C).Scan(
@@ -711,7 +1181,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			&databaseID, &clientID, &projectID,
 			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		)
-		
+
 		if err == nil {
 			if databaseID.Valid {
 				id := int(databaseID.Int64)
@@ -728,7 +1198,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			return upload, nil
 		}
 	}
-	
+
 	// Приоритет 2: Совпадение по computer_name + config_name + version_1c
 	if computerName != "" && configName != "" && version1C != "" {
 		query := `
@@ -741,7 +1211,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			ORDER BY started_at DESC
 			LIMIT 1
 		`
-		
+
 		upload := &Upload{}
 		var databaseID, clientID, projectID sql.NullInt64
 		err := db.conn.QueryRow(query, computerName, configName, version1C).Scan(
@@ -751,7 +1221,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			&databaseID, &clientID, &projectID,
 			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		)
-		
+
 		if err == nil {
 			if databaseID.Valid {
 				id := int(databaseID.Int64)
@@ -768,7 +1238,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			return upload, nil
 		}
 	}
-	
+
 	// Приоритет 3: Совпадение по computer_name + config_name
 	if computerName != "" && configName != "" {
 		query := `
@@ -781,7 +1251,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			ORDER BY started_at DESC
 			LIMIT 1
 		`
-		
+
 		upload := &Upload{}
 		var databaseID, clientID, projectID sql.NullInt64
 		err := db.conn.QueryRow(query, computerName, configName).Scan(
@@ -791,7 +1261,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			&databaseID, &clientID, &projectID,
 			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		)
-		
+
 		if err == nil {
 			if databaseID.Valid {
 				id := int(databaseID.Int64)
@@ -808,7 +1278,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			return upload, nil
 		}
 	}
-	
+
 	// Приоритет 4: Совпадение по config_name + version_1c
 	if configName != "" && version1C != "" {
 		query := `
@@ -821,7 +1291,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			ORDER BY started_at DESC
 			LIMIT 1
 		`
-		
+
 		upload := &Upload{}
 		var databaseID, clientID, projectID sql.NullInt64
 		err := db.conn.QueryRow(query, configName, version1C).Scan(
@@ -831,7 +1301,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			&databaseID, &clientID, &projectID,
 			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		)
-		
+
 		if err == nil {
 			if databaseID.Valid {
 				id := int(databaseID.Int64)
@@ -848,7 +1318,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			return upload, nil
 		}
 	}
-	
+
 	// Приоритет 5: Совпадение только по config_name (самый слабый критерий)
 	if configName != "" {
 		query := `
@@ -861,7 +1331,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			ORDER BY started_at DESC
 			LIMIT 1
 		`
-		
+
 		upload := &Upload{}
 		var databaseID, clientID, projectID sql.NullInt64
 		err := db.conn.QueryRow(query, configName).Scan(
@@ -871,7 +1341,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			&databaseID, &clientID, &projectID,
 			&upload.ComputerName, &upload.UserName, &upload.ConfigVersion,
 		)
-		
+
 		if err == nil {
 			if databaseID.Valid {
 				id := int(databaseID.Int64)
@@ -888,7 +1358,7 @@ func (db *DB) FindSimilarUpload(computerName, userName, configName, version1C, c
 			return upload, nil
 		}
 	}
-	
+
 	// Не найдено
 	return nil, sql.ErrNoRows
 }
@@ -899,19 +1369,19 @@ func (db *DB) GetUploadDetails(uuid string) (*Upload, []*Catalog, []*Constant, e
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	
+
 	// Получаем справочники
 	catalogs, err := db.GetCatalogsByUpload(upload.ID)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get catalogs: %w", err)
 	}
-	
+
 	// Получаем константы
 	constants, err := db.GetConstantsByUpload(upload.ID)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get constants: %w", err)
 	}
-	
+
 	return upload, catalogs, constants, nil
 }
 
@@ -923,13 +1393,13 @@ func (db *DB) GetConstantsByUpload(uploadID int) ([]*Constant, error) {
 		WHERE upload_id = ?
 		ORDER BY id
 	`
-	
+
 	rows, err := db.conn.Query(query, uploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get constants: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var constants []*Constant
 	for rows.Next() {
 		constant := &Constant{}
@@ -942,11 +1412,11 @@ func (db *DB) GetConstantsByUpload(uploadID int) ([]*Constant, error) {
 		}
 		constants = append(constants, constant)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating constants: %w", err)
 	}
-	
+
 	return constants, nil
 }
 
@@ -958,13 +1428,13 @@ func (db *DB) GetCatalogsByUpload(uploadID int) ([]*Catalog, error) {
 		WHERE c.upload_id = ?
 		ORDER BY c.name
 	`
-	
+
 	rows, err := db.conn.Query(query, uploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get catalogs: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var catalogs []*Catalog
 	for rows.Next() {
 		catalog := &Catalog{}
@@ -976,11 +1446,11 @@ func (db *DB) GetCatalogsByUpload(uploadID int) ([]*Catalog, error) {
 		}
 		catalogs = append(catalogs, catalog)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating catalogs: %w", err)
 	}
-	
+
 	return catalogs, nil
 }
 
@@ -1001,9 +1471,9 @@ func (db *DB) GetCatalogItemsByUpload(uploadID int, catalogNames []string, offse
 		INNER JOIN catalogs c ON ci.catalog_id = c.id
 		WHERE c.upload_id = ?
 	`
-	
+
 	args := []interface{}{uploadID}
-	
+
 	if len(catalogNames) > 0 {
 		query += " AND c.name IN ("
 		for i, name := range catalogNames {
@@ -1015,10 +1485,10 @@ func (db *DB) GetCatalogItemsByUpload(uploadID int, catalogNames []string, offse
 		}
 		query += ")"
 	}
-	
+
 	// Сортируем по ID элемента, чтобы сохранить порядок вставки в БД
 	query += " ORDER BY ci.id"
-	
+
 	// Получаем общее количество для пагинации
 	var totalCount int
 	countQuery := "SELECT COUNT(*) FROM (" + query + ")"
@@ -1026,19 +1496,19 @@ func (db *DB) GetCatalogItemsByUpload(uploadID int, catalogNames []string, offse
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
 	}
-	
+
 	// Добавляем пагинацию
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)
 	}
-	
+
 	rows, err := db.conn.Query(query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get catalog items: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var items []*CatalogItem
 	for rows.Next() {
 		item := &CatalogItem{}
@@ -1051,11 +1521,11 @@ func (db *DB) GetCatalogItemsByUpload(uploadID int, catalogNames []string, offse
 		}
 		items = append(items, item)
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("error iterating catalog items: %w", err)
 	}
-	
+
 	return items, totalCount, nil
 }
 
@@ -1068,13 +1538,13 @@ func (db *DB) GetCatalogItemCountByCatalog(uploadID int) (map[int]int, error) {
 		WHERE c.upload_id = ?
 		GROUP BY c.id
 	`
-	
+
 	rows, err := db.conn.Query(query, uploadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get catalog item counts: %w", err)
 	}
 	defer rows.Close()
-	
+
 	counts := make(map[int]int)
 	for rows.Next() {
 		var catalogID, itemCount int
@@ -1084,11 +1554,11 @@ func (db *DB) GetCatalogItemCountByCatalog(uploadID int) (map[int]int, error) {
 		}
 		counts[catalogID] = itemCount
 	}
-	
+
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating catalog item counts: %w", err)
 	}
-	
+
 	return counts, nil
 }
 
@@ -1156,15 +1626,15 @@ type NormalizedItem struct {
 
 // ItemAttribute представляет извлеченный атрибут товара
 type ItemAttribute struct {
-	ID                int       `json:"id"`
-	NormalizedItemID  int       `json:"normalized_item_id"`
-	AttributeType     string    `json:"attribute_type"`     // dimension, unit, article_code, technical_code, numeric_value, text_value
-	AttributeName     string    `json:"attribute_name"`     // width, height, thickness, weight, etc.
-	AttributeValue    string    `json:"attribute_value"`    // значение атрибута
-	Unit              string    `json:"unit"`               // единица измерения (mm, cm, kg, etc.)
-	OriginalText      string    `json:"original_text"`      // исходный текст, из которого извлечен атрибут
-	Confidence        float64   `json:"confidence"`         // уверенность в извлечении (0.0-1.0)
-	CreatedAt         time.Time `json:"created_at"`
+	ID               int       `json:"id"`
+	NormalizedItemID int       `json:"normalized_item_id"`
+	AttributeType    string    `json:"attribute_type"`  // dimension, unit, article_code, technical_code, numeric_value, text_value
+	AttributeName    string    `json:"attribute_name"`  // width, height, thickness, weight, etc.
+	AttributeValue   string    `json:"attribute_value"` // значение атрибута
+	Unit             string    `json:"unit"`            // единица измерения (mm, cm, kg, etc.)
+	OriginalText     string    `json:"original_text"`   // исходный текст, из которого извлечен атрибут
+	Confidence       float64   `json:"confidence"`      // уверенность в извлечении (0.0-1.0)
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // NormalizationSession представляет сессию нормализации для элемента
@@ -1181,25 +1651,63 @@ type NormalizationSession struct {
 
 // NormalizationStage представляет стадию нормализации
 type NormalizationStage struct {
-	ID                   int       `json:"id"`
-	SessionID            int       `json:"session_id"`
-	StageType            string    `json:"stage_type"`            // algorithmic, ai_single, ai_chat, manual
-	StageName            string    `json:"stage_name"`            // pattern_correction, ai_correction, etc.
-	InputName            string    `json:"input_name"`
-	OutputName           string    `json:"output_name"`
-	AppliedPatterns      string    `json:"applied_patterns"`      // JSON
-	AIContext            string    `json:"ai_context"`            // JSON для промптов/ответов
-	CategoryOriginal     string    `json:"category_original"`    // JSON
-	CategoryFolded      string    `json:"category_folded"`        // JSON
-	ClassificationStrategy string  `json:"classification_strategy"`
-	Confidence           float64   `json:"confidence"`
-	Status               string    `json:"status"`                // applied, pending, rejected
-	CreatedAt            time.Time `json:"created_at"`
+	ID                     int       `json:"id"`
+	SessionID              int       `json:"session_id"`
+	StageType              string    `json:"stage_type"` // algorithmic, ai_single, ai_chat, manual
+	StageName              string    `json:"stage_name"` // pattern_correction, ai_correction, etc.
+	InputName              string    `json:"input_name"`
+	OutputName             string    `json:"output_name"`
+	AppliedPatterns        string    `json:"applied_patterns"`  // JSON
+	AIContext              string    `json:"ai_context"`        // JSON для промптов/ответов
+	CategoryOriginal       string    `json:"category_original"` // JSON
+	CategoryFolded         string    `json:"category_folded"`   // JSON
+	ClassificationStrategy string    `json:"classification_strategy"`
+	Confidence             float64   `json:"confidence"`
+	Status                 string    `json:"status"` // applied, pending, rejected
+	CreatedAt              time.Time `json:"created_at"`
 }
 
-// GetAllCatalogItems получает все записи из catalog_items (устаревший метод для совместимости)
+// GetAllCatalogItems получает все записи из catalog_items с полными данными
 func (db *DB) GetAllCatalogItems() ([]*CatalogItem, error) {
-	return db.GetCatalogItemsFromTable("catalog_items", "reference", "code", "name")
+	query := `
+		SELECT ci.id, ci.catalog_id, c.name as catalog_name,
+		       ci.reference, ci.code, ci.name,
+		       COALESCE(ci.attributes_xml, '') as attributes,
+		       COALESCE(ci.table_parts_xml, '') as table_parts,
+		       ci.created_at
+		FROM catalog_items ci
+		LEFT JOIN catalogs c ON ci.catalog_id = c.id
+		ORDER BY ci.id
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all catalog items: %w", err)
+	}
+	defer rows.Close()
+
+	var items []*CatalogItem
+	for rows.Next() {
+		item := &CatalogItem{}
+		var catalogName sql.NullString
+		err := rows.Scan(
+			&item.ID, &item.CatalogID, &catalogName, &item.Reference, &item.Code, &item.Name,
+			&item.Attributes, &item.TableParts, &item.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan catalog item: %w", err)
+		}
+		if catalogName.Valid {
+			item.CatalogName = catalogName.String
+		}
+		items = append(items, item)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating catalog items: %w", err)
+	}
+
+	return items, nil
 }
 
 // GetCatalogItemsFromTable получает все записи из указанной таблицы с указанными колонками
@@ -1301,14 +1809,14 @@ func (db *DB) InsertNormalizedItemsBatch(items []*NormalizedItem) (map[string]in
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert normalized item: %w", err)
 		}
-		
+
 		// Получаем ID вставленной записи
 		id, err := result.LastInsertId()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get last insert id: %w", err)
 		}
-		
-		// ВАЖНО: Если несколько элементов имеют одинаковый код, 
+
+		// ВАЖНО: Если несколько элементов имеют одинаковый код,
 		// в map будет сохранен только ID последнего элемента с таким кодом.
 		// Это нормально, если код должен быть уникальным в рамках батча.
 		if item.Code != "" {
@@ -1379,6 +1887,46 @@ func (db *DB) GetNormalizedItems(offset, limit int) ([]*NormalizedItem, error) {
 	return items, nil
 }
 
+// GetNormalizedItem получает нормализованную запись по ID
+func (db *DB) GetNormalizedItem(id int) (*NormalizedItem, error) {
+	query := `
+		SELECT id, source_reference, source_name, code, normalized_name,
+		       normalized_reference, category, merged_count, ai_confidence,
+		       ai_reasoning, processing_level, kpved_code, kpved_name, kpved_confidence,
+		       quality_score, created_at
+		FROM normalized_data
+		WHERE id = ?
+	`
+
+	item := &NormalizedItem{}
+	err := db.conn.QueryRow(query, id).Scan(
+		&item.ID,
+		&item.SourceReference,
+		&item.SourceName,
+		&item.Code,
+		&item.NormalizedName,
+		&item.NormalizedReference,
+		&item.Category,
+		&item.MergedCount,
+		&item.AIConfidence,
+		&item.AIReasoning,
+		&item.ProcessingLevel,
+		&item.KpvedCode,
+		&item.KpvedName,
+		&item.KpvedConfidence,
+		&item.QualityScore,
+		&item.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, sql.ErrNoRows
+		}
+		return nil, fmt.Errorf("failed to get normalized item: %w", err)
+	}
+
+	return item, nil
+}
+
 // InsertItemAttributesBatch вставляет пакет атрибутов для нормализованного товара
 func (db *DB) InsertItemAttributesBatch(normalizedItemID int, attributes []*ItemAttribute) error {
 	if len(attributes) == 0 {
@@ -1428,7 +1976,9 @@ func (db *DB) InsertItemAttributesBatch(normalizedItemID int, attributes []*Item
 // InsertNormalizedItemsWithAttributesBatch вставляет items И их attributes в ОДНОЙ транзакции
 // Это гарантирует атомарность: либо вставляется все (items + attributes), либо ничего
 // Критично для предотвращения частичной вставки при сбоях
-func (db *DB) InsertNormalizedItemsWithAttributesBatch(items []*NormalizedItem, itemAttributes map[string][]*ItemAttribute) (map[string]int, error) {
+// sessionID - опциональный ID сессии нормализации для связи с project_database
+// projectID - опциональный ID проекта для фильтрации данных
+func (db *DB) InsertNormalizedItemsWithAttributesBatch(items []*NormalizedItem, itemAttributes map[string][]*ItemAttribute, sessionID *int, projectID *int) (map[string]int, error) {
 	if len(items) == 0 {
 		return make(map[string]int), nil
 	}
@@ -1441,10 +1991,11 @@ func (db *DB) InsertNormalizedItemsWithAttributesBatch(items []*NormalizedItem, 
 	defer tx.Rollback() // Откатим если что-то пошло не так
 
 	// Подготавливаем statement для вставки items
+	// Проверяем наличие project_id в схеме
 	itemStmt, err := tx.Prepare(`
 		INSERT OR REPLACE INTO normalized_data
-		(source_reference, source_name, code, normalized_name, normalized_reference, category, merged_count, ai_confidence, ai_reasoning, processing_level, kpved_code, kpved_name, kpved_confidence)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(source_reference, source_name, code, normalized_name, normalized_reference, category, merged_count, ai_confidence, ai_reasoning, processing_level, kpved_code, kpved_name, kpved_confidence, normalization_session_id, project_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare item statement: %w", err)
@@ -1466,6 +2017,11 @@ func (db *DB) InsertNormalizedItemsWithAttributesBatch(items []*NormalizedItem, 
 
 	// Вставляем items
 	for _, item := range items {
+		var projectIDValue interface{}
+		if projectID != nil {
+			projectIDValue = *projectID
+		}
+
 		result, err := itemStmt.Exec(
 			item.SourceReference,
 			item.SourceName,
@@ -1480,6 +2036,8 @@ func (db *DB) InsertNormalizedItemsWithAttributesBatch(items []*NormalizedItem, 
 			item.KpvedCode,
 			item.KpvedName,
 			item.KpvedConfidence,
+			sessionID,
+			projectIDValue,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert normalized item: %w", err)
@@ -1567,6 +2125,120 @@ func (db *DB) GetItemAttributes(normalizedItemID int) ([]*ItemAttribute, error) 
 	return attributes, nil
 }
 
+// DeleteAllNormalizedData удаляет все записи из normalized_data.
+// Атрибуты из normalized_item_attributes удалятся автоматически благодаря ON DELETE CASCADE.
+// Возвращает количество удаленных записей.
+func (db *DB) DeleteAllNormalizedData() (int64, error) {
+	// Начинаем транзакцию для атомарности
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Получаем количество записей перед удалением для логирования
+	var countBefore int64
+	err = tx.QueryRow("SELECT COUNT(*) FROM normalized_data").Scan(&countBefore)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count records before deletion: %w", err)
+	}
+
+	// Удаляем все записи из normalized_data
+	// Атрибуты удалятся автоматически через CASCADE
+	result, err := tx.Exec("DELETE FROM normalized_data")
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete normalized data: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// Коммитим транзакцию
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return rowsAffected, nil
+}
+
+// DeleteNormalizedDataByProjectID удаляет все записи из normalized_data для указанного проекта.
+// Атрибуты из normalized_item_attributes удалятся автоматически благодаря ON DELETE CASCADE.
+// Возвращает количество удаленных записей.
+func (db *DB) DeleteNormalizedDataByProjectID(projectID int) (int64, error) {
+	// Начинаем транзакцию для атомарности
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Получаем количество записей перед удалением для логирования
+	var countBefore int64
+	err = tx.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE project_id = ?", projectID).Scan(&countBefore)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count records before deletion: %w", err)
+	}
+
+	// Удаляем записи для указанного проекта
+	// Атрибуты удалятся автоматически через CASCADE
+	result, err := tx.Exec("DELETE FROM normalized_data WHERE project_id = ?", projectID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete normalized data: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// Коммитим транзакцию
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return rowsAffected, nil
+}
+
+// DeleteNormalizedDataBySessionID удаляет все записи из normalized_data для указанной сессии.
+// Атрибуты из normalized_item_attributes удалятся автоматически благодаря ON DELETE CASCADE.
+// Возвращает количество удаленных записей.
+func (db *DB) DeleteNormalizedDataBySessionID(sessionID int) (int64, error) {
+	// Начинаем транзакцию для атомарности
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Получаем количество записей перед удалением для логирования
+	var countBefore int64
+	err = tx.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE normalization_session_id = ?", sessionID).Scan(&countBefore)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count records before deletion: %w", err)
+	}
+
+	// Удаляем записи для указанной сессии
+	// Атрибуты удалятся автоматически через CASCADE
+	result, err := tx.Exec("DELETE FROM normalized_data WHERE normalization_session_id = ?", sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete normalized data: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// Коммитим транзакцию
+	if err = tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return rowsAffected, nil
+}
+
 // UpdateProcessingLevel обновляет уровень обработки и оценку качества
 func (db *DB) UpdateProcessingLevel(id int, processingLevel string, qualityScore float64) error {
 	query := `
@@ -1587,6 +2259,100 @@ func (db *DB) UpdateProcessingLevel(id int, processingLevel string, qualityScore
 	return nil
 }
 
+// UpdateNormalizedName обновляет каноническое имя записи после применения паттернов или AI.
+// Вызывается пайплайном нормализации, чтобы зафиксировать последнее предложение в normalized_data.
+// id может быть либо ID из normalized_data, либо catalog_item_id (в этом случае обновляется через связь)
+func (db *DB) UpdateNormalizedName(id int, normalizedName string) error {
+	// Сначала пытаемся обновить напрямую в normalized_data
+	query := `
+		UPDATE normalized_data
+		SET normalized_name = ?
+		WHERE id = ?
+	`
+
+	result, err := db.conn.Exec(query, normalizedName, id)
+	if err != nil {
+		return fmt.Errorf("failed to update normalized name: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read rows affected for normalized name update: %w", err)
+	}
+
+	// Если не обновилось, возможно id - это catalog_item_id, пытаемся обновить через связь
+	if rowsAffected == 0 {
+		// Пытаемся обновить через catalog_items -> normalized_data
+		query = `
+			UPDATE normalized_data
+			SET normalized_name = ?
+			WHERE id = (
+				SELECT normalized_item_id 
+				FROM catalog_items 
+				WHERE id = ? AND normalized_item_id IS NOT NULL
+			)
+		`
+		
+		result, err = db.conn.Exec(query, normalizedName, id)
+		if err != nil {
+			return fmt.Errorf("failed to update normalized name via catalog_item: %w", err)
+		}
+
+		rowsAffected, err = result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to read rows affected for normalized name update: %w", err)
+		}
+
+		// Если все еще не обновилось, создаем запись в normalized_data и связываем с catalog_item
+		if rowsAffected == 0 {
+			// Получаем информацию о catalog_item
+			var catalogID int
+			var reference, code, name string
+			err = db.conn.QueryRow(`
+				SELECT catalog_id, reference, code, name 
+				FROM catalog_items 
+				WHERE id = ?
+			`, id).Scan(&catalogID, &reference, &code, &name)
+			
+			if err != nil {
+				return sql.ErrNoRows
+			}
+
+			// Создаем запись в normalized_data
+			insertQuery := `
+				INSERT INTO normalized_data 
+				(source_reference, source_name, code, normalized_name, normalized_reference, category, merged_count)
+				VALUES (?, ?, ?, ?, ?, ?, 1)
+			`
+			
+			result, err = db.conn.Exec(insertQuery, reference, name, code, normalizedName, reference, "")
+			if err != nil {
+				return fmt.Errorf("failed to create normalized item: %w", err)
+			}
+
+			normalizedItemID, err := result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("failed to get normalized item ID: %w", err)
+			}
+
+			// Связываем catalog_item с normalized_data
+			_, err = db.conn.Exec(`
+				UPDATE catalog_items 
+				SET normalized_item_id = ? 
+				WHERE id = ?
+			`, normalizedItemID, id)
+			
+			if err != nil {
+				return fmt.Errorf("failed to link catalog item to normalized data: %w", err)
+			}
+
+			return nil
+		}
+	}
+
+	return nil
+}
+
 // GetQualityStats получает статистику по качеству нормализации
 func (db *DB) GetQualityStats() (map[string]interface{}, error) {
 	stats := make(map[string]interface{})
@@ -1600,11 +2366,16 @@ func (db *DB) GetQualityStats() (map[string]interface{}, error) {
 	stats["total_items"] = totalCount
 
 	// Количество по уровням обработки
+	// Используем quality_score если есть, иначе ai_confidence, иначе значение по умолчанию
 	rows, err := db.conn.Query(`
 		SELECT 
 			COALESCE(processing_level, 'basic') as processing_level, 
 			COUNT(*) as count, 
-			AVG(CASE WHEN ai_confidence > 0 THEN ai_confidence ELSE NULL END) as avg_quality
+			AVG(CASE 
+				WHEN quality_score > 0 THEN quality_score
+				WHEN ai_confidence > 0 THEN ai_confidence
+				ELSE NULL
+			END) as avg_quality
 		FROM normalized_data
 		GROUP BY COALESCE(processing_level, 'basic')
 	`)
@@ -1614,14 +2385,14 @@ func (db *DB) GetQualityStats() (map[string]interface{}, error) {
 	defer rows.Close()
 
 	levelStats := make(map[string]map[string]interface{})
-	// Базовые оценки качества для каждого уровня (если нет AI оценок)
+	// Базовые оценки качества для каждого уровня (если нет оценок)
 	levelQualityDefaults := map[string]float64{
 		"basic":       50.0,
 		"enhanced":    70.0,
 		"ai_enhanced": 85.0,
 		"benchmark":   95.0,
 	}
-	
+
 	for rows.Next() {
 		var level string
 		var count int
@@ -1629,45 +2400,63 @@ func (db *DB) GetQualityStats() (map[string]interface{}, error) {
 		if err := rows.Scan(&level, &count, &avgQuality); err != nil {
 			return nil, fmt.Errorf("failed to scan level stats: %w", err)
 		}
-		
-		// Используем AI оценку если есть, иначе базовую
+
+		// Используем рассчитанное среднее если есть, иначе базовое значение по умолчанию
 		qualityValue := levelQualityDefaults[level]
 		if avgQuality.Valid && avgQuality.Float64 > 0 {
-			qualityValue = avgQuality.Float64
+			// Конвертируем из 0-1 в проценты (0-100)
+			qualityValue = avgQuality.Float64 * 100.0
+		} else {
+			// Используем значение по умолчанию для уровня
+			qualityValue = levelQualityDefaults[level]
 		}
-		
+
+		percentage := 0.0
+		if totalCount > 0 {
+			percentage = float64(count) / float64(totalCount) * 100
+		}
+
 		levelStats[level] = map[string]interface{}{
-			"count":        count,
-			"avg_quality":  qualityValue,
-			"percentage":   float64(count) / float64(totalCount) * 100,
+			"count":       count,
+			"avg_quality": qualityValue,
+			"percentage":  percentage,
 		}
 	}
 	stats["by_level"] = levelStats
 
 	// Средняя оценка качества
-	// Используем ai_confidence если есть, иначе используем базовую оценку на основе processing_level
+	// Используем quality_score если есть, иначе ai_confidence, иначе базовую оценку на основе processing_level
 	var avgQuality sql.NullFloat64
-	err = db.conn.QueryRow("SELECT AVG(ai_confidence) FROM normalized_data WHERE ai_confidence > 0").Scan(&avgQuality)
-	if err != nil && err.Error() != "sql: Scan error on column index 0, name \"AVG(ai_confidence)\": converting NULL to float64 is unsupported" {
-		// Если нет записей с ai_confidence > 0, рассчитываем базовую оценку
+	err = db.conn.QueryRow(`
+		SELECT AVG(CASE 
+			WHEN quality_score > 0 THEN quality_score
+			WHEN ai_confidence > 0 THEN ai_confidence
+			ELSE NULL
+		END) 
+		FROM normalized_data 
+		WHERE quality_score > 0 OR ai_confidence > 0
+	`).Scan(&avgQuality)
+	if err != nil && err.Error() != "sql: Scan error on column index 0, name \"AVG(...)\": converting NULL to float64 is unsupported" {
+		// Если нет записей с оценками, рассчитываем базовую оценку
 		avgQuality = sql.NullFloat64{Valid: false}
 	}
-	
+
 	if avgQuality.Valid && avgQuality.Float64 > 0 {
-		stats["average_quality"] = avgQuality.Float64
+		// Конвертируем из 0-1 в проценты (0-100)
+		stats["average_quality"] = avgQuality.Float64 * 100.0
 	} else {
-		// Если нет AI оценок, используем базовую оценку на основе processing_level
+		// Если нет оценок, используем базовую оценку на основе processing_level
 		// basic = 50%, enhanced = 70%, ai_enhanced = 85%, benchmark = 95%
 		var basicCount, enhancedCount, aiEnhancedCount, benchmarkCount int
-		db.conn.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE processing_level = 'basic'").Scan(&basicCount)
+		db.conn.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE COALESCE(processing_level, 'basic') = 'basic'").Scan(&basicCount)
 		db.conn.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE processing_level = 'enhanced'").Scan(&enhancedCount)
 		db.conn.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE processing_level = 'ai_enhanced'").Scan(&aiEnhancedCount)
 		db.conn.QueryRow("SELECT COUNT(*) FROM normalized_data WHERE processing_level = 'benchmark'").Scan(&benchmarkCount)
-		
+
 		if totalCount > 0 {
-			calculatedQuality := (float64(basicCount)*50.0 + 
-				float64(enhancedCount)*70.0 + 
-				float64(aiEnhancedCount)*85.0 + 
+			calculatedQuality := (float64(basicCount)*50.0 +
+				float64(enhancedCount)*70.0 +
+				float64(aiEnhancedCount)*85.0 +
 				float64(benchmarkCount)*95.0) / float64(totalCount)
 			stats["average_quality"] = calculatedQuality
 		} else {
@@ -1697,34 +2486,34 @@ func (db *DB) GetQualityStats() (map[string]interface{}, error) {
 
 // DataQualityMetric представляет метрику качества данных
 type DataQualityMetric struct {
-	ID            int                    `json:"id"`
-	UploadID      int                    `json:"upload_id"`
-	DatabaseID    int                    `json:"database_id"`
-	MetricCategory string                `json:"metric_category"`
-	MetricName    string                 `json:"metric_name"`
-	MetricValue   float64                `json:"metric_value"`
-	ThresholdValue *float64              `json:"threshold_value,omitempty"`
-	Status        string                 `json:"status"`
-	MeasuredAt    time.Time              `json:"measured_at"`
-	Details       map[string]interface{} `json:"details,omitempty"`
+	ID             int                    `json:"id"`
+	UploadID       int                    `json:"upload_id"`
+	DatabaseID     int                    `json:"database_id"`
+	MetricCategory string                 `json:"metric_category"`
+	MetricName     string                 `json:"metric_name"`
+	MetricValue    float64                `json:"metric_value"`
+	ThresholdValue *float64               `json:"threshold_value,omitempty"`
+	Status         string                 `json:"status"`
+	MeasuredAt     time.Time              `json:"measured_at"`
+	Details        map[string]interface{} `json:"details,omitempty"`
 }
 
 // DataQualityIssue представляет проблему качества данных
 type DataQualityIssue struct {
-	ID             int        `json:"id"`
-	UploadID       int        `json:"upload_id"`
-	DatabaseID     int        `json:"database_id"`
-	EntityType     string     `json:"entity_type"`
-	EntityReference string    `json:"entity_reference,omitempty"`
-	IssueType      string     `json:"issue_type"`
-	IssueSeverity  string     `json:"issue_severity"`
-	FieldName      string     `json:"field_name,omitempty"`
-	ExpectedValue  string     `json:"expected_value,omitempty"`
-	ActualValue    string     `json:"actual_value,omitempty"`
-	Description    string     `json:"description"`
-	DetectedAt     time.Time  `json:"detected_at"`
-	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
-	Status         string     `json:"status"`
+	ID              int        `json:"id"`
+	UploadID        int        `json:"upload_id"`
+	DatabaseID      int        `json:"database_id"`
+	EntityType      string     `json:"entity_type"`
+	EntityReference string     `json:"entity_reference,omitempty"`
+	IssueType       string     `json:"issue_type"`
+	IssueSeverity   string     `json:"issue_severity"`
+	FieldName       string     `json:"field_name,omitempty"`
+	ExpectedValue   string     `json:"expected_value,omitempty"`
+	ActualValue     string     `json:"actual_value,omitempty"`
+	Description     string     `json:"description"`
+	DetectedAt      time.Time  `json:"detected_at"`
+	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	Status          string     `json:"status"`
 }
 
 // QualityTrend представляет тренд качества по базе данных
@@ -1974,6 +2763,143 @@ func (db *DB) GetQualityIssues(uploadID int, filters map[string]interface{}, lim
 		}
 
 		issues = append(issues, issue)
+	}
+
+	return issues, totalCount, nil
+}
+
+// GetQualityIssuesByUploadIDs получает проблемы качества для нескольких uploads одним запросом
+// Оптимизирует N+1 проблему при получении issues для нескольких uploads
+// GetQualityIssuesByUploadIDs получает проблемы качества для нескольких upload ID.
+// Использует batch-запрос с IN clause для оптимизации производительности (решает N+1 проблему).
+//
+// Параметры:
+//   - uploadIDs: список ID upload для получения проблем
+//   - filters: карта фильтров (entity_type, severity, status и т.д.)
+//   - limit: максимальное количество записей (0 = без лимита)
+//   - offset: смещение для пагинации
+//
+// Возвращает:
+//   - список проблем качества
+//   - общее количество записей (для пагинации)
+//   - ошибку при неудаче
+//
+// Пример использования:
+//
+//	issues, total, err := db.GetQualityIssuesByUploadIDs([]int{1, 2, 3}, map[string]interface{}{
+//	    "severity": "CRITICAL",
+//	}, 10, 0)
+func (db *DB) GetQualityIssuesByUploadIDs(uploadIDs []int, filters map[string]interface{}, limit, offset int) ([]DataQualityIssue, int, error) {
+	if len(uploadIDs) == 0 {
+		return []DataQualityIssue{}, 0, nil
+	}
+
+	// Создаем плейсхолдеры для IN запроса
+	placeholders := strings.Repeat("?,", len(uploadIDs)-1) + "?"
+
+	// Сначала получаем общее количество для пагинации
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM data_quality_issues WHERE upload_id IN (%s)`, placeholders)
+	countArgs := make([]interface{}, len(uploadIDs))
+	for i, id := range uploadIDs {
+		countArgs[i] = id
+	}
+
+	if entityType, ok := filters["entity_type"]; ok {
+		countQuery += " AND entity_type = ?"
+		countArgs = append(countArgs, entityType)
+	}
+
+	if severity, ok := filters["severity"]; ok {
+		countQuery += " AND issue_severity = ?"
+		countArgs = append(countArgs, severity)
+	}
+
+	if status, ok := filters["status"]; ok {
+		countQuery += " AND status = ?"
+		countArgs = append(countArgs, status)
+	}
+
+	var totalCount int
+	err := db.conn.QueryRow(countQuery, countArgs...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count quality issues: %w", err)
+	}
+
+	// Теперь получаем данные с пагинацией
+	query := fmt.Sprintf(`SELECT id, upload_id, database_id, entity_type, entity_reference,
+		issue_type, issue_severity, field_name, expected_value, actual_value,
+		description, detected_at, resolved_at, status
+		FROM data_quality_issues
+		WHERE upload_id IN (%s)`, placeholders)
+
+	args := make([]interface{}, len(uploadIDs))
+	for i, id := range uploadIDs {
+		args[i] = id
+	}
+
+	if entityType, ok := filters["entity_type"]; ok {
+		query += " AND entity_type = ?"
+		args = append(args, entityType)
+	}
+
+	if severity, ok := filters["severity"]; ok {
+		query += " AND issue_severity = ?"
+		args = append(args, severity)
+	}
+
+	if status, ok := filters["status"]; ok {
+		query += " AND status = ?"
+		args = append(args, status)
+	}
+
+	query += " ORDER BY detected_at DESC"
+
+	// Добавляем пагинацию только если указаны limit и offset
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query quality issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []DataQualityIssue
+	for rows.Next() {
+		var issue DataQualityIssue
+		var resolvedAt sql.NullTime
+
+		err := rows.Scan(
+			&issue.ID,
+			&issue.UploadID,
+			&issue.DatabaseID,
+			&issue.EntityType,
+			&issue.EntityReference,
+			&issue.IssueType,
+			&issue.IssueSeverity,
+			&issue.FieldName,
+			&issue.ExpectedValue,
+			&issue.ActualValue,
+			&issue.Description,
+			&issue.DetectedAt,
+			&resolvedAt,
+			&issue.Status,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan quality issue: %w", err)
+		}
+
+		if resolvedAt.Valid {
+			issue.ResolvedAt = &resolvedAt.Time
+		}
+
+		issues = append(issues, issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating quality issues: %w", err)
 	}
 
 	return issues, totalCount, nil
@@ -2277,6 +3203,23 @@ func (db *DB) GetTopQualityIssues(databaseID int, limit int) ([]DataQualityIssue
 	}
 
 	return issues, nil
+}
+
+// UpdateUploadClientProject обновляет client_id и project_id для выгрузки
+// Улучшает инкапсуляцию, вынося прямой SQL из сервисов
+func (db *DB) UpdateUploadClientProject(uploadID, clientID, projectID int) error {
+	query := `
+		UPDATE uploads 
+		SET client_id = ?, project_id = ? 
+		WHERE id = ?
+	`
+
+	_, err := db.conn.Exec(query, clientID, projectID, uploadID)
+	if err != nil {
+		return fmt.Errorf("failed to update upload client and project: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateUploadQualityScore обновляет общий балл качества для выгрузки
@@ -2925,7 +3868,7 @@ type PerformanceMetricsSnapshot struct {
 	ID                  int       `json:"id"`
 	Timestamp           time.Time `json:"timestamp"`
 	MetricType          string    `json:"metric_type"`
-	MetricData          string    `json:"metric_data"`           // JSON со всеми метриками
+	MetricData          string    `json:"metric_data"` // JSON со всеми метриками
 	UptimeSeconds       int       `json:"uptime_seconds"`
 	Throughput          float64   `json:"throughput"`
 	AISuccessRate       float64   `json:"ai_success_rate"`

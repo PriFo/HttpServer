@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # PostgreSQL для E2E тестов (если используется)
+  postgres-e2e:
+    image: postgres:15-alpine
+    container_name: httpserver-postgres-e2e
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"  # Другой порт, чтобы не конфликтовать с основным
+    volumes:
+      - postgres-e2e-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Backend для E2E тестов
+  backend-e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: httpserver-backend-e2e
+    ports:
+      - "9998:9999"  # Другой порт для E2E
+    environment:
+      - SERVER_PORT=9999
+      - DATABASE_PATH=/app/data/1c_data_e2e.db
+      - NORMALIZED_DATABASE_PATH=/app/data/normalized_data_e2e.db
+      - SERVICE_DATABASE_PATH=/app/data/service_e2e.db
+      - ARLIAI_API_KEY=${ARLIAI_API_KEY:-}
+      - ARLIAI_MODEL=${ARLIAI_MODEL:-GLM-4.5-Air}
+      - MAX_OPEN_CONNS=25
+      - MAX_IDLE_CONNS=5
+      - CONN_MAX_LIFETIME=300s
+      - NODE_ENV=test
+    volumes:
+      - ./data:/app/data
+      - ./tests/e2e:/app/tests/e2e:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+
+  # Frontend для E2E тестов
+  frontend-e2e:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: httpserver-frontend-e2e
+    ports:
+      - "3001:3000"  # Другой порт для E2E
+    environment:
+      - BACKEND_URL=http://backend-e2e:9999
+      - NODE_ENV=test
+    depends_on:
+      - backend-e2e
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres-e2e-data:
+
+

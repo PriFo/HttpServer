@@ -1,0 +1,35 @@
+# Automated TODO Management System Configuration
+
+## TODO System Settings
+
+The project uses an automated TODO management system located in `.todos/` directory.
+
+### Commands:
+- `npm run todos:scan` - Scan codebase for TODO/FIXME/HACK
+- `npm run todos:report` - Generate TODO_REPORT.md
+- `npm run todos:all` - Run scan and report
+
+### Priority Levels:
+- CRITICAL: Blocking issues, requires immediate attention
+- HIGH: Important tasks, FIXME, HACK
+- MEDIUM: Regular TODO, optimizations
+- LOW: Cosmetic improvements, documentation
+
+### Task Status:
+- OPEN: New task, not started
+- IN_PROGRESS: Currently being worked on
+- RESOLVED: Completed task
+- TESTING: Under testing
+
+### Auto-assignment:
+Tasks are automatically assigned based on file type:
+- `.go`, `.py` → backend-team
+- `.ts`, `.tsx`, `.js`, `.jsx` → frontend-team
+- `.sh`, `.yml`, `Dockerfile` → devops
+
+### Pre-commit Hook:
+Critical TODOs block commits. Use `git commit --no-verify` to bypass.
+
+### Dashboard:
+Open `.todos/dashboard.html` in browser for visual task tracking.
+

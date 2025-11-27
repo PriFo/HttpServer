@@ -1,0 +1,89 @@
+{
+  "accessible_databases": 7,
+  "databases": [
+    {
+      "database_id": 6,
+      "database_name": "E R P W E Номенклатура",
+      "file_path": "data\\uploads\\Выгрузка_Номенклатура_ERPWE_Unknown_Unknown_2025_11_20_10_18_55.db",
+      "nomenclature_count": 10818,
+      "counterparty_count": 0,
+      "total_records": 10818,
+      "database_size": 3469312,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 7,
+      "database_name": "УправлениеПредприятиемДляКазахстана Контрагенты",
+      "file_path": "data\\uploads\\Выгрузка_Контрагенты_УправлениеПредприятиемДляКазахстана_Unknown.db",
+      "nomenclature_count": 0,
+      "counterparty_count": 7094,
+      "total_records": 7094,
+      "database_size": 2822144,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 5,
+      "database_name": "УправлениеПредприятиемДляКазахстана Номенклатура",
+      "file_path": "data\\uploads\\Выгрузка_Номенклатура_УправлениеПредприятиемДляКазахстана_Unknown.db",
+      "nomenclature_count": 995,
+      "counterparty_count": 0,
+      "total_records": 995,
+      "database_size": 876544,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 4,
+      "database_name": "БухгалтерияДляКазахстана Номенклатура",
+      "file_path": "data\\uploads\\Выгрузка_Номенклатура_БухгалтерияДляКазахстана_Unknown_Unknown_2025.db",
+      "nomenclature_count": 16065,
+      "counterparty_count": 0,
+      "total_records": 16065,
+      "database_size": 4620288,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 3,
+      "database_name": "E R P W E Контрагенты",
+      "file_path": "data\\uploads\\Выгрузка_Контрагенты_ERPWE_Unknown_Unknown_2025_11_20_13_27_39_20251120_222356.db",
+      "nomenclature_count": 0,
+      "counterparty_count": 4223,
+      "total_records": 4223,
+      "database_size": 1875968,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 2,
+      "database_name": "БухгалтерияДляКазахстана Контрагенты",
+      "file_path": "data\\uploads\\Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025.db",
+      "nomenclature_count": 0,
+      "counterparty_count": 4627,
+      "total_records": 4627,
+      "database_size": 1912832,
+      "is_accessible": true,
+      "is_valid": true
+    },
+    {
+      "database_id": 1,
+      "database_name": "Выгрузка Контрагенты БухгалтерияДляКазахстана 2025",
+      "file_path": "E:\\HttpServer\\Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025.db",
+      "nomenclature_count": 0,
+      "counterparty_count": 4627,
+      "total_records": 4627,
+      "database_size": 6873088,
+      "is_accessible": true,
+      "is_valid": true
+    }
+  ],
+  "duplicate_groups": 18,
+  "estimated_duplicates": 36,
+  "total_counterparties": 20571,
+  "total_databases": 7,
+  "total_nomenclature": 27878,
+  "total_records": 48449,
+  "valid_databases": 7
+}

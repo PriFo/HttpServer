@@ -97,4 +97,3 @@ func getStringFromMetadata(value interface{}) string {
 	}
 	return ""
 }
-

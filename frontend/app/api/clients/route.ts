@@ -1,72 +1,134 @@
 import { NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
+import { fetchJsonServer, isNetworkError } from '@/lib/fetch-utils-server'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
+import { logger, createApiContext, withLogging } from '@/lib/logger'
+import { handleFetchError } from '@/lib/error-handler'
 
-const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+export const runtime = 'nodejs'
 
 export async function GET() {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/clients`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    })
+  const context = createApiContext('/api/clients', 'GET')
+  const startTime = Date.now()
 
-    if (!response.ok) {
-      // Если backend недоступен или возвращает 404, возвращаем пустой список
-      if (response.status === 404) {
-        console.warn('Backend endpoint /api/clients not found. Backend may need to be restarted.')
-        return NextResponse.json([])
+  return withLogging(
+    'GET /api/clients',
+    async () => {
+      const BACKEND_URL = getBackendUrl()
+      const endpoint = `${BACKEND_URL}/api/clients`
+
+      logger.logRequest('GET', '/api/clients', context)
+
+      try {
+        const data = await fetchJsonServer(endpoint, {
+          timeout: QUALITY_TIMEOUTS.STANDARD,
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+
+        // Обрабатываем ответ - он может быть массивом или объектом с полями clients/total
+        let result: unknown[]
+        if (Array.isArray(data)) {
+          result = data
+        } else if (data && typeof data === 'object' && 'clients' in data) {
+          result = (data as { clients: unknown[] }).clients || []
+        } else {
+          result = []
+        }
+
+        const duration = Date.now() - startTime
+        logger.logResponse('GET', '/api/clients', 200, duration, {
+          ...context,
+          count: result.length,
+        })
+
+        return NextResponse.json(result)
+      } catch (error) {
+        const duration = Date.now() - startTime
+        const isNetwork = isNetworkError(error)
+        
+        if (!isNetwork) {
+          logger.error('Error fetching clients', { ...context, duration }, error instanceof Error ? error : undefined)
+        } else {
+          logger.debug('Network error fetching clients (backend may be down)', { ...context, duration })
+        }
+        
+        // Возвращаем пустой массив с информацией о fallback
+        // Страница клиентов должна показать информативное сообщение
+        return NextResponse.json([], { status: 200 })
       }
-      const errorText = await response.text().catch(() => 'Unknown error')
-      console.error(`Backend error (${response.status}):`, errorText)
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error fetching clients:', error)
-    // Возвращаем пустой список вместо ошибки, чтобы UI не ломался
-    return NextResponse.json([])
-  }
+    },
+    context
+  )
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    
-    const response = await fetch(`${API_BASE_URL}/api/clients`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+  const context = createApiContext('/api/clients', 'POST')
+  const startTime = Date.now()
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        const errorMsg = 'Backend endpoint not found. Please restart the backend server to apply changes.'
-        console.error(errorMsg)
-        return NextResponse.json(
-          { error: errorMsg },
-          { status: 503 }
-        )
+  return withLogging(
+    'POST /api/clients',
+    async () => {
+      const API_BASE_URL = getBackendUrl()
+      const endpoint = `${API_BASE_URL}/api/clients`
+      
+      let body: unknown = {}
+      try {
+        body = await request.json()
+      } catch {
+        // Body может быть пустым
       }
-      const errorData = await response.json().catch(() => ({}))
-      const errorText = await response.text().catch(() => '')
-      console.error(`Backend error (${response.status}):`, errorData || errorText)
-      throw new Error(errorData.error || errorText || `HTTP error! status: ${response.status}`)
-    }
 
-    const data = await response.json()
-    return NextResponse.json(data, { status: 201 })
-  } catch (error) {
-    console.error('Error creating client:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create client' },
-      { status: 500 }
-    )
-  }
+      logger.logRequest('POST', '/api/clients', { ...context, hasBody: !!body })
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        })
+
+        const duration = Date.now() - startTime
+        logger.logResponse('POST', '/api/clients', response.status, duration, context)
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            const errorMsg = 'Backend endpoint not found. Please restart the backend server to apply changes.'
+            logger.error('Backend endpoint not found', { ...context, duration, endpoint })
+            return NextResponse.json(
+              { error: errorMsg },
+              { status: 503 }
+            )
+          }
+          
+          const errorText = await response.text().catch(() => '')
+          logger.logBackendError(endpoint, response.status, errorText, context)
+          
+          let errorData: { error?: string } = {}
+          try {
+            errorData = JSON.parse(errorText)
+          } catch {
+            errorData = { error: errorText }
+          }
+          
+          return NextResponse.json(
+            { error: errorData.error || errorText || `HTTP error! status: ${response.status}` },
+            { status: response.status }
+          )
+        }
+
+        const data = await response.json()
+        return NextResponse.json(data, { status: 201 })
+      } catch (error) {
+        const duration = Date.now() - startTime
+        return handleFetchError(error, endpoint, { ...context, duration })
+      }
+    },
+    context
+  )
 }
 

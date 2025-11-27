@@ -1,0 +1,226 @@
+Промпт для генерации интеграционных тестов CRUD API уведомлений
+
+Скопируй этот промпт в новый чат для автоматической генерации интеграционных тестов:
+
+---
+
+## Роль
+
+Ты — Senior Go Developer и QA Automation Engineer. Твоя задача — создать исчерпывающий набор интеграционных тестов для проверки всех CRUD операций API уведомлений с обязательной проверкой персистентности данных в базе данных.
+
+## Контекст
+
+Проект: Go-приложение с использованием фреймворка Gin и SQLite базы данных
+
+API уведомлений: /api/notifications
+
+Структура БД: Таблица notifications в service_db со следующими полями:
+- id (INTEGER PRIMARY KEY AUTOINCREMENT)
+- type (TEXT NOT NULL) - тип уведомления: 'info', 'success', 'warning', 'error'
+- title (TEXT NOT NULL) - заголовок уведомления
+- message (TEXT NOT NULL) - текст уведомления
+- timestamp (TIMESTAMP DEFAULT CURRENT_TIMESTAMP) - время создания
+- read (BOOLEAN DEFAULT FALSE) - флаг прочитанности
+- client_id (INTEGER) - ID клиента (опционально)
+- project_id (INTEGER) - ID проекта (опционально)
+- metadata_json (TEXT) - JSON с дополнительными данными
+- created_at (TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+
+Обработчики:
+- HandleGetNotifications - GET /api/notifications
+- HandleGetUnreadCount - GET /api/notifications/unread-count
+- HandleMarkAsRead - POST /api/notifications/{id}/read
+- HandleMarkAllAsRead - POST /api/notifications/read-all
+- HandleDeleteNotification - DELETE /api/notifications/{id}
+
+## Основная задача
+
+Сгенерируй один Go-файл notifications_crud_integration_test.go, который будет содержать полный набор интеграционных тестов для проверки всех CRUD операций API уведомлений. Тесты должны использовать testify/suite для организации и httptest для HTTP-запросов.
+
+Критически важно: Каждый тест должен включать прямые SQL-запросы к тестовой БД для проверки персистентности данных после каждой операции.
+
+## Детальные требования к тестам
+
+### 1. Настройка тестового окружения
+
+Создай структуру NotificationsCRUDIntegrationTestSuite со следующими полями:
+- serviceDB *database.ServiceDB
+- tx *sql.Tx
+- router *gin.Engine
+- notificationHandler *handlers.NotificationHandler
+- notificationService *services.NotificationService
+- baseHandler *handlers.BaseHandler
+
+В методе SetupSuite():
+1. Инициализируй тестовую БД: database.NewServiceDB(":memory:")
+2. Выполни миграции (создай таблицу notifications)
+3. Инициализируй зависимости (BaseHandler, NotificationService, NotificationHandler)
+4. Инициализируй Gin роутер и зарегистрируй все роуты
+
+В методе SetupTest():
+- Начинай транзакцию: suite.tx, err = suite.serviceDB.DB.Begin()
+
+В методе TearDownTest():
+- Откатывай транзакцию: suite.tx.Rollback()
+
+### 2. Тестирование CRUD-операций и персистентности
+
+#### 2.1. POST /api/notifications (Создание)
+
+Тест: TestNotification_Create_Success
+
+Проверки:
+1. HTTP-уровень:
+   - Отправь валидный JSON для создания уведомления (type, title, message, client_id, project_id, metadata_json)
+   - Проверь статус 201 Created и наличие id в ответе
+
+2. Уровень базы данных (критично!):
+   - Сделай прямой SQL-запрос к тестовой БД в рамках транзакции
+   - Проверь, что запись создана со всеми правильными полями
+   - Проверь, что read=false по умолчанию
+   - Проверь, что timestamp и created_at установлены
+
+Тест: TestNotification_Create_InvalidData
+
+Проверки:
+- Отправь JSON с отсутствующими обязательными полями (без title) - ожидай 400
+- Отправь невалидный JSON - ожидай 400
+- Проверь в БД, что ничего не добавилось (SELECT COUNT(*) должен остаться прежним)
+
+#### 2.2. GET /api/notifications (Чтение/Фильтрация)
+
+Тест: TestNotification_GetAll_Success
+
+Проверки:
+1. Подготовка данных:
+   - В рамках тестовой транзакции создай несколько уведомлений через SQL для разных client_id, некоторые прочитанные, некоторые нет
+
+2. GET без фильтров:
+   - Отправь GET /api/notifications без фильтров
+   - Проверь 200 OK и что ответ содержит все созданные уведомления
+
+3. GET с фильтром client_id:
+   - Отправь GET /api/notifications?client_id=123
+   - Проверь, что в ответе только уведомления для этого клиента
+   - Сделай прямой SQL-запрос для сравнения
+
+4. GET с фильтром read=false:
+   - Отправь GET /api/notifications?unread_only=true
+   - Проверь, что только непрочитанные
+   - Сделай прямой SQL-запрос для сравнения
+
+#### 2.3. POST /api/notifications/{id}/read (Обновление)
+
+Тест: TestNotification_MarkAsRead_Success
+
+Проверки:
+1. Подготовка данных:
+   - Создай уведомление через API или напрямую в БД (с read=false)
+
+2. HTTP-уровень:
+   - Отправь POST /api/notifications/{id}/read
+   - Проверь ответ 200 OK
+
+3. Уровень базы данных (критично!):
+   - Сделай прямой SQL-запрос, чтобы убедиться, что поле read изменилось на true
+
+Тест: TestNotification_MarkAsRead_NotFound
+
+Проверки:
+- Отправь запрос с несуществующим ID - ожидай 404 Not Found
+- Проверь, что в БД ничего не изменилось
+
+#### 2.4. POST /api/notifications/read-all (Массовое обновление)
+
+Тест: TestNotification_MarkAllAsRead_Success
+
+Проверки:
+1. Подготовка данных:
+   - Создай несколько непрочитанных уведомлений для client_id=111
+   - Создай несколько непрочитанных уведомлений для client_id=222
+
+2. HTTP-уровень:
+   - Отправь POST /api/notifications/read-all?client_id=111
+   - Проверь ответ 200 OK
+
+3. Уровень базы данных (критично!):
+   - Сделай прямой SQL-запрос, чтобы убедиться, что только уведомления для client_id=111 пометились как прочитанные
+   - Проверь, что уведомления для client_id=222 остались непрочитанными
+
+#### 2.5. GET /api/notifications/unread-count (Агрегация)
+
+Тест: TestNotification_GetUnreadCount_Success
+
+Проверки:
+1. Подготовка данных:
+   - Создай смесь из прочитанных и непрочитанных уведомлений
+
+2. HTTP-уровень:
+   - Отправь GET /api/notifications/unread-count
+   - Проверь 200 OK и количество в JSON
+
+3. Уровень базы данных (критично!):
+   - Сделай прямой SQL-запрос: SELECT COUNT(*) FROM notifications WHERE read = false
+   - Сравни результат с ответом API
+
+#### 2.6. DELETE /api/notifications/{id} (Удаление)
+
+Тест: TestNotification_Delete_Success
+
+Проверки:
+1. Подготовка данных:
+   - Создай уведомление
+
+2. HTTP-уровень:
+   - Отправь DELETE /api/notifications/{id}
+   - Проверь ответ 200 OK или 204 No Content
+
+3. Уровень базы данных (критично!):
+   - Сделай прямой SQL-запрос, чтобы убедиться, что запись была удалена (должна быть ошибка sql.ErrNoRows)
+
+Тест: TestNotification_Delete_NotFound
+
+Проверки:
+- Отправь запрос с несуществующим ID - ожидай 404
+- Проверь, что количество записей в БД не изменилось
+
+## Технические детали
+
+Фреймворк: testify/suite, testify/assert
+HTTP-тестирование: net/http/httptest
+SQL: database/sql для прямых запросов
+JSON: encoding/json для парсинга
+Имя файла: notifications_crud_integration_test.go
+Пакет: server_test или integration
+
+## Ожидаемый результат
+
+Предоставь один готовый к запуску Go-файл notifications_crud_integration_test.go, содержащий:
+
+1. Структуру NotificationsCRUDIntegrationTestSuite с методами SetupSuite, SetupTest, TearDownTest
+2. Набор тестовых методов для проверки всех CRUD операций с прямыми SQL-запросами для проверки персистентности
+3. Необходимые импорты
+4. Хорошо прокомментированный код, следующий лучшим практикам Go
+
+Код должен быть готов к запуску командой:
+go test -v ./server_test -run TestNotificationsCRUDIntegrationSuite
+или
+go test -v ./integration -run TestNotificationsCRUDIntegrationSuite
+
+---
+
+## Инструкция по использованию:
+
+1. Скопируй промпт выше (текст между "---" и "---")
+2. Вставь в новый чат с AI
+3. AI автоматически сгенерирует полный файл интеграционных тестов
+
+## Что будет создано:
+
+- notifications_crud_integration_test.go - полный файл с интеграционными тестами
+- Тесты для всех CRUD операций (Create, Read, Update, Delete)
+- Тесты для фильтрации и агрегации
+- Прямые SQL-запросы для проверки персистентности в каждом тесте
+- Позитивные и негативные сценарии
+- Готовый к запуску код с необходимыми зависимостями
+

@@ -1,6 +1,7 @@
 package normalization
 
 import (
+	stdctx "context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -44,16 +45,16 @@ type AIResponse struct {
 
 // HierarchicalClassifier иерархический классификатор КПВЭД
 type HierarchicalClassifier struct {
-	tree                  *KpvedTree
-	db                    KpvedDB
-	aiClient              *nomenclature.AIClient
+	tree                   *KpvedTree
+	db                     KpvedDB
+	aiClient               *nomenclature.AIClient
 	promptBuilder          *PromptBuilder
-	cache                 *sync.Map
-	baseWordCache         *sync.Map // кэш для корневых слов
-	keywordClassifier     *KeywordClassifier
+	cache                  *sync.Map
+	baseWordCache          *sync.Map // кэш для корневых слов
+	keywordClassifier      *KeywordClassifier
 	productServiceDetector *ProductServiceDetector
-	contextEnricher       *context.ContextEnricher // опциональный обогатитель контекста
-	minConfidence         float64 // минимальный порог уверенности для продолжения
+	contextEnricher        *context.ContextEnricher // опциональный обогатитель контекста
+	minConfidence          float64                  // минимальный порог уверенности для продолжения
 }
 
 // NewHierarchicalClassifier создает новый иерархический классификатор
@@ -82,20 +83,26 @@ func NewHierarchicalClassifier(db KpvedDB, aiClient *nomenclature.AIClient) (*Hi
 		log.Printf("[HierarchicalClassifier] WARNING: No sections found in KPVED tree!")
 	}
 
+	return NewHierarchicalClassifierWithTree(tree, db, aiClient), nil
+}
+
+// NewHierarchicalClassifierWithTree создает новый иерархический классификатор с готовым деревом
+// Позволяет переиспользовать дерево для нескольких классификаторов (полезно для бенчмарков)
+func NewHierarchicalClassifierWithTree(tree *KpvedTree, db KpvedDB, aiClient *nomenclature.AIClient) *HierarchicalClassifier {
 	classifier := &HierarchicalClassifier{
-		tree:                  tree,
-		db:                    db,
-		aiClient:              aiClient,
+		tree:                   tree,
+		db:                     db,
+		aiClient:               aiClient,
 		promptBuilder:          NewPromptBuilder(tree),
-		cache:                 &sync.Map{},
-		baseWordCache:         &sync.Map{},
-		keywordClassifier:     NewKeywordClassifier(),
+		cache:                  &sync.Map{},
+		baseWordCache:          &sync.Map{},
+		keywordClassifier:      NewKeywordClassifier(),
 		productServiceDetector: NewProductServiceDetector(),
-		minConfidence:         0.7, // порог 70%
+		minConfidence:          0.7, // порог 70%
 	}
 
 	log.Printf("[HierarchicalClassifier] Hierarchical classifier initialized with min confidence: %.2f", classifier.minConfidence)
-	return classifier, nil
+	return classifier
 }
 
 // SetContextEnricher устанавливает обогатитель контекста (опционально)
@@ -105,7 +112,13 @@ func (h *HierarchicalClassifier) SetContextEnricher(enricher *context.ContextEnr
 }
 
 // Classify выполняет иерархическую классификацию
+// Использует context.Background() для обратной совместимости
 func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*HierarchicalResult, error) {
+	return h.ClassifyWithContext(stdctx.Background(), normalizedName, category)
+}
+
+// ClassifyWithContext выполняет иерархическую классификацию с поддержкой контекста
+func (h *HierarchicalClassifier) ClassifyWithContext(ctx stdctx.Context, normalizedName, category string) (*HierarchicalResult, error) {
 	startTime := time.Now()
 	result := &HierarchicalResult{
 		Steps: make([]ClassificationStep, 0),
@@ -185,7 +198,7 @@ func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*Hie
 
 	// Шаг 1: Классификация по секциям (A-U)
 	log.Printf("[Step 1/4] Classifying '%s' by section...", normalizedName)
-	sectionStep, err := h.classifyLevel(normalizedName, category, LevelSection, "", objectType)
+	sectionStep, err := h.classifyLevel(ctx, normalizedName, category, LevelSection, "", objectType)
 	if err != nil {
 		return nil, fmt.Errorf("section classification failed: %w", err)
 	}
@@ -204,7 +217,7 @@ func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*Hie
 
 	// Шаг 2: Классификация по классам (01, 02, ...)
 	log.Printf("[Step 2/4] Classifying '%s' by class in section %s...", normalizedName, sectionStep.Code)
-	classStep, err := h.classifyLevel(normalizedName, category, LevelClass, sectionStep.Code, objectType)
+	classStep, err := h.classifyLevel(ctx, normalizedName, category, LevelClass, sectionStep.Code, objectType)
 	if err != nil {
 		return nil, fmt.Errorf("class classification failed: %w", err)
 	}
@@ -222,7 +235,7 @@ func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*Hie
 
 	// Шаг 3: Классификация по подклассам (XX.Y)
 	log.Printf("[Step 3/4] Classifying '%s' by subclass in class %s...", normalizedName, classStep.Code)
-	subclassStep, err := h.classifyLevel(normalizedName, category, LevelSubclass, classStep.Code, objectType)
+	subclassStep, err := h.classifyLevel(ctx, normalizedName, category, LevelSubclass, classStep.Code, objectType)
 	if err != nil {
 		return nil, fmt.Errorf("subclass classification failed: %w", err)
 	}
@@ -240,7 +253,7 @@ func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*Hie
 
 	// Шаг 4: Классификация по группам (XX.YY)
 	log.Printf("[Step 4/4] Classifying '%s' by group in subclass %s...", normalizedName, subclassStep.Code)
-	groupStep, err := h.classifyLevel(normalizedName, category, LevelGroup, subclassStep.Code, objectType)
+	groupStep, err := h.classifyLevel(ctx, normalizedName, category, LevelGroup, subclassStep.Code, objectType)
 	if err != nil {
 		return nil, fmt.Errorf("group classification failed: %w", err)
 	}
@@ -280,6 +293,7 @@ func (h *HierarchicalClassifier) Classify(normalizedName, category string) (*Hie
 
 // classifyLevel классифицирует на указанном уровне
 func (h *HierarchicalClassifier) classifyLevel(
+	ctx stdctx.Context,
 	normalizedName, category string,
 	level KpvedLevel,
 	parentCode string,
@@ -315,7 +329,12 @@ func (h *HierarchicalClassifier) classifyLevel(
 
 	log.Printf("[AI Call] Level: %s, Prompt size: %d bytes", level, prompt.GetPromptSize())
 
-	response, err := h.aiClient.GetCompletion(systemPrompt, userPrompt)
+	// Проверяем, не отменен ли контекст перед вызовом AI
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("context cancelled before AI call: %w", ctx.Err())
+	}
+
+	response, err := h.aiClient.GetCompletionWithContext(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("ai call failed: %w", err)
 	}
@@ -441,7 +460,7 @@ func (h *HierarchicalClassifier) validateAndFixClassification(
 	// Проверка 1: Если товар попал в категорию услуг (коды начинающиеся с 33-99)
 	if isProduct && h.isServiceCode(result.FinalCode) {
 		log.Printf("[Validation] ERROR: Product '%s' classified as service code %s, attempting fix...", normalizedName, result.FinalCode)
-		
+
 		// Пытаемся исправить с помощью keyword классификатора
 		if h.keywordClassifier != nil {
 			if keywordResult, found := h.keywordClassifier.ClassifyByKeyword(normalizedName, category); found {
@@ -451,7 +470,7 @@ func (h *HierarchicalClassifier) validateAndFixClassification(
 				}
 			}
 		}
-		
+
 		// Если не удалось исправить, снижаем уверенность
 		result.FinalConfidence *= 0.5
 		log.Printf("[Validation] WARNING: Could not fix classification for '%s', reduced confidence to %.2f", normalizedName, result.FinalConfidence)
@@ -473,8 +492,8 @@ func (h *HierarchicalClassifier) validateAndFixClassification(
 
 	// Проверка 3: Специфичные ошибки классификации
 	// Кабели не должны быть платами
-	if strings.Contains(strings.ToLower(normalizedName), "кабель") && 
-	   (result.FinalCode == "26.12.1" || strings.Contains(result.FinalName, "плат")) {
+	if strings.Contains(strings.ToLower(normalizedName), "кабель") &&
+		(result.FinalCode == "26.12.1" || strings.Contains(result.FinalName, "плат")) {
 		if h.keywordClassifier != nil {
 			if keywordResult, found := h.keywordClassifier.ClassifyByKeyword(normalizedName, category); found {
 				if keywordResult.FinalCode == "27.32.11" || strings.Contains(keywordResult.FinalName, "кабел") {
@@ -486,7 +505,7 @@ func (h *HierarchicalClassifier) validateAndFixClassification(
 	}
 
 	// Датчики/преобразователи не должны быть услугами по испытаниям
-	if (strings.Contains(strings.ToLower(normalizedName), "датчик") || 
+	if (strings.Contains(strings.ToLower(normalizedName), "датчик") ||
 		strings.Contains(strings.ToLower(normalizedName), "преобразователь")) &&
 		(result.FinalCode == "71.20.1" || strings.Contains(result.FinalName, "испытан")) {
 		if h.keywordClassifier != nil {
@@ -520,31 +539,31 @@ func (h *HierarchicalClassifier) isServiceCode(code string) bool {
 	if len(code) < 2 {
 		return false
 	}
-	
+
 	// Парсим код КПВЭД (формат: XX.XX.XX или XX.XX.X)
 	parts := strings.Split(code, ".")
 	if len(parts) == 0 {
 		return false
 	}
-	
+
 	// Получаем первую часть кода (раздел/класс)
 	firstPart := parts[0]
 	if len(firstPart) < 2 {
 		return false
 	}
-	
+
 	// Пытаемся преобразовать в число
 	var section int
 	if _, err := fmt.Sscanf(firstPart, "%d", &section); err != nil {
 		return false
 	}
-	
+
 	// Разделы 33-99 - это услуги
 	// Разделы 01-32 - это товары (промышленность, сельское хозяйство, строительство)
 	if section >= 33 && section <= 99 {
 		return true
 	}
-	
+
 	// Специфичные коды услуг из примеров (даже если они в разделах 01-32)
 	// Это исключения, которые нужно проверять отдельно
 	serviceCodes := []string{
@@ -553,13 +572,13 @@ func (h *HierarchicalClassifier) isServiceCode(code string) bool {
 		"96.09.1", // Услуги индивидуальные прочие
 		"96.09.11", "96.09.12", "96.09.13", "96.09.19",
 	}
-	
+
 	for _, svcCode := range serviceCodes {
 		if code == svcCode || strings.HasPrefix(code, svcCode+".") {
 			return true
 		}
 	}
-	
+
 	// Проверяем по названию категории, если доступно
 	// Это дополнительная проверка для надежности
 	if node, exists := h.tree.GetNode(code); exists {
@@ -575,7 +594,7 @@ func (h *HierarchicalClassifier) isServiceCode(code string) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -612,4 +631,13 @@ func (h *HierarchicalClassifier) SetMinConfidence(confidence float64) {
 		h.minConfidence = confidence
 		log.Printf("[Config] Min confidence set to %.2f", confidence)
 	}
+}
+
+// WaitForCircuitBreakerRecovery ждет, пока circuit breaker восстановится
+// Возвращает true если circuit breaker готов к работе, false если произошла ошибка или таймаут
+func (h *HierarchicalClassifier) WaitForCircuitBreakerRecovery(maxWaitTime time.Duration) bool {
+	if h.aiClient == nil {
+		return true // Если AI клиент не инициализирован, считаем что все готово
+	}
+	return h.aiClient.WaitForCircuitBreakerRecovery(maxWaitTime)
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
 
-const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+const API_BASE_URL = getBackendUrl()
 
 export async function GET(
   request: Request,
@@ -24,7 +25,15 @@ export async function GET(
     }
 
     const data = await response.json()
-    return NextResponse.json(data)
+    
+    // Нормализуем ответ: backend может возвращать массив или объект с полем projects
+    // Если это объект с полем projects, извлекаем массив
+    if (data && typeof data === 'object' && !Array.isArray(data) && 'projects' in data) {
+      return NextResponse.json(Array.isArray(data.projects) ? data.projects : [])
+    }
+    
+    // Если это уже массив или другой формат, возвращаем как есть
+    return NextResponse.json(Array.isArray(data) ? data : [])
   } catch (error) {
     console.error('Error fetching projects:', error)
     return NextResponse.json([])

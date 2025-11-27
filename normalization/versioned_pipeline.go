@@ -98,6 +98,11 @@ func (p *VersionedNormalizationPipeline) ApplyPatterns() error {
 	p.currentName = fixedName
 	p.stages = append(p.stages, stage)
 
+	// Сохраняем окончательное значение в normalized_data
+	if err := p.db.UpdateNormalizedName(p.catalogItemID, fixedName); err != nil {
+		return fmt.Errorf("failed to persist normalized name: %w", err)
+	}
+
 	return nil
 }
 
@@ -125,14 +130,14 @@ func (p *VersionedNormalizationPipeline) ApplyAICorrection(useChat bool, context
 
 	// Формируем AI контекст для сохранения
 	aiContextJSON, err := json.Marshal(map[string]interface{}{
-		"use_chat":        useChat,
-		"context":         context,
-		"chat_history":    aiContext,
-		"ai_result":       result,
-		"original_name":   p.currentName,
-		"suggested_name":  result.FinalSuggestion,
-		"confidence":      result.Confidence,
-		"reasoning":       result.Reasoning,
+		"use_chat":       useChat,
+		"context":        context,
+		"chat_history":   aiContext,
+		"ai_result":      result,
+		"original_name":  p.currentName,
+		"suggested_name": result.FinalSuggestion,
+		"confidence":     result.Confidence,
+		"reasoning":      result.Reasoning,
 	})
 	if err != nil {
 		aiContextJSON = []byte("{}")
@@ -146,14 +151,14 @@ func (p *VersionedNormalizationPipeline) ApplyAICorrection(useChat bool, context
 
 	// Создаем стадию
 	stage := &database.NormalizationStage{
-		SessionID:       p.sessionID,
-		StageType:       stageType,
-		StageName:       "ai_correction",
-		InputName:       p.currentName,
-		OutputName:      result.FinalSuggestion,
-		AIContext:        string(aiContextJSON),
-		Confidence:      result.Confidence,
-		Status:          "applied",
+		SessionID:  p.sessionID,
+		StageType:  stageType,
+		StageName:  "ai_correction",
+		InputName:  p.currentName,
+		OutputName: result.FinalSuggestion,
+		AIContext:  string(aiContextJSON),
+		Confidence: result.Confidence,
+		Status:     "applied",
 	}
 
 	// Сохраняем стадию
@@ -164,6 +169,11 @@ func (p *VersionedNormalizationPipeline) ApplyAICorrection(useChat bool, context
 	// Обновляем текущее имя
 	p.currentName = result.FinalSuggestion
 	p.stages = append(p.stages, stage)
+
+	// Сохраняем окончательное значение в normalized_data
+	if err := p.db.UpdateNormalizedName(p.catalogItemID, result.FinalSuggestion); err != nil {
+		return fmt.Errorf("failed to persist normalized name: %w", err)
+	}
 
 	return nil
 }
@@ -242,15 +252,15 @@ func (p *VersionedNormalizationPipeline) CompleteSession() error {
 // buildChatContext строит контекст для чат-подхода на основе истории стадий
 func (p *VersionedNormalizationPipeline) buildChatContext() map[string]interface{} {
 	context := make(map[string]interface{})
-	
+
 	// Собираем историю предыдущих AI стадий
 	var chatHistory []map[string]interface{}
 	for _, stage := range p.stages {
 		if stage.StageType == "ai_single" || stage.StageType == "ai_chat" {
 			chatHistory = append(chatHistory, map[string]interface{}{
-				"input":   stage.InputName,
-				"output":  stage.OutputName,
-				"stage":   stage.StageName,
+				"input":      stage.InputName,
+				"output":     stage.OutputName,
+				"stage":      stage.StageName,
 				"confidence": stage.Confidence,
 			})
 		}
@@ -279,7 +289,7 @@ func (p *VersionedNormalizationPipeline) calculatePatternConfidence(matches []Pa
 	}
 
 	avgConfidence := totalConfidence / float64(len(matches))
-	
+
 	// Если все паттерны автоприменяемые, уверенность выше
 	allAutoFixable := true
 	for _, match := range matches {
@@ -295,4 +305,3 @@ func (p *VersionedNormalizationPipeline) calculatePatternConfidence(matches []Pa
 
 	return avgConfidence * 0.8
 }
-

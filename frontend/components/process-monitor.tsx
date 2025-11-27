@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { RefreshCw, Play, Square, Clock, Zap, CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 interface ProcessStatus {
   isRunning: boolean
@@ -21,6 +22,10 @@ interface ProcessStatus {
   rate?: number
   startTime?: string
   elapsedTime?: string
+  // Поля для номенклатуры (КПВЭД)
+  kpvedClassified?: number
+  kpvedTotal?: number
+  kpvedProgress?: number
 }
 
 interface ProcessMonitorProps {
@@ -52,11 +57,47 @@ export function ProcessMonitor({
   })
   const [loading, setLoading] = useState(false)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null)
+  const [endpointNotFound, setEndpointNotFound] = useState(false) // Флаг для 404 ошибок
+  const [backendStatus, setBackendStatus] = useState<'unknown' | 'ok' | 'unreachable'>('unknown')
+  const backendErrorToastAt = useRef<number>(0)
 
-  const fetchStatus = async () => {
+  const markBackendHealthy = useCallback(() => {
+    setBackendStatus(prev => (prev === 'ok' ? prev : 'ok'))
+  }, [])
+
+  const notifyBackendUnavailable = useCallback((message: string) => {
+    setBackendStatus(prev => (prev === 'unreachable' ? prev : 'unreachable'))
+    const now = Date.now()
+    if (now - backendErrorToastAt.current > 60000) {
+      toast.error(message)
+      backendErrorToastAt.current = now
+    }
+  }, [])
+
+  const isBackendConnectionError = useCallback((message: string) => {
+    const normalized = message.toLowerCase()
+    return (
+      normalized.includes('backend') ||
+      normalized.includes('9999') ||
+      normalized.includes('failed to fetch') ||
+      normalized.includes('networkerror') ||
+      normalized.includes('econnrefused')
+    )
+  }, [])
+
+  const fetchStatus = useCallback(async () => {
+    // Если эндпоинт не найден (404), не делаем запросы
+    if (endpointNotFound) {
+      return
+    }
+
     try {
       const response = await fetch(statusEndpoint)
       if (response.ok) {
+        // Сбрасываем флаг 404, если запрос успешен
+        setEndpointNotFound(false)
+        markBackendHealthy()
+        
         const data = await response.json()
         setStatus(prev => ({
           ...prev,
@@ -86,38 +127,259 @@ export function ProcessMonitor({
           setEstimatedTimeRemaining(null)
         }
       } else {
-        // Если статус недоступен, но процесс был запущен - показываем предупреждение
+        // Обработка различных HTTP статусов
+        let errorMessage = 'Ошибка получения статуса'
+        
+        // Если 404, устанавливаем флаг и прекращаем дальнейшие запросы
+        if (response.status === 404) {
+          setEndpointNotFound(true)
+          errorMessage = 'Эндпоинт не найден. Проверьте конфигурацию API.'
+          setStatus(prev => ({
+            ...prev,
+            currentStep: errorMessage,
+            isRunning: false
+          }))
+          return // Прекращаем дальнейшие запросы
+        }
+        
+        if (response.status === 503) {
+          errorMessage = 'Backend сервер недоступен. Убедитесь, что сервер запущен на порту 9999.'
+        } else if (response.status === 504) {
+          errorMessage = 'Превышено время ожидания ответа от сервера'
+        } else if (response.status >= 500) {
+          errorMessage = 'Ошибка сервера при получении статуса'
+        }
+        
+        // Пытаемся получить детали ошибки из ответа
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            errorMessage = errorData.error
+          }
+        } catch {
+          // Игнорируем ошибку парсинга JSON
+        }
+        
         setStatus(prev => ({
           ...prev,
-          currentStep: prev.isRunning ? 'Ошибка получения статуса' : prev.currentStep
+          currentStep: prev.isRunning ? errorMessage : prev.currentStep,
+          isRunning: false // Сбрасываем флаг запуска при ошибке
         }))
+
+        if (response.status === 503 || response.status === 504 || response.status === 502 || isBackendConnectionError(errorMessage)) {
+          notifyBackendUnavailable(errorMessage)
+        }
       }
     } catch (error) {
-      console.error('Error fetching status:', error)
-      // Не сбрасываем статус при ошибке сети, чтобы не потерять информацию
+      // Логируем ошибку только если она содержит полезную информацию
+      if (error instanceof Error && error.message) {
+        console.error('Error fetching status:', error.message)
+      } else if (error && typeof error === 'object' && Object.keys(error).length > 0) {
+        console.error('Error fetching status:', error)
+      }
+      // Обработка сетевых ошибок
+      const errorMessage = error instanceof Error && error.message && (
+        error.message.includes('fetch failed') ||
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('NetworkError') ||
+        error.message.includes('ECONNREFUSED')
+      ) ? 'Не удалось подключиться к backend серверу. Убедитесь, что сервер запущен на порту 9999.' : 'Ошибка сети при получении статуса'
+      
+      setStatus(prev => ({
+        ...prev,
+        currentStep: errorMessage,
+        isRunning: false
+      }))
+
+      if (isBackendConnectionError(errorMessage)) {
+        notifyBackendUnavailable(errorMessage)
+      }
     }
-  }
+  }, [statusEndpoint, endpointNotFound, markBackendHealthy, notifyBackendUnavailable, isBackendConnectionError])
+
+  const handleBackendRetry = useCallback(() => {
+    setBackendStatus('unknown')
+    backendErrorToastAt.current = 0
+    setEndpointNotFound(false)
+    fetchStatus()
+  }, [fetchStatus])
 
   useEffect(() => {
+    // Сбрасываем флаг 404 при изменении endpoint
+    setEndpointNotFound(false)
+  }, [statusEndpoint])
+
+  useEffect(() => {
+    // Если эндпоинт не найден, не делаем запросы
+    if (endpointNotFound) {
+      return
+    }
+    
     fetchStatus()
-    const interval = setInterval(() => {
-      fetchStatus()
-    }, 2000) // Обновление каждые 2 секунды
-    return () => clearInterval(interval)
-  }, [statusEndpoint, fetchStatus])
+    
+    let interval: NodeJS.Timeout | null = null
+    
+    const setupInterval = () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      
+      // Если эндпоинт не найден, не создаем интервал
+      if (endpointNotFound) {
+        return
+      }
+      
+      // Оптимизация частоты запросов:
+      // - Если процесс запущен - обновляем каждые 2 секунды
+      // - Если процесс не запущен - обновляем каждые 15 секунд (увеличено с 10 для снижения нагрузки)
+      // - Если была ошибка подключения - обновляем каждые 30 секунд (редкие проверки)
+      const hasConnectionError = backendStatus === 'unreachable' || status.currentStep?.includes('подключиться') || status.currentStep?.includes('Ошибка сети')
+      const intervalTime = status.isRunning 
+        ? 2000 
+        : hasConnectionError 
+          ? 30000 
+          : 15000
+      
+      interval = setInterval(() => {
+        // Проверяем перед каждым запросом
+        if (!endpointNotFound) {
+          fetchStatus()
+        } else {
+          if (interval) {
+            clearInterval(interval)
+          }
+        }
+      }, intervalTime)
+    }
+    
+    setupInterval()
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [fetchStatus, status.isRunning, endpointNotFound, backendStatus, status.currentStep])
 
   // Подключение к SSE потоку, если процесс запущен
   useEffect(() => {
-    if (status.isRunning && eventsEndpoint) {
-      const eventSource = new EventSource(eventsEndpoint)
+    if (status.isRunning && eventsEndpoint && backendStatus !== 'unreachable') {
+      let reconnectAttempts = 0
+      let reconnectTimeout: NodeJS.Timeout | null = null
       
-      eventSource.onmessage = (event) => {
+      const connect = () => {
+        try {
+          const eventSource = new EventSource(eventsEndpoint)
+          
+          eventSource.onopen = () => {
+            reconnectAttempts = 0
+            markBackendHealthy()
+          }
+          
+          eventSource.onmessage = (event) => {
         try {
           // Пытаемся распарсить как JSON, если не получается - используем как строку
           let message = event.data
+          let structuredData: any = null
+          
           try {
             const data = JSON.parse(event.data)
-            if (data.type === 'log' && data.message) {
+            
+            // Обрабатываем структурированные события нормализации (контрагенты и номенклатура)
+            if (data.type && (data.data || data.type === 'log') && (data.type === 'progress' || data.type === 'start' || 
+                data.type === 'completed' || data.type === 'duplicates_found' || 
+                data.type === 'processing_started' || data.type === 'database_start' ||
+                data.type === 'database_stopped' || data.type === 'database_completed' ||
+                data.type === 'kpved_classification' || data.type === 'kpved_progress')) {
+              structuredData = data
+              
+              // Обновляем статус из структурированных данных
+              if (data.type === 'progress' && data.data) {
+                const progressData = data.data
+                setStatus(prev => ({
+                  ...prev,
+                  processed: progressData.processed || prev.processed,
+                  total: progressData.total || prev.total,
+                  progress: progressData.progress_percent || prev.progress,
+                  logs: [...prev.logs.slice(-99), `Обработано ${progressData.processed || 0} из ${progressData.total || 0} (${(progressData.progress_percent || 0).toFixed(1)}%)`],
+                  currentStep: `Обработка: ${progressData.processed || 0}/${progressData.total || 0}`
+                }))
+                return // Не добавляем в логи, так как уже обновили статус
+              }
+              
+              if (data.type === 'completed' && data.data) {
+                const completedData = data.data
+                message = `Нормализация завершена: обработано ${completedData.total_processed || 0}, эталонов: ${completedData.benchmark_matches || 0}, дозаполнено: ${completedData.enriched_count || 0}`
+              }
+              
+              if (data.type === 'start' && data.data) {
+                message = `Начало нормализации: ${data.data.total_counterparties || 0} контрагентов`
+              }
+              
+              if (data.type === 'database_start' && (data.data || data.database_name)) {
+                const dbName = data.database_name || data.data?.database_name || 'неизвестно'
+                const count = data.counterparties_count || data.data?.counterparties_count || 0
+                message = `Начало обработки БД: ${dbName} (${count} контрагентов)`
+              }
+              
+              if (data.type === 'database_completed' && (data.data || data.database_name)) {
+                const dbName = data.database_name || data.data?.database_name || 'неизвестно'
+                const processed = data.processed || data.data?.processed || 0
+                const total = data.total || data.data?.total || 0
+                const benchmarkMatches = data.benchmark_matches || data.data?.benchmark_matches || 0
+                const enrichedCount = data.enriched_count || data.data?.enriched_count || 0
+                message = `БД ${dbName} обработана: ${processed}/${total} (эталонов: ${benchmarkMatches}, дозаполнено: ${enrichedCount})`
+              }
+              
+              if (data.type === 'database_stopped' && (data.data || data.database_name)) {
+                const dbName = data.database_name || data.data?.database_name || 'неизвестно'
+                const processed = data.processed || data.data?.processed || 0
+                const total = data.total || data.data?.total || 0
+                const progressPercent = data.progress_percent || data.data?.progress_percent || 0
+                message = `БД ${dbName} остановлена: обработано ${processed}/${total} (${progressPercent.toFixed(1)}%)`
+              }
+              
+              if (data.type === 'duplicates_found' && data.data) {
+                const dupData = data.data
+                message = `Найдено групп дублей: ${dupData.total_groups || 0}, всего дубликатов: ${dupData.total_duplicates || 0}`
+              }
+              
+              if (data.type === 'processing_started' && data.data) {
+                const procData = data.data
+                message = `Начало обработки: ${procData.total_counterparties || 0} контрагентов, ${procData.workers || 0} воркеров`
+              }
+              
+              if (data.type === 'normalization_stopped' && data.data) {
+                const stopData = data.data
+                message = `Нормализация остановлена: обработано ${stopData.processed || 0}/${stopData.total || 0} (${(stopData.progress_percent || 0).toFixed(1)}%)`
+              }
+              
+              // События для номенклатуры (КПВЭД классификация)
+              if (data.type === 'kpved_classification' && data.data) {
+                const kpvedData = data.data
+                message = `КПВЭД классификация: ${kpvedData.classified || 0}/${kpvedData.total || 0} групп (${(kpvedData.progress_percent || 0).toFixed(1)}%)`
+                // Обновляем статус с информацией о КПВЭД
+                setStatus(prev => ({
+                  ...prev,
+                  kpvedClassified: kpvedData.classified || prev.kpvedClassified,
+                  kpvedTotal: kpvedData.total || prev.kpvedTotal,
+                  kpvedProgress: kpvedData.progress_percent || prev.kpvedProgress,
+                }))
+                return
+              }
+              
+              if (data.type === 'kpved_progress' && data.data) {
+                const kpvedData = data.data
+                message = `КПВЭД: ${kpvedData.classified || 0}/${kpvedData.total || 0} (${(kpvedData.progress_percent || 0).toFixed(1)}%)`
+                setStatus(prev => ({
+                  ...prev,
+                  kpvedClassified: kpvedData.classified || prev.kpvedClassified,
+                  kpvedTotal: kpvedData.total || prev.kpvedTotal,
+                  kpvedProgress: kpvedData.progress_percent || prev.kpvedProgress,
+                }))
+                return
+              }
+            } else if (data.type === 'log' && data.message) {
               message = data.message
             } else if (data.message) {
               message = data.message
@@ -132,7 +394,7 @@ export function ProcessMonitor({
             currentStep: message
           }))
           
-          // Обновляем прогресс из сообщений
+          // Обновляем прогресс из сообщений (fallback для старых форматов)
           if (message.includes('Обработано')) {
             const match = message.match(/Обработано[:\s]+(\d+)[/\s]+(\d+)/)
             if (match) {
@@ -151,15 +413,47 @@ export function ProcessMonitor({
         }
       }
 
-      eventSource.onerror = () => {
-        eventSource.close()
+          eventSource.onerror = (err) => {
+            // Проверяем состояние соединения
+            if (eventSource.readyState === EventSource.CLOSED) {
+              // Соединение закрыто - пытаемся переподключиться
+              eventSource.close()
+              
+              // Переподключение с экспоненциальной задержкой
+              reconnectAttempts += 1
+              const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000)
+              
+              if (reconnectAttempts <= 5 && status.isRunning) {
+                console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`)
+                reconnectTimeout = setTimeout(() => {
+                  connect()
+                }, delay)
+              } else {
+                console.error('[SSE] Connection failed after multiple attempts')
+                notifyBackendUnavailable('Поток событий недоступен. Проверьте backend сервер (порт 9999).')
+              }
+            } else {
+              // Другие ошибки
+              if (eventSource.readyState !== EventSource.CONNECTING) {
+                console.error('[SSE] Connection error:', err)
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[SSE] Error creating EventSource:', err)
+        }
       }
-
+      
+      // Начальное подключение
+      connect()
+      
       return () => {
-        eventSource.close()
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout)
+        }
       }
     }
-  }, [status.isRunning, eventsEndpoint])
+  }, [status.isRunning, eventsEndpoint, backendStatus, markBackendHealthy, notifyBackendUnavailable])
 
   const handleStart = async () => {
     if (!startEndpoint || !onStart) return
@@ -216,6 +510,21 @@ export function ProcessMonitor({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {backendStatus === 'unreachable' && (
+          <Alert variant="destructive">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Backend недоступен</AlertTitle>
+            </div>
+            <AlertDescription className="mt-2 space-y-2">
+              <p>Не удаётся получить статус процесса (порт 9999). Повторные запросы временно замедлены.</p>
+              <Button variant="outline" size="sm" onClick={handleBackendRetry} className="flex items-center gap-2">
+                <RefreshCw className="h-3 w-3" />
+                Повторить попытку
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {/* Прогресс */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -270,21 +579,37 @@ export function ProcessMonitor({
         {/* Текущий шаг */}
         {status.currentStep && status.currentStep !== 'Не запущено' && (
           <Alert className={
-            status.currentStep.includes('Ошибка') ? 'border-red-500 bg-red-50 dark:bg-red-950' :
+            status.currentStep.includes('Ошибка') || status.currentStep.includes('подключиться') ? 'border-red-500 bg-red-50 dark:bg-red-950' :
             status.currentStep.includes('завершена') || status.currentStep.includes('завершен') ? 'border-green-500 bg-green-50 dark:bg-green-950' :
             ''
           }>
             <AlertCircle className={`h-4 w-4 ${
-              status.currentStep.includes('Ошибка') ? 'text-red-500' :
+              status.currentStep.includes('Ошибка') || status.currentStep.includes('подключиться') ? 'text-red-500' :
               status.currentStep.includes('завершена') || status.currentStep.includes('завершен') ? 'text-green-500' :
               ''
             }`} />
             <AlertDescription className={
-              status.currentStep.includes('Ошибка') ? 'text-red-700 dark:text-red-300' :
+              status.currentStep.includes('Ошибка') || status.currentStep.includes('подключиться') ? 'text-red-700 dark:text-red-300' :
               status.currentStep.includes('завершена') || status.currentStep.includes('завершен') ? 'text-green-700 dark:text-green-300' :
               ''
             }>
-              {status.currentStep}
+              <div className="flex items-center justify-between">
+                <span>{status.currentStep}</span>
+                {(status.currentStep.includes('Ошибка') || status.currentStep.includes('подключиться')) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEndpointNotFound(false)
+                      fetchStatus()
+                    }}
+                    className="ml-4"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Повторить
+                  </Button>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}
