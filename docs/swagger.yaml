@@ -1,0 +1,1950 @@
+basePath: /api
+definitions:
+  handlers.ClassificationStatsResponse:
+    properties:
+      average_confidence:
+        type: number
+      classified_items:
+        type: integer
+      pendingItems:
+        type: integer
+      total_items:
+        type: integer
+    type: object
+  handlers.ClassifyRequest:
+    properties:
+      category:
+        type: string
+      classifier:
+        type: string
+      context:
+        additionalProperties: true
+        type: object
+      item_code:
+        type: string
+      item_id:
+        type: integer
+      item_name:
+        type: string
+      model:
+        type: string
+      options:
+        additionalProperties: true
+        type: object
+      strategy_id:
+        type: string
+    type: object
+  handlers.ClassifyResponse:
+    properties:
+      attributes:
+        additionalProperties: true
+        type: object
+      category:
+        type: string
+      classifier:
+        type: string
+      code:
+        type: string
+      confidence:
+        type: number
+      item_code:
+        type: string
+      item_id:
+        type: integer
+      item_name:
+        type: string
+      name:
+        type: string
+      result: {}
+      subcategory:
+        type: string
+    type: object
+  handlers.DatabaseInfoResponse:
+    properties:
+      info: {}
+    type: object
+  handlers.DatabaseListResponse:
+    properties:
+      aggregated_stats:
+        additionalProperties: true
+        type: object
+      databases:
+        items: {}
+        type: array
+      total:
+        type: integer
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      error:
+        type: boolean
+      message:
+        type: string
+    type: object
+  handlers.MonitoringDataResponse:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/handlers.ProviderMetricsResponse'
+        type: array
+      system:
+        $ref: '#/definitions/handlers.SystemStatsResponse'
+    type: object
+  handlers.NormalizationAIRequest:
+    properties:
+      context:
+        example:
+        - '"Предыдущие варианты"'
+        items:
+          type: string
+        type: array
+      session_id:
+        example: 42
+        type: integer
+      use_chat:
+        example: false
+        type: boolean
+    type: object
+  handlers.NormalizationCategoryRequest:
+    properties:
+      category:
+        example: materials
+        type: string
+      session_id:
+        example: 42
+        type: integer
+    type: object
+  handlers.NormalizationRevertRequest:
+    properties:
+      session_id:
+        example: 42
+        type: integer
+      stage_index:
+        example: 1
+        type: integer
+    type: object
+  handlers.NormalizationSessionRequest:
+    properties:
+      session_id:
+        example: 42
+        type: integer
+    type: object
+  handlers.NormalizationStartRequest:
+    properties:
+      item_id:
+        example: 1001
+        type: integer
+      original_name:
+        example: Труба стальная 20мм
+        type: string
+    type: object
+  handlers.ProviderMetricsResponse:
+    properties:
+      active_channels:
+        type: integer
+      average_latency_ms:
+        type: number
+      current_requests:
+        type: integer
+      failed_requests:
+        type: integer
+      id:
+        type: string
+      last_request_time:
+        type: string
+      name:
+        type: string
+      requests_per_second:
+        type: number
+      status:
+        type: string
+      successful_requests:
+        type: integer
+      total_requests:
+        type: integer
+    type: object
+  handlers.QualityReportResponse:
+    properties:
+      accuracy:
+        type: number
+      completeness:
+        type: number
+      consistency:
+        type: number
+      database_id:
+        type: integer
+      database_name:
+        type: string
+      generated_at:
+        type: string
+      overall_score:
+        type: number
+      recommendations:
+        items:
+          type: string
+        type: array
+      statistics:
+        additionalProperties: true
+        type: object
+      uniqueness:
+        type: number
+    type: object
+  handlers.QualityScoreResponse:
+    properties:
+      accuracy:
+        type: number
+      completeness:
+        type: number
+      consistency:
+        type: number
+      database_id:
+        type: integer
+      score:
+        type: number
+      uniqueness:
+        type: number
+    type: object
+  handlers.SystemStatsResponse:
+    properties:
+      active_providers:
+        type: integer
+      system_requests_per_second:
+        type: number
+      timestamp:
+        type: string
+      total_failed:
+        type: integer
+      total_providers:
+        type: integer
+      total_requests:
+        type: integer
+      total_successful:
+        type: integer
+    type: object
+  models.Benchmark:
+    properties:
+      created_at:
+        type: string
+      data:
+        additionalProperties: true
+        type: object
+      entity_type:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      source_client_id:
+        type: integer
+      source_upload_id:
+        type: integer
+      updated_at:
+        type: string
+      variations:
+        items:
+          type: string
+        type: array
+    type: object
+  models.CreateBenchmarkFromUploadRequest:
+    properties:
+      entity_type:
+        type: string
+      item_ids:
+        items:
+          type: string
+        type: array
+      upload_id:
+        type: string
+    required:
+    - entity_type
+    - item_ids
+    - upload_id
+    type: object
+  models.UpdateBenchmarkRequest:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      entity_type:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      variations:
+        items:
+          type: string
+        type: array
+    type: object
+  types.NormalizationStatus:
+    properties:
+      currentStep:
+        type: string
+      elapsedTime:
+        type: string
+      errors:
+        type: integer
+      isRunning:
+        type: boolean
+      kpvedClassified:
+        description: количество классифицированных групп по КПВЭД
+        type: integer
+      kpvedProgress:
+        description: процент классифицированных групп по КПВЭД
+        type: number
+      kpvedTotal:
+        description: общее количество групп для КПВЭД
+        type: integer
+      logs:
+        items:
+          type: string
+        type: array
+      processed:
+        type: integer
+      progress:
+        type: number
+      rate:
+        description: записей в секунду
+        type: number
+      startTime:
+        type: string
+      success:
+        type: integer
+      total:
+        type: integer
+    type: object
+host: localhost:9999
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: API для системы нормализации данных из 1С. Мульти-провайдерная нормализация,
+    AI-классификация, управление качеством данных.
+  license:
+    name: Internal Use Only
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: HTTP Server API
+  version: "1.0"
+paths:
+  /api/benchmarks:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all active benchmarks or filtered by type
+      parameters:
+      - description: Entity type to filter by
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of benchmarks
+          schema:
+            items:
+              $ref: '#/definitions/models.Benchmark'
+            type: array
+        "500":
+          description: Failed to get benchmarks
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: List all benchmarks
+      tags:
+      - benchmarks
+  /api/benchmarks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Marks a benchmark as deleted (soft delete)
+      parameters:
+      - description: Benchmark ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Success message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid benchmark ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Failed to delete benchmark
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Delete benchmark
+      tags:
+      - benchmarks
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a specific benchmark by its ID
+      parameters:
+      - description: Benchmark ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Benchmark details
+          schema:
+            $ref: '#/definitions/models.Benchmark'
+        "400":
+          description: Invalid benchmark ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Benchmark not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Get benchmark by ID
+      tags:
+      - benchmarks
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing benchmark with new data
+      parameters:
+      - description: Benchmark ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Benchmark update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateBenchmarkRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated benchmark
+          schema:
+            $ref: '#/definitions/models.Benchmark'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Benchmark not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Failed to update benchmark
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Update benchmark
+      tags:
+      - benchmarks
+  /api/benchmarks/from-upload:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new benchmark from selected items in an upload
+      parameters:
+      - description: Benchmark creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateBenchmarkFromUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Benchmark created successfully
+          schema:
+            $ref: '#/definitions/models.Benchmark'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Upload not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Failed to create benchmark
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Create benchmark from upload
+      tags:
+      - benchmarks
+  /api/benchmarks/search:
+    get:
+      consumes:
+      - application/json
+      description: Finds the best matching benchmark for a given name and entity type
+      parameters:
+      - description: Name to search for
+        in: query
+        name: name
+        required: true
+        type: string
+      - description: Entity type (e.g., counterparty, nomenclature)
+        in: query
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Best matching benchmark
+          schema:
+            $ref: '#/definitions/models.Benchmark'
+        "400":
+          description: Missing required parameter
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Benchmark not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Search for best match benchmark
+      tags:
+      - benchmarks
+  /api/classification/classify:
+    post:
+      consumes:
+      - application/json
+      description: Классифицирует элемент номенклатуры по справочнику КПВЭД
+      parameters:
+      - description: Данные для классификации
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ClassifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результат классификации
+          schema:
+            $ref: '#/definitions/handlers.ClassifyResponse'
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Классифицировать элемент
+      tags:
+      - classification
+  /api/classification/stats:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает статистику процесса классификации
+      parameters:
+      - description: ID базы данных
+        in: query
+        name: database_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статистика классификации
+          schema:
+            $ref: '#/definitions/handlers.ClassificationStatsResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статистику классификации
+      tags:
+      - classification
+  /api/clients/{clientId}/projects/{projectId}/normalization/preview-stats:
+    get:
+      description: Возвращает агрегированные показатели по выбранным базам перед запуском
+        нормализации.
+      parameters:
+      - description: ID клиента
+        in: path
+        name: clientId
+        required: true
+        type: integer
+      - description: ID проекта
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Предварительная статистика
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Клиент или проект не найдены
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить превью статистику нормализации проекта
+      tags:
+      - normalization
+  /api/clients/{clientId}/projects/{projectId}/normalization/start:
+    post:
+      consumes:
+      - application/json
+      description: Запускает процесс нормализации контрагентов для заданного клиента
+        и проекта.
+      parameters:
+      - description: ID клиента
+        in: path
+        name: clientId
+        required: true
+        type: integer
+      - description: ID проекта
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      - description: Дополнительные опции запуска
+        in: body
+        name: payload
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статус запуска
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Клиент или проект не найдены
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Не удалось запустить нормализацию
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Запустить нормализацию проекта клиента
+      tags:
+      - normalization
+  /api/clients/{clientId}/projects/{projectId}/normalization/status:
+    get:
+      description: Возвращает прогресс и состояние текущей сессии нормализации.
+      parameters:
+      - description: ID клиента
+        in: path
+        name: clientId
+        required: true
+        type: integer
+      - description: ID проекта
+        in: path
+        name: projectId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NormalizationStatus'
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Клиент или проект не найдены
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статус нормализации проекта клиента
+      tags:
+      - normalization
+  /api/database/info:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает детальную информацию о базе данных
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Информация о базе данных
+          schema:
+            $ref: '#/definitions/handlers.DatabaseInfoResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить информацию о базе данных
+      tags:
+      - databases
+  /api/databases/find:
+    get:
+      consumes:
+      - application/json
+      description: Ищет базы данных по запросу
+      parameters:
+      - description: Поисковый запрос
+        in: query
+        name: q
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Найденные базы данных
+          schema:
+            $ref: '#/definitions/handlers.DatabaseListResponse'
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Найти базы данных
+      tags:
+      - databases
+  /api/databases/list:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список всех доступных баз данных в системе
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список баз данных
+          schema:
+            $ref: '#/definitions/handlers.DatabaseListResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить список всех баз данных
+      tags:
+      - databases
+  /api/gosts:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список ГОСТов с фильтрацией и пагинацией
+      parameters:
+      - default: 50
+        description: Количество записей на странице
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Смещение для пагинации
+        in: query
+        name: offset
+        type: integer
+      - description: Фильтр по статусу
+        in: query
+        name: status
+        type: string
+      - description: Фильтр по типу источника
+        in: query
+        name: source_type
+        type: string
+      - description: Поисковый запрос
+        in: query
+        name: search
+        type: string
+      - description: Дата принятия с (ГГГГ-ММ-ДД)
+        in: query
+        name: adoption_from
+        type: string
+      - description: Дата принятия по (ГГГГ-ММ-ДД)
+        in: query
+        name: adoption_to
+        type: string
+      - description: Дата вступления с (ГГГГ-ММ-ДД)
+        in: query
+        name: effective_from
+        type: string
+      - description: Дата вступления по (ГГГГ-ММ-ДД)
+        in: query
+        name: effective_to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список ГОСТов
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить список ГОСТов
+      tags:
+      - gosts
+  /api/gosts/:id:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает детальную информацию о ГОСТе по ID
+      parameters:
+      - description: ID ГОСТа
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Детальная информация о ГОСТе
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: ГОСТ не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить детальную информацию о ГОСТе
+      tags:
+      - gosts
+  /api/gosts/:id/document:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает файл документа ГОСТа
+      parameters:
+      - description: ID ГОСТа
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: ID документа (если не указан, возвращается последний)
+        in: query
+        name: doc_id
+        type: integer
+      produces:
+      - application/pdf
+      - application/msword
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      responses:
+        "200":
+          description: Файл документа
+        "404":
+          description: Документ не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить документ ГОСТа
+      tags:
+      - gosts
+    post:
+      consumes:
+      - multipart/form-data
+      description: Загружает полный текст ГОСТа (PDF/Word)
+      parameters:
+      - description: ID ГОСТа
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Файл документа (PDF/Word)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Информация о загруженном документе
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: ГОСТ не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Загрузить документ для ГОСТа
+      tags:
+      - gosts
+  /api/gosts/import:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Загружает и импортирует ГОСТы из CSV файла
+      parameters:
+      - description: CSV файл с ГОСТами
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Тип источника данных
+        in: formData
+        name: source_type
+        required: true
+        type: string
+      - description: URL источника данных
+        in: formData
+        name: source_url
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результат импорта
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Импортировать ГОСТы из CSV
+      tags:
+      - gosts
+  /api/gosts/number/:number:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает информацию о ГОСТе по его номеру
+      parameters:
+      - description: Номер ГОСТа
+        in: path
+        name: number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Информация о ГОСТе
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: ГОСТ не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить ГОСТ по номеру
+      tags:
+      - gosts
+  /api/gosts/search:
+    get:
+      consumes:
+      - application/json
+      description: Выполняет поиск ГОСТов по номеру, названию или ключевым словам
+      parameters:
+      - description: Поисковый запрос
+        in: query
+        name: q
+        required: true
+        type: string
+      - default: 50
+        description: Количество записей на странице
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Смещение для пагинации
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результаты поиска
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Поиск ГОСТов
+      tags:
+      - gosts
+  /api/gosts/statistics:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает статистику по базе ГОСТов
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статистика
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статистику по базе ГОСТов
+      tags:
+      - gosts
+  /api/monitoring/providers:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает текущий статус и метрики всех AI-провайдеров
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные мониторинга провайдеров
+          schema:
+            $ref: '#/definitions/handlers.MonitoringDataResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статус AI-провайдеров
+      tags:
+      - monitoring
+  /api/monitoring/providers/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает детальные метрики конкретного AI-провайдера
+      parameters:
+      - description: ID провайдера
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Метрики провайдера
+          schema:
+            $ref: '#/definitions/handlers.ProviderMetricsResponse'
+        "404":
+          description: Провайдер не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить метрики провайдера
+      tags:
+      - monitoring
+  /api/monitoring/providers/{id}/start:
+    post:
+      consumes:
+      - application/json
+      description: Запускает указанный AI-провайдер
+      parameters:
+      - description: ID провайдера
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешный запуск
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Провайдер не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Запустить провайдер
+      tags:
+      - monitoring
+  /api/monitoring/providers/{id}/stop:
+    post:
+      consumes:
+      - application/json
+      description: Останавливает указанный AI-провайдер
+      parameters:
+      - description: ID провайдера
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешная остановка
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Провайдер не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Остановить провайдер
+      tags:
+      - monitoring
+  /api/normalization/apply-ai:
+    post:
+      consumes:
+      - application/json
+      description: Запускает AI-коррекцию для текущей сессии нормализации и фиксирует
+        результат.
+      parameters:
+      - description: Параметры AI-коррекции
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NormalizationAIRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Обновленная информация о сессии
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Применить AI-коррекцию
+      tags:
+      - normalization
+  /api/normalization/apply-categorization:
+    post:
+      consumes:
+      - application/json
+      description: Позволяет вручную задать категорию для результатов нормализации
+        в рамках указанной сессии.
+      parameters:
+      - description: Идентификатор сессии и категория
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NormalizationCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Обновленная информация
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Применить категорию для сессии нормализации
+      tags:
+      - normalization
+  /api/normalization/apply-patterns:
+    post:
+      consumes:
+      - application/json
+      description: Применяет корректирующие паттерны к текущей сессии нормализации
+        и сохраняет результат.
+      parameters:
+      - description: Идентификатор сессии
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NormalizationSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Обновленная информация о сессии
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Применить алгоритмические паттерны
+      tags:
+      - normalization
+  /api/normalization/columns:
+    get:
+      description: Возвращает список всех колонок указанной таблицы с информацией
+        о типе данных и других атрибутах.
+      parameters:
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      - description: Имя таблицы
+        in: query
+        name: table
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список колонок с их атрибутами
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Отсутствует имя таблицы или некорректные параметры
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Ошибка при запросе к базе данных
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить список колонок таблицы
+      tags:
+      - normalization
+  /api/normalization/config:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает
+        GET (получение), PUT/POST (обновление).
+      parameters:
+      - description: Конфигурация нормализации (для PUT/POST)
+        in: body
+        name: config
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Конфигурация или сообщение об успехе
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "503":
+          description: Сервис недоступен
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить/Обновить конфигурацию нормализации
+      tags:
+      - normalization
+    post:
+      consumes:
+      - application/json
+      description: Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает
+        GET (получение), PUT/POST (обновление).
+      parameters:
+      - description: Конфигурация нормализации (для PUT/POST)
+        in: body
+        name: config
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Конфигурация или сообщение об успехе
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "503":
+          description: Сервис недоступен
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить/Обновить конфигурацию нормализации
+      tags:
+      - normalization
+    put:
+      consumes:
+      - application/json
+      description: Возвращает или обновляет текущую конфигурацию нормализации. Поддерживает
+        GET (получение), PUT/POST (обновление).
+      parameters:
+      - description: Конфигурация нормализации (для PUT/POST)
+        in: body
+        name: config
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Конфигурация или сообщение об успехе
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "503":
+          description: Сервис недоступен
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить/Обновить конфигурацию нормализации
+      tags:
+      - normalization
+  /api/normalization/databases:
+    get:
+      description: Возвращает список доступных баз данных для нормализации с информацией
+        о размере и пути.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список баз данных
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить список баз данных
+      tags:
+      - normalization
+  /api/normalization/events:
+    get:
+      description: Возвращает Server-Sent Events (SSE) поток с событиями процесса
+        нормализации в реальном времени.
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE поток событий
+          schema:
+            type: string
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить поток событий нормализации
+      tags:
+      - normalization
+  /api/normalization/export:
+    get:
+      description: Экспортирует нормализованные данные с возможностью фильтрации по
+        категории, поисковому запросу, коду КПВЭД и другим параметрам.
+      parameters:
+      - description: Формат экспорта (csv, json). По умолчанию csv
+        in: query
+        name: format
+        type: string
+      - description: Фильтр по категории
+        in: query
+        name: category
+        type: string
+      - description: Поисковый запрос
+        in: query
+        name: search
+        type: string
+      - description: Фильтр по коду КПВЭД
+        in: query
+        name: kpved_code
+        type: string
+      - description: Лимит записей (по умолчанию 10000)
+        in: query
+        name: limit
+        type: integer
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Экспортированные данные
+          schema:
+            type: file
+        "400":
+          description: Некорректные параметры запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Экспортировать нормализованные данные
+      tags:
+      - normalization
+  /api/normalization/export-group:
+    get:
+      description: Экспортирует указанную группу нормализованных данных в выбранном
+        формате (CSV, JSON и т.д.).
+      parameters:
+      - description: Нормализованное название группы
+        in: query
+        name: normalized_name
+        required: true
+        type: string
+      - description: Категория группы
+        in: query
+        name: category
+        required: true
+        type: string
+      - description: Формат экспорта (csv, json)
+        in: query
+        name: format
+        type: string
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Экспортированные данные
+          schema:
+            type: file
+        "400":
+          description: Отсутствуют обязательные параметры
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Экспортировать группу нормализованных данных
+      tags:
+      - normalization
+  /api/normalization/group-items:
+    get:
+      description: Возвращает все исходные записи, объединенные в указанную группу.
+      parameters:
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      - description: Нормализованное название группы
+        in: query
+        name: normalized_name
+        required: true
+        type: string
+      - description: Категория группы
+        in: query
+        name: category
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список элементов группы
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Отсутствуют обязательные параметры
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить элементы группы нормализованных данных
+      tags:
+      - normalization
+  /api/normalization/groups:
+    get:
+      description: Возвращает список всех групп нормализованных данных с агрегированной
+        информацией по каждой группе.
+      parameters:
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      - description: Фильтр по категории
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список групп нормализованных данных
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить группы нормализованных данных
+      tags:
+      - normalization
+  /api/normalization/history:
+    get:
+      description: Возвращает стадии нормализации и список примененных шагов для указанной
+        сессии.
+      parameters:
+      - description: Идентификатор сессии
+        in: query
+        name: session_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: История стадий
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить историю сессии нормализации
+      tags:
+      - normalization
+  /api/normalization/item-attributes/{id}:
+    get:
+      description: Возвращает детальную информацию об атрибутах указанного элемента
+        нормализации по его ID.
+      parameters:
+      - description: ID элемента нормализации
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Атрибуты элемента
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный ID
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: Элемент не найден
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить атрибуты элемента нормализации
+      tags:
+      - normalization
+  /api/normalization/pipeline/stage-details:
+    get:
+      description: Возвращает подробную информацию о текущем этапе pipeline нормализации,
+        включая прогресс и статус обработки.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Детали этапа нормализации
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "503":
+          description: Сервис недоступен
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить детали текущего этапа нормализации
+      tags:
+      - normalization
+  /api/normalization/pipeline/stats:
+    get:
+      description: Возвращает детальную статистику по этапам pipeline нормализации,
+        включая информацию о стадиях обработки.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статистика pipeline
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "503":
+          description: Сервис недоступен
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статистику pipeline нормализации
+      tags:
+      - normalization
+  /api/normalization/revert:
+    post:
+      consumes:
+      - application/json
+      description: Откатывает указанную стадию и восстанавливает предыдущее значение
+        в normalized_data.
+      parameters:
+      - description: Параметры отката
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NormalizationRevertRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Актуальное состояние сессии
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Откатить стадию нормализации
+      tags:
+      - normalization
+  /api/normalization/start:
+    post:
+      consumes:
+      - application/json
+      description: Создает новую сессию нормализации для указанного элемента и возвращает
+        session_id.
+      parameters:
+      - description: Параметры запуска нормализации
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.NormalizationStartRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Информация о сессии
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Запустить версионированную нормализацию
+      tags:
+      - normalization
+  /api/normalization/stats:
+    get:
+      description: 'Возвращает агрегированную статистику по процессу нормализации:
+        количество обработанных записей, групп, успешных операций и ошибок.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статистика нормализации
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить статистику нормализации
+      tags:
+      - normalization
+  /api/normalization/status:
+    get:
+      description: Возвращает агрегированную информацию о текущем состоянии нормализационной
+        сессии.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.NormalizationStatus'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить общий статус нормализации
+      tags:
+      - normalization
+  /api/normalization/stop:
+    post:
+      description: Останавливает текущий процесс нормализации и возвращает статус
+        операции.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статус остановки с полем was_running
+          schema:
+            additionalProperties: true
+            type: object
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Остановить нормализацию
+      tags:
+      - normalization
+  /api/normalization/tables:
+    get:
+      description: Возвращает список всех таблиц в указанной базе данных, исключая
+        системные таблицы SQLite.
+      parameters:
+      - description: Путь к базе данных
+        in: query
+        name: database
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список имен таблиц
+          schema:
+            items:
+              type: string
+            type: array
+        "400":
+          description: Некорректные параметры запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "405":
+          description: Метод не поддерживается
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Ошибка при запросе к базе данных
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить список таблиц базы данных
+      tags:
+      - normalization
+  /api/normalize/start:
+    post:
+      consumes:
+      - application/json
+      deprecated: true
+      description: Устаревший метод. Рекомендуется использовать POST /api/clients/:clientId/projects/:projectId/normalization/start
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Результат запуска нормализации
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Некорректные данные запроса
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: (Legacy) Запустить нормализацию для проекта клиента
+      tags:
+      - normalization
+  /api/quality/report:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает детальный отчет о качестве данных для указанной базы
+        данных
+      parameters:
+      - description: ID базы данных
+        in: query
+        name: database_id
+        type: integer
+      - description: ID клиента
+        in: query
+        name: client_id
+        type: integer
+      - description: ID проекта
+        in: query
+        name: project_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Отчет о качестве данных
+          schema:
+            $ref: '#/definitions/handlers.QualityReportResponse'
+        "400":
+          description: Неверный запрос
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: База данных не найдена
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить отчет о качестве данных
+      tags:
+      - quality
+  /api/quality/score/{database_id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает оценку качества данных для указанной базы данных
+      parameters:
+      - description: ID базы данных
+        in: path
+        name: database_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Оценка качества
+          schema:
+            $ref: '#/definitions/handlers.QualityScoreResponse'
+        "404":
+          description: База данных не найдена
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить оценку качества базы данных
+      tags:
+      - quality
+schemes:
+- http
+- https
+swagger: "2.0"

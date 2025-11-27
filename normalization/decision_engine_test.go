@@ -96,7 +96,7 @@ func TestDecisionEngine_getSourcePriority(t *testing.T) {
 
 func TestDecisionEngine_checkTypeCompatibility(t *testing.T) {
 	tree := NewKpvedTree()
-	tree.NodeMap["25.94.11"] = &KpvedNode{Code: "25.94.11", Name: "Болты"} // Товар
+	tree.NodeMap["25.94.11"] = &KpvedNode{Code: "25.94.11", Name: "Болты"}          // Товар
 	tree.NodeMap["71.20.1"] = &KpvedNode{Code: "71.20.1", Name: "Услуги испытаний"} // Услуга
 
 	de := &DecisionEngine{tree: tree}
@@ -151,13 +151,13 @@ func TestDecisionEngine_checkTypeCompatibility(t *testing.T) {
 
 func TestDecisionEngine_findAlternativeByType(t *testing.T) {
 	tree := NewKpvedTree()
-	tree.NodeMap["25.94.11"] = &KpvedNode{Code: "25.94.11", Name: "Болты"} // Товар (25)
+	tree.NodeMap["25.94.11"] = &KpvedNode{Code: "25.94.11", Name: "Болты"}          // Товар (25)
 	tree.NodeMap["71.20.1"] = &KpvedNode{Code: "71.20.1", Name: "Услуги испытаний"} // Услуга (71)
 
 	de := &DecisionEngine{tree: tree}
 
 	candidates := []CandidateResult{
-		{Source: "stage6", Code: "71.20.1", Confidence: 0.85}, // Услуга
+		{Source: "stage6", Code: "71.20.1", Confidence: 0.85},  // Услуга
 		{Source: "stage7", Code: "25.94.11", Confidence: 0.75}, // Товар
 	}
 
@@ -184,10 +184,10 @@ func TestDecisionEngine_generateDecisionReason(t *testing.T) {
 	de := &DecisionEngine{}
 
 	tests := []struct {
-		name               string
-		best               CandidateResult
-		validationResult   CodeValidationResult
-		expectedContains   string
+		name             string
+		best             CandidateResult
+		validationResult CodeValidationResult
+		expectedContains string
 	}{
 		{
 			name: "Stage7 high confidence",

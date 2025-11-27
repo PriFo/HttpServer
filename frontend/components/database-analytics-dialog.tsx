@@ -11,14 +11,14 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, Database, TrendingUp, BarChart3, History } from 'lucide-react'
+import { RefreshCw, Database, TrendingUp, BarChart3, History, Upload, FileText, Layers, Calendar } from 'lucide-react'
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
+  DynamicLineChart,
+  DynamicLine,
+  DynamicBarChart,
+  DynamicBar,
+  DynamicPieChart,
+  DynamicPie,
   Cell,
   XAxis,
   YAxis,
@@ -26,8 +26,12 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from 'recharts'
+} from '@/lib/recharts-dynamic'
 import { DatabaseTypeBadge } from './database-type-badge'
+import { formatDateTime, formatDate as formatDateSafe, formatNumber, formatFileSize } from '@/lib/locale'
+import { fetchJson, getErrorMessage } from '@/lib/fetch-utils'
+import { QUALITY_TIMEOUTS } from '@/lib/quality-constants'
+import { toast } from 'sonner'
 
 interface TableStat {
   name: string
@@ -53,6 +57,16 @@ interface DatabaseAnalytics {
   table_stats: TableStat[]
   top_tables: TableStat[]
   analyzed_at: string
+  upload_stats?: {
+    total_uploads?: number
+    uploads_count?: number
+    total_catalogs?: number
+    catalogs_count?: number
+    total_items?: number
+    items_count?: number
+    last_upload_date?: string
+    avg_items_per_upload?: number
+  }
 }
 
 interface DatabaseAnalyticsDialogProps {
@@ -86,26 +100,30 @@ export function DatabaseAnalyticsDialog({
         throw new Error('Database identifier is required')
       }
       
-      // Кодируем имя базы данных для URL (убираем расширение .db из пути, если оно есть)
-      const dbNameForUrl = databaseName.replace(/\.db$/i, '')
-      const url = `/api/databases/analytics/${encodeURIComponent(dbNameForUrl)}?path=${encodeURIComponent(dbIdentifier)}`
+      // Используем формат без dbname в пути, только query параметр path
+      const url = `/api/databases/analytics?path=${encodeURIComponent(dbIdentifier)}`
       
-      const response = await fetch(url)
-      if (!response.ok) {
-        let errorMessage = 'Failed to fetch analytics'
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorMessage
-        } catch {
-          // Если не удалось распарсить JSON, используем статус
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`
-        }
-        throw new Error(errorMessage)
+      const data = await fetchJson<DatabaseAnalytics>(url, {
+        timeout: QUALITY_TIMEOUTS.STANDARD,
+        cache: 'no-store',
+      })
+      
+      // Обеспечиваем, что все массивы инициализированы
+      const safeData: DatabaseAnalytics = {
+        ...data,
+        table_stats: data.table_stats || [],
+        top_tables: data.top_tables || [],
       }
-      const data = await response.json()
-      setAnalytics(data)
+      
+      setAnalytics(safeData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      const errorMessage = getErrorMessage(err, 'Не удалось загрузить аналитику базы данных')
+      setError(errorMessage)
+      // Показываем toast уведомление для критических ошибок
+      toast.error('Ошибка загрузки аналитики', {
+        description: errorMessage,
+        duration: 5000,
+      })
     } finally {
       setLoading(false)
     }
@@ -113,23 +131,38 @@ export function DatabaseAnalyticsDialog({
 
   const fetchHistory = useCallback(async () => {
     try {
-      if (!databaseName) {
-        console.warn('Database name is not provided for history fetch')
+      // Используем путь к базе данных, если он доступен, иначе имя
+      const dbIdentifier = databasePath || databaseName
+      if (!dbIdentifier) {
+        // История не критична, просто пропускаем загрузку
         return
       }
       
-      const response = await fetch(`/api/databases/history/${encodeURIComponent(databaseName)}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.error || 'Failed to fetch history')
-      }
-      const data = await response.json()
+      // Бэкенд ожидает имя БД в пути: /api/databases/history/{dbName}
+      // Извлекаем имя файла из пути, если путь полный
+      const dbName = dbIdentifier.includes('/') || dbIdentifier.includes('\\')
+        ? dbIdentifier.split(/[/\\]/).pop() || dbIdentifier
+        : dbIdentifier
+      const url = `/api/databases/history/${encodeURIComponent(dbName)}`
+      
+      const data = await fetchJson<{ history: HistoryEntry[] }>(
+        url,
+        {
+          timeout: QUALITY_TIMEOUTS.STANDARD,
+          cache: 'no-store',
+        }
+      )
       setHistory(data.history || [])
     } catch (err) {
-      console.error('Failed to fetch history:', err)
-      // Не устанавливаем ошибку в state, так как история не критична
+      // История не критична для работы компонента, поэтому не показываем ошибку пользователю
+      // Только логируем для отладки (в dev режиме)
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('Failed to fetch history (non-critical):', err)
+      }
+      // Устанавливаем пустую историю, чтобы показать соответствующее сообщение в UI
+      setHistory([])
     }
-  }, [databaseName])
+  }, [databaseName, databasePath])
 
   useEffect(() => {
     if (open && databaseName) {
@@ -138,18 +171,11 @@ export function DatabaseAnalyticsDialog({
     }
   }, [open, databaseName, fetchAnalytics, fetchHistory])
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
-  }
+  // Используем безопасную функцию форматирования размера файла из lib/locale
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'Неизвестно'
-    const date = new Date(dateString)
-    return date.toLocaleDateString('ru-RU', {
+  // Используем безопасную функцию форматирования из lib/locale
+  const formatDate = (dateString: string | null | undefined) => {
+    return formatDateTime(dateString, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -159,22 +185,24 @@ export function DatabaseAnalyticsDialog({
   }
 
   // Подготовка данных для графиков
-  const historyChartData = history.map((entry) => ({
-    date: new Date(entry.timestamp).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }),
-    size: entry.size_mb,
-    rows: entry.row_count,
-  }))
+  const historyChartData = history.map((entry) => {
+    return {
+      date: formatDateSafe(entry.timestamp, { month: 'short', day: 'numeric' }),
+      size: entry.size_mb,
+      rows: entry.row_count,
+    }
+  })
 
-  const topTablesData = analytics?.top_tables.slice(0, 10).map((table) => ({
+  const topTablesData = (analytics?.top_tables || []).slice(0, 10).map((table) => ({
     name: table.name.length > 20 ? table.name.substring(0, 20) + '...' : table.name,
     size: table.size_mb,
     rows: table.row_count,
-  })) || []
+  }))
 
-  const pieData = analytics?.top_tables.slice(0, 8).map((table) => ({
+  const pieData = (analytics?.top_tables || []).slice(0, 8).map((table) => ({
     name: table.name,
     value: table.size_mb,
-  })) || []
+  }))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,11 +276,93 @@ export function DatabaseAnalyticsDialog({
                   </CardHeader>
                   <CardContent>
                     <p className="text-2xl font-bold">
-                      {analytics.total_rows.toLocaleString('ru-RU')}
+                      {formatNumber(analytics.total_rows)}
                     </p>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Статистика из выгрузок */}
+              {analytics.upload_stats && (analytics.upload_stats.total_uploads !== undefined || analytics.upload_stats.uploads_count !== undefined) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Статистика выгрузок
+                    </CardTitle>
+                    <CardDescription>
+                      Информация из таблицы uploads
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <Layers className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Выгрузок</p>
+                          <p className="text-xl font-bold">
+                            {formatNumber(analytics.upload_stats.total_uploads ?? analytics.upload_stats.uploads_count ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                      {analytics.upload_stats.total_catalogs !== undefined && (
+                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <FileText className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Справочников</p>
+                            <p className="text-xl font-bold">
+                              {formatNumber(analytics.upload_stats.total_catalogs ?? analytics.upload_stats.catalogs_count ?? 0)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {analytics.upload_stats.total_items !== undefined && (
+                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <Database className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Записей</p>
+                            <p className="text-xl font-bold">
+                              {formatNumber(analytics.upload_stats.total_items ?? analytics.upload_stats.items_count ?? 0)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {analytics.upload_stats.last_upload_date && (
+                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <Calendar className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Последняя выгрузка</p>
+                            <p className="text-xl font-bold">
+                              {formatDateTime(new Date(analytics.upload_stats.last_upload_date))}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {analytics.upload_stats.avg_items_per_upload !== undefined && (
+                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <TrendingUp className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Среднее записей/выгрузка</p>
+                            <p className="text-xl font-bold">
+                              {formatNumber(Math.round(analytics.upload_stats.avg_items_per_upload))}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
@@ -263,7 +373,7 @@ export function DatabaseAnalyticsDialog({
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {analytics.top_tables.slice(0, 5).map((table, index) => (
+                    {(analytics.top_tables || []).slice(0, 5).map((table, index) => (
                       <div
                         key={table.name}
                         className="flex items-center justify-between p-2 bg-muted rounded-lg"
@@ -274,7 +384,7 @@ export function DatabaseAnalyticsDialog({
                         </div>
                         <div className="flex items-center gap-4 text-sm">
                           <span className="text-muted-foreground">
-                            {table.row_count.toLocaleString('ru-RU')} записей
+                            {formatNumber(table.row_count)} записей
                           </span>
                           <span className="font-semibold">{formatFileSize(table.size_bytes)}</span>
                         </div>
@@ -305,7 +415,7 @@ export function DatabaseAnalyticsDialog({
                         </tr>
                       </thead>
                       <tbody>
-                        {analytics.table_stats.map((table, index) => (
+                        {(analytics.table_stats || []).map((table, index) => (
                           <tr 
                             key={table.name} 
                             className={`border-b hover:bg-muted/50 transition-colors ${
@@ -314,7 +424,7 @@ export function DatabaseAnalyticsDialog({
                           >
                             <td className="p-3 font-mono text-xs break-all">{table.name}</td>
                             <td className="text-right p-3">
-                              {table.row_count.toLocaleString('ru-RU')}
+                              {formatNumber(table.row_count)}
                             </td>
                             <td className="text-right p-3 text-muted-foreground">
                               {formatFileSize(table.size_bytes)}
@@ -344,20 +454,20 @@ export function DatabaseAnalyticsDialog({
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={historyChartData}>
+                        <DynamicLineChart data={historyChartData}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="date" />
                           <YAxis label={{ value: 'Размер (MB)', angle: -90, position: 'insideLeft' }} />
                           <Tooltip />
                           <Legend />
-                          <Line
+                          <DynamicLine
                             type="monotone"
                             dataKey="size"
                             stroke="#3b82f6"
                             name="Размер (MB)"
                             strokeWidth={2}
                           />
-                        </LineChart>
+                        </DynamicLineChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
@@ -374,14 +484,14 @@ export function DatabaseAnalyticsDialog({
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={topTablesData}>
+                        <DynamicBarChart data={topTablesData}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                           <YAxis label={{ value: 'Размер (MB)', angle: -90, position: 'insideLeft' }} />
                           <Tooltip />
                           <Legend />
-                          <Bar dataKey="size" fill="#3b82f6" name="Размер (MB)" />
-                        </BarChart>
+                          <DynamicBar dataKey="size" fill="#3b82f6" name="Размер (MB)" />
+                        </DynamicBarChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
@@ -395,8 +505,8 @@ export function DatabaseAnalyticsDialog({
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
+                        <DynamicPieChart>
+                          <DynamicPie
                             data={pieData}
                             cx="50%"
                             cy="50%"
@@ -409,9 +519,9 @@ export function DatabaseAnalyticsDialog({
                             {pieData.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
-                          </Pie>
+                          </DynamicPie>
                           <Tooltip />
-                        </PieChart>
+                        </DynamicPieChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
@@ -445,7 +555,7 @@ export function DatabaseAnalyticsDialog({
                           <div>
                             <p className="font-medium">{formatDate(entry.timestamp)}</p>
                             <p className="text-sm text-muted-foreground">
-                              {entry.row_count.toLocaleString('ru-RU')} записей
+                              {formatNumber(entry.row_count)} записей
                             </p>
                           </div>
                           <div className="text-right">

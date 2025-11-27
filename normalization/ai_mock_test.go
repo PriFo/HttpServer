@@ -12,10 +12,10 @@ func TestMockAINormalizer(t *testing.T) {
 
 	// Устанавливаем ответ
 	result := &AIResult{
-		Category:      "инструмент",
+		Category:       "инструмент",
 		NormalizedName: "молоток",
-		Confidence:    0.95,
-		Reasoning:     "Test reasoning",
+		Confidence:     0.95,
+		Reasoning:      "Test reasoning",
 	}
 	mock.SetResponse("Молоток ER-00013004", result)
 
@@ -97,10 +97,10 @@ func TestMockPatternAIIntegrator(t *testing.T) {
 
 	// Устанавливаем ответ AI
 	aiResult := &AIResult{
-		Category:      "инструмент",
+		Category:       "инструмент",
 		NormalizedName: "молоток",
-		Confidence:    0.9,
-		Reasoning:     "Test reasoning",
+		Confidence:     0.9,
+		Reasoning:      "Test reasoning",
 	}
 	mock.GetAINormalizer().SetResponse("Молоток ER-00013004", aiResult)
 
@@ -135,4 +135,3 @@ func TestMockPatternAIIntegratorError(t *testing.T) {
 		t.Error("Expected error, got nil")
 	}
 }
-

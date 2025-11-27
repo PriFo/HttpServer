@@ -62,13 +62,14 @@ export function Pagination({
 
   return (
     <div className={cn('flex items-center justify-between', className)}>
-      {showInfo && (startItem !== null && endItem !== null) && (
+      {showInfo && startItem !== null && endItem !== null ? (
         <div className="text-sm text-muted-foreground" role="status" aria-live="polite">
           Показаны записи {startItem.toLocaleString('ru-RU')} - {endItem.toLocaleString('ru-RU')}
           {totalItems && ` из ${totalItems.toLocaleString('ru-RU')}`}
         </div>
+      ) : (
+        <div />
       )}
-      {!showInfo && <div />}
       
       <nav className="flex gap-2" aria-label="Навигация по страницам">
         <Button

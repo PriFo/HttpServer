@@ -10,14 +10,14 @@ import (
 
 // AttributeSchema схема атрибута для позиционного извлечения
 type AttributeSchema struct {
-	Position      int                    // Позиция в массиве токенов
-	AttributeName string                 // Имя атрибута
-	AttributeType string                 // Тип атрибута (text_value, numeric_value, dimension, etc.)
-	Required      bool                   // Обязательное поле
-	DefaultValue  string                 // Значение по умолчанию
-	Validator     func(string) bool      // Функция валидации значения
-	Transformer   func(string) string    // Функция трансформации значения
-	Description   string                 // Описание атрибута
+	Position      int                 // Позиция в массиве токенов
+	AttributeName string              // Имя атрибута
+	AttributeType string              // Тип атрибута (text_value, numeric_value, dimension, etc.)
+	Required      bool                // Обязательное поле
+	DefaultValue  string              // Значение по умолчанию
+	Validator     func(string) bool   // Функция валидации значения
+	Transformer   func(string) string // Функция трансформации значения
+	Description   string              // Описание атрибута
 }
 
 // PositionalExtractor извлекатель атрибутов по позициям

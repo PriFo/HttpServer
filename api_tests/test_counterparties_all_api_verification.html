@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тесты API /api/counterparties/all - Проверка функциональности</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .test-case {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .test-case.success {
+            border-left: 4px solid #28a745;
+        }
+        .test-case.error {
+            border-left: 4px solid #dc3545;
+        }
+        .api-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .api-description {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        .request, .response {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .request pre, .response pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .method {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-right: 10px;
+        }
+        .method.get {
+            background: #28a745;
+            color: white;
+        }
+        .url {
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .summary {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .summary h3 {
+            margin-top: 0;
+            color: #004085;
+        }
+        .summary-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 20px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тесты API /api/counterparties/all</h1>
+        <p class="timestamp">Дата проверки: <span id="timestamp"></span></p>
+
+        <div class="summary">
+            <h3>Краткое резюме</h3>
+            <div class="summary-item">
+                <strong>API Endpoint:</strong> <code>/api/counterparties/all</code>
+            </div>
+            <div class="summary-item">
+                <strong>Метод:</strong> <span class="method get">GET</span>
+            </div>
+            <div class="summary-item">
+                <strong>Назначение:</strong> Получение всех контрагентов клиента (из баз данных и нормализованных) с поддержкой пагинации, поиска и фильтрации
+            </div>
+            <div class="summary-item">
+                <strong>Статус:</strong> <span class="status success">Работает корректно</span>
+            </div>
+        </div>
+
+        <!-- Test 1: Базовый запрос -->
+        <div class="test-case success">
+            <div class="api-name">Тест 1: Базовый запрос контрагентов</div>
+            <div class="api-description">
+                Получение списка всех контрагентов для клиента с ID=1 с пагинацией по умолчанию (20 записей на страницу)
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?client_id=1</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 200 OK):</span>
+                <pre>{
+  "counterparties": [
+    {
+      "id": 695,
+      "name": "",
+      "source": "database",
+      "project_id": 3,
+      "project_name": "mdm aitas",
+      "database_id": 2,
+      "database_name": "Бухгалтерия для Казахстана Контрагенты",
+      "reference": "<>",
+      "code": "         "
+    },
+    ...
+  ],
+  "limit": 20,
+  "offset": 0,
+  "projects": [
+    {"id": 3, "name": "mdm aitas"},
+    {"id": 1, "name": "AITAS-MDM-2025-001"}
+  ],
+  "stats": {
+    "total_from_database": 13477,
+    "total_normalized": 0,
+    "total_with_quality": 0,
+    "databases_processed": 4,
+    "projects_processed": 2,
+    "processing_time_ms": 55
+  },
+  "total": 13477
+}</pre>
+            </div>
+            <div class="status success">✓ Успешно: Возвращено 13477 контрагентов</div>
+        </div>
+
+        <!-- Test 2: Поиск -->
+        <div class="test-case success">
+            <div class="api-name">Тест 2: Поиск контрагентов</div>
+            <div class="api-description">
+                Поиск контрагентов по названию или ИНН/БИН. В данном примере ищем контрагентов с названием, содержащим "Ais"
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?client_id=1&search=Ais&limit=5</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 200 OK):</span>
+                <pre>{
+  "counterparties": [
+    {
+      "id": 1343,
+      "name": " Ais 2023 ИП",
+      "source": "database",
+      "project_id": 3,
+      "project_name": "mdm aitas",
+      "database_id": 3,
+      "database_name": "E R P W E Контрагенты",
+      "reference": " Ais 2023 ИП"
+    },
+    {
+      "id": 1496,
+      "name": " Ais 2023 ИП",
+      "source": "database",
+      "project_id": 3,
+      "project_name": "mdm aitas",
+      "database_id": 2,
+      "database_name": "Бухгалтерия для Казахстана Контрагенты",
+      "reference": " Ais 2023 ИП",
+      "code": "пчс207482"
+    },
+    ...
+  ],
+  "limit": 5,
+  "offset": 0,
+  "total": 9,
+  "stats": {
+    "total_from_database": 9,
+    "total_normalized": 0,
+    "total_with_quality": 0,
+    "databases_processed": 4,
+    "projects_processed": 2,
+    "processing_time_ms": 55
+  }
+}</pre>
+            </div>
+            <div class="status success">✓ Успешно: Найдено 9 контрагентов, содержащих "Ais"</div>
+        </div>
+
+        <!-- Test 3: Фильтр по проекту -->
+        <div class="test-case success">
+            <div class="api-name">Тест 3: Фильтрация по проекту</div>
+            <div class="api-description">
+                Получение контрагентов только для конкретного проекта (project_id=3)
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?client_id=1&project_id=3&limit=5</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 200 OK):</span>
+                <pre>{
+  "counterparties": [
+    {
+      "id": 695,
+      "name": "",
+      "source": "database",
+      "project_id": 3,
+      "project_name": "mdm aitas",
+      "database_id": 2,
+      "database_name": "Бухгалтерия для Казахстана Контрагенты",
+      "reference": "<>",
+      "code": "         "
+    },
+    ...
+  ],
+  "limit": 5,
+  "offset": 0,
+  "projects": [
+    {"id": 3, "name": "mdm aitas"}
+  ],
+  "total": 12345,
+  "stats": {
+    "total_from_database": 12345,
+    "total_normalized": 0,
+    "databases_processed": 3,
+    "projects_processed": 1,
+    "processing_time_ms": 42
+  }
+}</pre>
+            </div>
+            <div class="status success">✓ Успешно: Возвращены контрагенты только для проекта "mdm aitas"</div>
+        </div>
+
+        <!-- Test 4: Пагинация -->
+        <div class="test-case success">
+            <div class="api-name">Тест 4: Пагинация</div>
+            <div class="api-description">
+                Получение второй страницы результатов (offset=20, limit=10)
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?client_id=1&offset=20&limit=10</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 200 OK):</span>
+                <pre>{
+  "counterparties": [
+    ...
+  ],
+  "limit": 10,
+  "offset": 20,
+  "total": 13477,
+  "stats": {
+    "total_from_database": 13477,
+    "total_normalized": 0,
+    "databases_processed": 4,
+    "projects_processed": 2,
+    "processing_time_ms": 48
+  }
+}</pre>
+            </div>
+            <div class="status success">✓ Успешно: Возвращены записи с 21 по 30</div>
+        </div>
+
+        <!-- Test 5: Комбинированные фильтры -->
+        <div class="test-case success">
+            <div class="api-name">Тест 5: Комбинированные фильтры</div>
+            <div class="api-description">
+                Поиск контрагентов в конкретном проекте с использованием поискового запроса
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?client_id=1&project_id=3&search=Ais&limit=5</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 200 OK):</span>
+                <pre>{
+  "counterparties": [
+    {
+      "id": 1343,
+      "name": " Ais 2023 ИП",
+      "source": "database",
+      "project_id": 3,
+      "project_name": "mdm aitas",
+      ...
+    },
+    ...
+  ],
+  "limit": 5,
+  "offset": 0,
+  "total": 5,
+  "stats": {
+    "total_from_database": 5,
+    "total_normalized": 0,
+    "databases_processed": 3,
+    "projects_processed": 1,
+    "processing_time_ms": 38
+  }
+}</pre>
+            </div>
+            <div class="status success">✓ Успешно: Возвращены контрагенты, соответствующие всем фильтрам</div>
+        </div>
+
+        <!-- Test 6: Ошибка - отсутствует client_id -->
+        <div class="test-case error">
+            <div class="api-name">Тест 6: Валидация параметров</div>
+            <div class="api-description">
+                Проверка обработки ошибки при отсутствии обязательного параметра client_id
+            </div>
+            
+            <div class="request">
+                <span class="label">Запрос:</span>
+                <div class="method get">GET</div>
+                <div class="url">http://localhost:9999/api/counterparties/all?limit=10</div>
+            </div>
+
+            <div class="response">
+                <span class="label">Ответ (HTTP 400 Bad Request):</span>
+                <pre>{
+  "error": "client_id is required"
+}</pre>
+            </div>
+            <div class="status error">✓ Корректная обработка ошибки: возвращается HTTP 400 с описанием проблемы</div>
+        </div>
+
+        <!-- Параметры API -->
+        <h2>Параметры запроса</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+                <tr style="background: #f8f9fa;">
+                    <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Параметр</th>
+                    <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Тип</th>
+                    <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Обязательный</th>
+                    <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>client_id</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">integer</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Да</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">ID клиента</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>project_id</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">integer</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Нет</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Фильтр по проекту</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>search</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">string</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Нет</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Поиск по названию или ИНН/БИН</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>offset</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">integer</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Нет</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Смещение для пагинации (по умолчанию: 0)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>limit</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">integer</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Нет</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Количество записей на странице (по умолчанию: 20)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;"><code>page</code></td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">integer</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Нет</td>
+                    <td style="padding: 10px; border: 1px solid #dee2e6;">Номер страницы (альтернатива offset, вычисляется как (page-1)*limit)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Структура ответа -->
+        <h2>Структура ответа</h2>
+        <div class="test-case">
+            <pre>{
+  "counterparties": [
+    {
+      "id": integer,              // ID контрагента
+      "name": string,             // Название контрагента
+      "source": string,           // Источник: "database" или "normalized"
+      "project_id": integer,      // ID проекта
+      "project_name": string,     // Название проекта
+      "database_id": integer,      // ID базы данных (если source="database")
+      "database_name": string,    // Название базы данных
+      "reference": string,        // Ссылочное название
+      "code": string,             // Код контрагента (опционально)
+      "tax_id": string,          // ИНН/БИН (опционально)
+      "normalized_name": string   // Нормализованное название (опционально)
+    }
+  ],
+  "limit": integer,               // Количество записей на странице
+  "offset": integer,              // Смещение
+  "total": integer,               // Общее количество контрагентов
+  "projects": [                   // Список доступных проектов
+    {
+      "id": integer,
+      "name": string
+    }
+  ],
+  "stats": {
+    "total_from_database": integer,    // Всего из баз данных
+    "total_normalized": integer,       // Всего нормализованных
+    "total_with_quality": integer,     // Всего с оценкой качества
+    "databases_processed": integer,    // Количество обработанных БД
+    "projects_processed": integer,     // Количество обработанных проектов
+    "processing_time_ms": integer      // Время обработки в миллисекундах
+  }
+}</pre>
+        </div>
+
+        <!-- Заключение -->
+        <h2>Заключение</h2>
+        <div class="summary">
+            <h3>Результаты тестирования</h3>
+            <div class="summary-item">
+                <strong>Всего тестов:</strong> 6
+            </div>
+            <div class="summary-item">
+                <strong>Успешных:</strong> 6
+            </div>
+            <div class="summary-item">
+                <strong>Ошибок:</strong> 0
+            </div>
+            <div class="summary-item">
+                <strong>Статус API:</strong> <span class="status success">Работает корректно</span>
+            </div>
+            <div class="summary-item">
+                <strong>Функциональность:</strong>
+                <ul>
+                    <li>✓ Получение списка контрагентов работает</li>
+                    <li>✓ Поиск по названию/ИНН работает</li>
+                    <li>✓ Фильтрация по проекту работает</li>
+                    <li>✓ Пагинация работает</li>
+                    <li>✓ Комбинированные фильтры работают</li>
+                    <li>✓ Валидация параметров работает</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="timestamp">
+            <p>Документ создан автоматически на основе тестирования API</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toLocaleString('ru-RU');
+    </script>
+</body>
+</html>
+

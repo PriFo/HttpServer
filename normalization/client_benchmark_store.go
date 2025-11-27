@@ -10,16 +10,16 @@ import (
 
 // Benchmark представляет эталонную запись
 type Benchmark struct {
-	ID               int
-	ClientProjectID  int
-	OriginalName     string
-	NormalizedName   string
-	Category         string
-	Subcategory      string
-	Attributes       string
-	QualityScore     float64
-	IsApproved       bool
-	UsageCount       int
+	ID              int
+	ClientProjectID int
+	OriginalName    string
+	NormalizedName  string
+	Category        string
+	Subcategory     string
+	Attributes      string
+	QualityScore    float64
+	IsApproved      bool
+	UsageCount      int
 }
 
 // ClientBenchmarkStore хранилище эталонных записей клиента
@@ -43,7 +43,7 @@ func NewClientBenchmarkStore(serviceDB *database.ServiceDB, projectID int) *Clie
 func (s *ClientBenchmarkStore) FindBenchmark(name string) (*Benchmark, bool) {
 	// Нормализуем имя для поиска
 	searchKey := strings.ToLower(strings.TrimSpace(name))
-	
+
 	// Проверяем кэш
 	s.mutex.RLock()
 	if benchmark, found := s.cache[searchKey]; found {
@@ -131,4 +131,3 @@ func (s *ClientBenchmarkStore) GetBenchmarksByCategory(category string) ([]*Benc
 func (s *ClientBenchmarkStore) UpdateUsage(benchmarkID int) error {
 	return s.db.UpdateBenchmarkUsage(benchmarkID)
 }
-

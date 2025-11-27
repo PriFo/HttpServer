@@ -6,17 +6,20 @@ import (
 	"strings"
 
 	"httpserver/database"
+	"httpserver/normalization/algorithms"
 )
 
 // NameNormalizer нормализует наименования товаров
 type NameNormalizer struct {
-	technicalCodeRegex     *regexp.Regexp
-	dimensionRegex         *regexp.Regexp
-	numbersWithUnitsRegex  *regexp.Regexp
+	technicalCodeRegex           *regexp.Regexp
+	dimensionRegex               *regexp.Regexp
+	numbersWithUnitsRegex        *regexp.Regexp
 	numbersWithUnitsNoSpaceRegex *regexp.Regexp // Числа с единицами без пробела (например, "120mm")
-	standaloneNumbersRegex *regexp.Regexp
-	articleCodeRegex       *regexp.Regexp // Артикулы/коды в начале строки (например, "wbc00z0002")
-	trailingSpecialCharsRegex *regexp.Regexp // Специальные символы в конце строки
+	standaloneNumbersRegex       *regexp.Regexp
+	articleCodeRegex             *regexp.Regexp         // Артикулы/коды в начале строки (например, "wbc00z0002")
+	trailingSpecialCharsRegex    *regexp.Regexp         // Специальные символы в конце строки
+	lemmatizer                   algorithms.Lemmatizer  // Лемматизатор для нормализации слов
+	ner                          *algorithms.RussianNER // NER для извлечения сущностей
 }
 
 // NewNameNormalizer создает новый нормализатор имен
@@ -37,6 +40,10 @@ func NewNameNormalizer() *NameNormalizer {
 		articleCodeRegex: regexp.MustCompile(`^[a-zа-я]{2,}\d+[a-zа-я]*\d+\s*`),
 		// Специальные символы в конце строки (*, -, ., и т.д.)
 		trailingSpecialCharsRegex: regexp.MustCompile(`[^\w\sа-яА-Я]+$`),
+		// Лемматизатор для нормализации слов
+		lemmatizer: algorithms.NewRussianLemmatizer(),
+		// NER для извлечения сущностей
+		ner: algorithms.NewRussianNER(),
 	}
 }
 
@@ -75,6 +82,26 @@ func (n *NameNormalizer) NormalizeName(name string) string {
 
 	// 10. Удаляем лишние знаки препинания в начале и конце
 	normalized = strings.Trim(normalized, " ,.-+")
+
+	return normalized
+}
+
+// NormalizeNameWithLemmatization нормализует наименование товара с применением лемматизации
+// Лемматизация приводит слова к нормальной форме (например, "маслами" -> "масло")
+// Это более точная нормализация, чем просто приведение к нижнему регистру
+func (n *NameNormalizer) NormalizeNameWithLemmatization(name string) string {
+	// Сначала применяем стандартную нормализацию
+	normalized := n.NormalizeName(name)
+
+	if normalized == "" {
+		return ""
+	}
+
+	// Затем применяем лемматизацию к каждому слову
+	if n.lemmatizer != nil {
+		lemmatized := n.lemmatizer.LemmatizeText(normalized)
+		return lemmatized
+	}
 
 	return normalized
 }
@@ -188,7 +215,7 @@ func (n *NameNormalizer) ExtractAttributes(name string) (string, []*database.Ite
 			if len(submatches) >= 3 {
 				value := submatches[1]
 				unit := submatches[2]
-				
+
 				attrName := n.getAttributeNameByUnit(unit)
 				attributes = append(attributes, &database.ItemAttribute{
 					AttributeType:  "numeric_value",
@@ -214,7 +241,7 @@ func (n *NameNormalizer) ExtractAttributes(name string) (string, []*database.Ite
 			if len(submatches) >= 3 {
 				value := submatches[1]
 				unit := submatches[2]
-				
+
 				attrName := n.getAttributeNameByUnit(unit)
 				attributes = append(attributes, &database.ItemAttribute{
 					AttributeType:  "numeric_value",
@@ -239,7 +266,7 @@ func (n *NameNormalizer) ExtractAttributes(name string) (string, []*database.Ite
 		}
 		extractedKeys[key] = true
 	}
-	
+
 	for _, patternMatch := range patternMatches {
 		relatedAttrs := n.extractRelatedAttributes(originalName, patternMatch.EndPosition, patternMatch.PatternType)
 		for _, attr := range relatedAttrs {
@@ -274,17 +301,17 @@ func (n *NameNormalizer) ExtractAttributes(name string) (string, []*database.Ite
 // Анализирует текст после позиции паттерна и ищет типичные реквизиты
 func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int, patternType string) []*database.ItemAttribute {
 	var attributes []*database.ItemAttribute
-	
+
 	if afterPosition >= len(text) {
 		return attributes
 	}
-	
+
 	// Берем текст после паттерна (максимум 100 символов для анализа)
 	remainingText := text[afterPosition:]
 	if len(remainingText) > 100 {
 		remainingText = remainingText[:100]
 	}
-	
+
 	// В зависимости от типа паттерна ищем разные связанные реквизиты
 	switch patternType {
 	case "dimension":
@@ -305,7 +332,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				break // Берем только первое совпадение
 			}
 		}
-		
+
 		// Ищем материал (обычно после размера)
 		materialKeywords := []string{"сталь", "металл", "пластик", "дерево", "стекло", "алюминий", "бетон", "кирпич", "steel", "metal", "plastic", "wood", "glass", "aluminum", "concrete", "brick"}
 		for _, keyword := range materialKeywords {
@@ -325,7 +352,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				}
 			}
 		}
-		
+
 		// Ищем цвет после размера
 		colorKeywords := []string{"белый", "черный", "серый", "красный", "синий", "зеленый", "желтый", "коричневый", "бежевый", "white", "black", "gray", "grey", "red", "blue", "green", "yellow", "brown", "beige"}
 		for _, keyword := range colorKeywords {
@@ -344,7 +371,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				}
 			}
 		}
-		
+
 		// Ищем тип покрытия/обработки
 		coatingKeywords := []string{"оцинкован", "покрашен", "полирован", "матовый", "глянцевый", "galvanized", "painted", "polished", "matte", "glossy"}
 		for _, keyword := range coatingKeywords {
@@ -363,7 +390,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				}
 			}
 		}
-		
+
 	case "article_code":
 		// После артикула обычно идут: размеры, характеристики, тип, толщина
 		// Ищем размеры после артикула
@@ -387,7 +414,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				})
 			}
 		}
-		
+
 		// Ищем единицы измерения после артикула (толщина, вес и т.д.)
 		unitAfterArticle := n.numbersWithUnitsNoSpaceRegex.FindString(remainingText)
 		if unitAfterArticle != "" {
@@ -405,7 +432,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				})
 			}
 		}
-		
+
 		// Ищем тип товара после артикула
 		typeKeywords := []string{"панель", "лист", "профиль", "труба", "уголок", "швеллер", "panel", "sheet", "profile", "pipe", "angle", "channel"}
 		for _, keyword := range typeKeywords {
@@ -424,7 +451,7 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 				}
 			}
 		}
-		
+
 	case "technical_code":
 		// После технического кода обычно идут: характеристики, параметры
 		// Ищем параметры (числа с единицами)
@@ -445,54 +472,54 @@ func (n *NameNormalizer) extractRelatedAttributes(text string, afterPosition int
 			}
 		}
 	}
-	
+
 	return attributes
 }
 
 // getAttributeNameByUnit определяет имя атрибута по единице измерения
 func (n *NameNormalizer) getAttributeNameByUnit(unit string) string {
 	unit = strings.ToLower(unit)
-	
+
 	// Длина/размер
 	if unit == "mm" || unit == "мм" || unit == "cm" || unit == "см" || unit == "m" || unit == "м" {
 		return "thickness"
 	}
-	
+
 	// Вес
 	if unit == "kg" || unit == "кг" || unit == "g" || unit == "г" || unit == "мг" {
 		return "weight"
 	}
-	
+
 	// Объем
 	if unit == "l" || unit == "л" || unit == "ml" || unit == "мл" {
 		return "volume"
 	}
-	
+
 	// Мощность
 	if unit == "w" || unit == "в" || unit == "watt" || unit == "kw" || unit == "квт" || unit == "вт" {
 		return "power"
 	}
-	
+
 	// Напряжение/ток
 	if unit == "v" || unit == "в" || unit == "a" || unit == "а" {
 		return "electrical"
 	}
-	
+
 	// Время
 	if unit == "h" || unit == "ч" || unit == "min" || unit == "мин" || unit == "sec" || unit == "сек" {
 		return "duration"
 	}
-	
+
 	// Количество
 	if unit == "шт" {
 		return "quantity"
 	}
-	
+
 	// Процент
 	if unit == "%" {
 		return "percentage"
 	}
-	
+
 	return "value"
 }
 
@@ -680,6 +707,76 @@ func (n *NameNormalizer) ExtractAttributesContextual(name string) (string, []*da
 	return normalized, attributes
 }
 
+// ExtractAttributesWithNER извлекает атрибуты используя улучшенный NER
+// Использует BIO-тегирование и расширенные правила для распознавания сущностей
+func (n *NameNormalizer) ExtractAttributesWithNER(name string) (string, []*database.ItemAttribute) {
+	if name == "" {
+		return "", nil
+	}
+
+	// Используем NER для извлечения сущностей
+	entities := n.ner.ExtractEntities(name)
+
+	var attributes []*database.ItemAttribute
+	normalized := strings.ToLower(name)
+
+	// Преобразуем NER сущности в ItemAttribute
+	for _, entity := range entities {
+		attrType := "text_value"
+		attrName := string(entity.Type)
+
+		// Определяем тип атрибута на основе NER типа
+		switch entity.Type {
+		case algorithms.NEREntityTypeMaterial:
+			attrType = "text_value"
+			attrName = "material"
+		case algorithms.NEREntityTypeColor:
+			attrType = "text_value"
+			attrName = "color"
+		case algorithms.NEREntityTypeType:
+			attrType = "text_value"
+			attrName = "type"
+		case algorithms.NEREntityTypeDimension:
+			attrType = "dimension"
+			attrName = "dimension"
+		case algorithms.NEREntityTypeWeight:
+			attrType = "numeric_value"
+			attrName = "weight"
+		case algorithms.NEREntityTypeLength:
+			attrType = "numeric_value"
+			attrName = "length"
+		case algorithms.NEREntityTypeVolume:
+			attrType = "numeric_value"
+			attrName = "volume"
+		case algorithms.NEREntityTypePower:
+			attrType = "numeric_value"
+			attrName = "power"
+		case algorithms.NEREntityTypeCode:
+			attrType = "article_code"
+			attrName = "code"
+		}
+
+		attr := &database.ItemAttribute{
+			AttributeType:  attrType,
+			AttributeName:  attrName,
+			AttributeValue: entity.Value,
+			Unit:           entity.Unit,
+			OriginalText:   entity.Text,
+			Confidence:     entity.Confidence,
+		}
+
+		attributes = append(attributes, attr)
+
+		// Удаляем найденную сущность из нормализованного текста
+		normalized = strings.Replace(normalized, strings.ToLower(entity.Text), "", 1)
+	}
+
+	// Применяем стандартную нормализацию к оставшемуся тексту
+	normalized = n.NormalizeName(normalized)
+
+	return normalized, attributes
+}
+
 // ExtractAttributesWithPositional извлекает атрибуты используя позиционную схему
 // Полезно для стандартизированных данных, где позиция токена определяет его смысл
 func (n *NameNormalizer) ExtractAttributesWithPositional(name string, schemaName string) (string, []*database.ItemAttribute, error) {
@@ -720,19 +817,19 @@ func (n *NameNormalizer) CompareExtractionMethods(name string) map[string]interf
 	// Метод 1: Стандартный ExtractAttributes
 	norm1, attrs1 := n.ExtractAttributes(name)
 	result["standard"] = map[string]interface{}{
-		"normalized":     norm1,
-		"attributes":     attrs1,
-		"count":          len(attrs1),
-		"method":         "regex-based",
+		"normalized": norm1,
+		"attributes": attrs1,
+		"count":      len(attrs1),
+		"method":     "regex-based",
 	}
 
 	// Метод 2: Контекстный ExtractAttributesContextual
 	norm2, attrs2 := n.ExtractAttributesContextual(name)
 	result["contextual"] = map[string]interface{}{
-		"normalized":     norm2,
-		"attributes":     attrs2,
-		"count":          len(attrs2),
-		"method":         "contextual-tokenization",
+		"normalized": norm2,
+		"attributes": attrs2,
+		"count":      len(attrs2),
+		"method":     "contextual-tokenization",
 	}
 
 	// Сравнение
@@ -767,11 +864,4 @@ func (n *NameNormalizer) recommendMethod(standardCount, contextualCount int, nam
 	return "contextual"
 }
 
-// abs возвращает абсолютное значение разности
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
+// abs удален - используется функция из method_selector.go

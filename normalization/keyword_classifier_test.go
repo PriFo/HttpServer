@@ -64,10 +64,10 @@ func TestKeywordClassifier_ClassifyByKeyword(t *testing.T) {
 			if !isProduct && tt.shouldMatch {
 				t.Logf("Warning: '%s' not detected as product, but should match. This may affect classification.", tt.normalizedName)
 			}
-			
+
 			result, found := kc.ClassifyByKeyword(tt.normalizedName, tt.category)
 			if found != tt.shouldMatch {
-				t.Errorf("ClassifyByKeyword(%q, %q) found = %v, want %v (isProduct: %v)", 
+				t.Errorf("ClassifyByKeyword(%q, %q) found = %v, want %v (isProduct: %v)",
 					tt.normalizedName, tt.category, found, tt.shouldMatch, isProduct)
 				return
 			}
@@ -116,7 +116,7 @@ func TestKeywordClassifier_LearnFromSuccessfulClassification(t *testing.T) {
 
 	// Используем товар, который точно определится как продукт
 	testName := "тестовый болт м10"
-	
+
 	// Проверяем, что товар определяется как продукт
 	if !kc.isProduct(testName) {
 		t.Skip("Test item not detected as product, skipping test")
@@ -150,4 +150,3 @@ func TestKeywordClassifier_LearnFromSuccessfulClassification(t *testing.T) {
 		t.Error("Expected code, got empty string")
 	}
 }
-

@@ -1,0 +1,141 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-11-23T00:25:27+03:00",
+  "counterparties": {
+    "total_unique": 4,
+    "total_duplicates": 5,
+    "duplicate_groups": 1
+  },
+  "nomenclature": {
+    "total_unique": 3,
+    "total_duplicates": 2,
+    "duplicate_groups": 1
+  },
+  "results": [
+    {
+      "id": 1,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "1234567890",
+      "kpp": "123456789",
+      "quality_score": 0.95,
+      "duplicate_group": 1,
+      "is_master": true
+    },
+    {
+      "id": 2,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "1234567890",
+      "kpp": "123456789",
+      "quality_score": 0.9,
+      "duplicate_group": 1
+    },
+    {
+      "id": 3,
+      "entity_type": "counterparty",
+      "normalized_name": "ИП Ромашка",
+      "inn": "123456789012",
+      "quality_score": 0.85,
+      "is_master": true
+    },
+    {
+      "id": 4,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "1234567890",
+      "quality_score": 0.8,
+      "duplicate_group": 1
+    },
+    {
+      "id": 5,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "1234567890",
+      "quality_score": 0.75,
+      "duplicate_group": 1
+    },
+    {
+      "id": 6,
+      "entity_type": "counterparty",
+      "normalized_name": "Ромашка",
+      "inn": "1234567890",
+      "quality_score": 0.7,
+      "is_master": true
+    },
+    {
+      "id": 7,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "1234567890",
+      "quality_score": 0.9,
+      "duplicate_group": 1
+    },
+    {
+      "id": 8,
+      "entity_type": "counterparty",
+      "normalized_name": "Ромашка",
+      "inn": "1234567890",
+      "quality_score": 0.85,
+      "is_master": true
+    },
+    {
+      "id": 9,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "12345",
+      "quality_score": 0.6,
+      "is_master": true
+    },
+    {
+      "id": 10,
+      "entity_type": "counterparty",
+      "normalized_name": "ООО Ромашка",
+      "inn": "9876543210",
+      "quality_score": 0.9,
+      "duplicate_group": 2,
+      "is_master": true
+    },
+    {
+      "id": 11,
+      "entity_type": "nomenclature",
+      "normalized_name": "Винт Винтажный",
+      "category": "Крепеж",
+      "quality_score": 0.95,
+      "duplicate_group": 3,
+      "is_master": true
+    },
+    {
+      "id": 12,
+      "entity_type": "nomenclature",
+      "normalized_name": "Винт Винтажный",
+      "category": "Крепеж",
+      "quality_score": 0.9,
+      "duplicate_group": 3
+    },
+    {
+      "id": 13,
+      "entity_type": "nomenclature",
+      "normalized_name": "Гайка М8",
+      "category": "Крепеж",
+      "quality_score": 0.8,
+      "is_master": true
+    },
+    {
+      "id": 14,
+      "entity_type": "nomenclature",
+      "normalized_name": "Болт М10",
+      "category": "Крепеж",
+      "quality_score": 0.75,
+      "is_master": true
+    },
+    {
+      "id": 15,
+      "entity_type": "nomenclature",
+      "normalized_name": "Шайба М8",
+      "category": "Крепеж",
+      "quality_score": 0.85,
+      "is_master": true
+    }
+  ]
+}

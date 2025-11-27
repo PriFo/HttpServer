@@ -1,0 +1,85 @@
+=== ╨б╨Я╨Ш╨б╨Ю╨Ъ ╨Т╨б╨Х╨е ╨в╨Р╨С╨Ы╨Ш╨ж ╨Т service.db ===
+
+2025/11/26 00:43:36 Running migration: creating normalization_sessions table...
+2025/11/26 00:43:36 Normalization sessions migration completed: table and 6 indexes created
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: app_config
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: app_config_history
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: category_classifiers
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: client_benchmarks
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 6183
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: client_normalization_sessions
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: client_projects
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 3
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: clients
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 3
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: counterparty_databases
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: database_metadata
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 7
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: database_table_metadata
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: folding_strategies
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: model_benchmark_history
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: normalization_config
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 1
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: normalization_sessions
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: normalized_counterparties
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: notifications
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: okpd2_classifier
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 152
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: pending_databases
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: project_databases
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: project_normalization_config
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: project_type_classifiers
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: providers
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 6
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: tnved_reference
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: tu_gost_reference
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: websearch_provider_stats
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: websearch_providers
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 4
+
+ЁЯУЛ ╨в╨░╨▒╨╗╨╕╤Ж╨░: worker_config
+   ╨Ч╨░╨┐╨╕╤Б╨╡╨╣: 0
+

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"httpserver/database"
+	"httpserver/normalization/algorithms"
 )
 
 // DuplicateGroup группа потенциальных дубликатов
@@ -28,6 +29,11 @@ type FuzzyMatcher struct {
 	maxComparisons    int // Максимальное количество сравнений на элемент
 	batchSize         int // Размер батча для обработки
 	prefixLength      int // Длина префикса для предварительной фильтрации
+	
+	// Новые алгоритмы
+	similarityMetrics *algorithms.SimilarityMetrics
+	phoneticMatcher   *algorithms.PhoneticMatcher
+	ngramGenerator    *algorithms.NGramGenerator
 }
 
 // NewFuzzyMatcher создает новый нечеткий сопоставитель
@@ -41,6 +47,11 @@ func NewFuzzyMatcher(db *database.DB, threshold float64) *FuzzyMatcher {
 		maxComparisons: 1000, // Максимум 1000 сравнений на элемент
 		batchSize:      500,  // Обрабатываем по 500 элементов за раз
 		prefixLength:   3,    // Используем первые 3 символа для фильтрации
+		
+		// Инициализируем новые алгоритмы
+		similarityMetrics: algorithms.NewSimilarityMetrics(),
+		phoneticMatcher:   algorithms.NewPhoneticMatcher(),
+		ngramGenerator:    algorithms.NewNGramGenerator(2), // биграммы
 	}
 }
 
@@ -277,7 +288,7 @@ func (fm *FuzzyMatcher) prefixSimilarity(p1, p2 string) float64 {
 	return float64(matches) / float64(len(p1))
 }
 
-// calculateSimilarity рассчитывает схожесть двух строк используя алгоритм Левенштейна
+// calculateSimilarity рассчитывает схожесть двух строк используя комбинированные алгоритмы
 func (fm *FuzzyMatcher) calculateSimilarity(s1, s2 string) float64 {
 	// Нормализация строк
 	norm1 := strings.ToLower(strings.TrimSpace(s1))
@@ -287,15 +298,8 @@ func (fm *FuzzyMatcher) calculateSimilarity(s1, s2 string) float64 {
 		return 1.0
 	}
 
-	// Расчет расстояния Левенштейна
-	distance := levenshteinDistance(norm1, norm2)
-	maxLen := max(len(norm1), len(norm2))
-
-	if maxLen == 0 {
-		return 1.0
-	}
-
-	return 1.0 - float64(distance)/float64(maxLen)
+	// Используем комбинированную метрику схожести
+	return fm.similarityMetrics.CombinedSimilarity(norm1, norm2)
 }
 
 // levenshteinDistance рассчитывает расстояние Левенштейна между двумя строками

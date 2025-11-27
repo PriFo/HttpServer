@@ -35,6 +35,9 @@ type NormalizationHandlers struct {
 		HandleGetSessionHistory(http.ResponseWriter, *http.Request)
 		HandleRevertStage(http.ResponseWriter, *http.Request)
 		HandleApplyCategorization(http.ResponseWriter, *http.Request)
+		HandleDeleteAllNormalizedData(http.ResponseWriter, *http.Request)
+		HandleDeleteNormalizedDataByProject(http.ResponseWriter, *http.Request)
+		HandleDeleteNormalizedDataBySession(http.ResponseWriter, *http.Request)
 	}
 	// Legacy handlers для fallback
 	HandleNormalizeStart              http.HandlerFunc
@@ -62,6 +65,15 @@ type NormalizationHandlers struct {
 }
 
 // RegisterNormalizationRoutes регистрирует маршруты для normalization
+//
+// Примечание: Следующие роуты намеренно не включены в legacy-систему, так как они используют
+// параметризованные пути (path parameters) с :clientId и :projectId, которые legacy-система
+// не поддерживает. Эти роуты доступны только через Gin router:
+//   - POST /api/clients/:clientId/projects/:projectId/normalization/start
+//   - GET /api/clients/:clientId/projects/:projectId/normalization/status
+//   - GET /api/clients/:clientId/projects/:projectId/normalization/preview-stats
+//
+// Это стимулирует миграцию клиентов на современную архитектуру с Gin router.
 func RegisterNormalizationRoutes(mux *http.ServeMux, h *NormalizationHandlers) {
 	registered := map[string]bool{}
 	register := func(pattern string, handler http.HandlerFunc) {
@@ -111,6 +123,9 @@ func RegisterNormalizationRoutes(mux *http.ServeMux, h *NormalizationHandlers) {
 		register("/api/normalization/history", h.OldHandler.HandleGetSessionHistory)
 		register("/api/normalization/revert", h.OldHandler.HandleRevertStage)
 		register("/api/normalization/apply-categorization", h.OldHandler.HandleApplyCategorization)
+		register("/api/normalization/data/all", h.OldHandler.HandleDeleteAllNormalizedData)
+		register("/api/normalization/data/project", h.OldHandler.HandleDeleteNormalizedDataByProject)
+		register("/api/normalization/data/session", h.OldHandler.HandleDeleteNormalizedDataBySession)
 	} else {
 		// Fallback к legacy handlers
 		register("/api/normalize/start", h.HandleNormalizeStart)

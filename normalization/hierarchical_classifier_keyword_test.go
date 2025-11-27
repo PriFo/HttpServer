@@ -22,6 +22,22 @@ func TestHierarchicalClassifier_KeywordIntegration(t *testing.T) {
 		t.Fatalf("Failed to init schema: %v", err)
 	}
 
+	// Создаем таблицу kpved_classifier, если её нет
+	createTable := `
+		CREATE TABLE IF NOT EXISTS kpved_classifier (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			code TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL,
+			parent_code TEXT,
+			level INTEGER,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`
+	_, err = serviceDB.Exec(createTable)
+	if err != nil {
+		t.Fatalf("Failed to create kpved_classifier table: %v", err)
+	}
+
 	// Добавляем минимальные данные КПВЭД для теста
 	_, err = serviceDB.Exec(`
 		INSERT INTO kpved_classifier (code, name, parent_code, level) VALUES
@@ -81,6 +97,22 @@ func TestHierarchicalClassifier_KeywordCache(t *testing.T) {
 		t.Fatalf("Failed to init schema: %v", err)
 	}
 
+	// Создаем таблицу kpved_classifier, если её нет
+	createTable := `
+		CREATE TABLE IF NOT EXISTS kpved_classifier (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			code TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL,
+			parent_code TEXT,
+			level INTEGER,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`
+	_, err = serviceDB.Exec(createTable)
+	if err != nil {
+		t.Fatalf("Failed to create kpved_classifier table: %v", err)
+	}
+
 	// Добавляем минимальные данные
 	_, err = serviceDB.Exec(`
 		INSERT INTO kpved_classifier (code, name, parent_code, level) VALUES
@@ -117,4 +149,3 @@ func TestHierarchicalClassifier_KeywordCache(t *testing.T) {
 		t.Errorf("Expected code '25.94.11', got '%s'", result.FinalCode)
 	}
 }
-

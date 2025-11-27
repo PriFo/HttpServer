@@ -249,6 +249,50 @@ func (db *DB) GetFoldingStrategy(id int) (*FoldingStrategy, error) {
 	return strategy, nil
 }
 
+// GetAllFoldingStrategies возвращает все стратегии свертки
+func (db *DB) GetAllFoldingStrategies() ([]*FoldingStrategy, error) {
+	query := `
+		SELECT id, name, description, strategy_config, client_id, is_default, created_at, updated_at
+		FROM folding_strategies
+		ORDER BY created_at DESC
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get folding strategies: %w", err)
+	}
+	defer rows.Close()
+
+	var strategies []*FoldingStrategy
+	for rows.Next() {
+		strategy := &FoldingStrategy{}
+		var clientID sql.NullInt64
+
+		err := rows.Scan(
+			&strategy.ID,
+			&strategy.Name,
+			&strategy.Description,
+			&strategy.StrategyConfig,
+			&clientID,
+			&strategy.IsDefault,
+			&strategy.CreatedAt,
+			&strategy.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan folding strategy: %w", err)
+		}
+
+		if clientID.Valid {
+			id := int(clientID.Int64)
+			strategy.ClientID = &id
+		}
+
+		strategies = append(strategies, strategy)
+	}
+
+	return strategies, nil
+}
+
 // GetFoldingStrategiesByClient получает стратегии свертки для клиента
 func (db *DB) GetFoldingStrategiesByClient(clientID int) ([]*FoldingStrategy, error) {
 	query := `
@@ -552,6 +596,12 @@ func (db *DB) GetClassificationStats() (map[string]interface{}, error) {
 	levelStats := make(map[string]int)
 
 	for level := 1; level <= 5; level++ {
+		// Валидация имени колонки для безопасности
+		columnName := fmt.Sprintf("category_level%d", level)
+		if err := ValidateColumnName(columnName, false); err != nil {
+			return nil, fmt.Errorf("invalid column name for level %d: %w", level, err)
+		}
+		
 		var count int
 		err := db.conn.QueryRow(fmt.Sprintf("SELECT COUNT(DISTINCT category_level%d) FROM catalog_items WHERE category_level%d IS NOT NULL AND category_level%d != ''", level, level, level)).Scan(&count)
 		if err != nil {

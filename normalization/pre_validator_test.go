@@ -8,102 +8,102 @@ func TestPreValidator_PreValidate(t *testing.T) {
 	validator := NewPreValidator()
 
 	tests := []struct {
-		name             string
-		input            string
-		expectedValid    bool
-		expectedReason   string
-		minConfidence    float64
+		name           string
+		input          string
+		expectedValid  bool
+		expectedReason string
+		minConfidence  float64
 	}{
 		{
-			name:             "Valid simple name",
-			input:            "Болт М12",
-			expectedValid:    true,
-			expectedReason:   "",
-			minConfidence:    1.0,
+			name:           "Valid simple name",
+			input:          "Болт М12",
+			expectedValid:  true,
+			expectedReason: "",
+			minConfidence:  1.0,
 		},
 		{
-			name:             "Valid name with spaces",
-			input:            "  Труба стальная 100x100  ",
-			expectedValid:    true,
-			expectedReason:   "",
-			minConfidence:    1.0,
+			name:           "Valid name with spaces",
+			input:          "  Труба стальная 100x100  ",
+			expectedValid:  true,
+			expectedReason: "",
+			minConfidence:  1.0,
 		},
 		{
-			name:             "Empty string",
-			input:            "",
-			expectedValid:    false,
-			expectedReason:   "empty_string",
-			minConfidence:    0.0,
+			name:           "Empty string",
+			input:          "",
+			expectedValid:  false,
+			expectedReason: "empty_string",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Too short",
-			input:            "ab",
-			expectedValid:    false,
-			expectedReason:   "too_short",
-			minConfidence:    0.0,
+			name:           "Too short",
+			input:          "ab",
+			expectedValid:  false,
+			expectedReason: "too_short",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Test pattern (Russian)",
-			input:            "ТЕСТ номенклатура",
-			expectedValid:    false,
-			expectedReason:   "test_pattern_detected",
-			minConfidence:    0.0,
+			name:           "Test pattern (Russian)",
+			input:          "ТЕСТ номенклатура",
+			expectedValid:  false,
+			expectedReason: "test_pattern_detected",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Test pattern (English)",
-			input:            "Test item for demo",
-			expectedValid:    false,
-			expectedReason:   "test_pattern_detected",
-			minConfidence:    0.0,
+			name:           "Test pattern (English)",
+			input:          "Test item for demo",
+			expectedValid:  false,
+			expectedReason: "test_pattern_detected",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Delete marker",
-			input:            "[Удалить] Старая запись",
-			expectedValid:    false,
-			expectedReason:   "test_pattern_detected",
-			minConfidence:    0.0,
+			name:           "Delete marker",
+			input:          "[Удалить] Старая запись",
+			expectedValid:  false,
+			expectedReason: "test_pattern_detected",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Only numbers",
-			input:            "123456789",
-			expectedValid:    false,
-			expectedReason:   "only_numbers_or_special_chars",
-			minConfidence:    0.0,
+			name:           "Only numbers",
+			input:          "123456789",
+			expectedValid:  false,
+			expectedReason: "only_numbers_or_special_chars",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Only special chars",
-			input:            "---===***",
-			expectedValid:    false,
-			expectedReason:   "test_pattern_detected", // Ловится раньше по паттерну ^===|^---
-			minConfidence:    0.0,
+			name:           "Only special chars",
+			input:          "---===***",
+			expectedValid:  false,
+			expectedReason: "test_pattern_detected", // Ловится раньше по паттерну ^===|^---
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Valid with multiple spaces",
-			input:            "Болт     М12   длинный",
-			expectedValid:    true,
-			expectedReason:   "",
-			minConfidence:    1.0,
+			name:           "Valid with multiple spaces",
+			input:          "Болт     М12   длинный",
+			expectedValid:  true,
+			expectedReason: "",
+			minConfidence:  1.0,
 		},
 		{
-			name:             "Valid with special chars",
-			input:            "Кабель ВВГ-нг(А)-LS 3х2,5",
-			expectedValid:    true,
-			expectedReason:   "",
-			minConfidence:    1.0,
+			name:           "Valid with special chars",
+			input:          "Кабель ВВГ-нг(А)-LS 3х2,5",
+			expectedValid:  true,
+			expectedReason: "",
+			minConfidence:  1.0,
 		},
 		{
-			name:             "Draft marker",
-			input:            "Черновик - Новая позиция",
-			expectedValid:    false,
-			expectedReason:   "test_pattern_detected",
-			minConfidence:    0.0,
+			name:           "Draft marker",
+			input:          "Черновик - Новая позиция",
+			expectedValid:  false,
+			expectedReason: "test_pattern_detected",
+			minConfidence:  0.0,
 		},
 		{
-			name:             "Repeating characters",
-			input:            "aaaaaaaaaaaaaaaaaaaa",
-			expectedValid:    false,
-			expectedReason:   "excessive_repeating_chars", // Проверка повторов срабатывает раньше
-			minConfidence:    0.0,
+			name:           "Repeating characters",
+			input:          "aaaaaaaaaaaaaaaaaaaa",
+			expectedValid:  false,
+			expectedReason: "excessive_repeating_chars", // Проверка повторов срабатывает раньше
+			minConfidence:  0.0,
 		},
 	}
 

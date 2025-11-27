@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проверка функциональности контрагентов</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #666;
+            margin-top: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .status.ok {
+            background: #4CAF50;
+            color: white;
+        }
+        .status.warning {
+            background: #FF9800;
+            color: white;
+        }
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+        .status.pending {
+            background: #9E9E9E;
+            color: white;
+        }
+        .code-block {
+            background: #f4f4f4;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .test-item {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        .test-item.pending {
+            border-left-color: #9E9E9E;
+        }
+        .test-item.error {
+            border-left-color: #f44336;
+        }
+        .endpoint {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .endpoint code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            padding: 5px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Проверка функциональности контрагентов</h1>
+        <p><strong>Дата проверки:</strong> <span id="date"></span></p>
+        <p><strong>Статус:</strong> <span class="status pending">Требуется ручная проверка</span></p>
+
+        <h2>1. Проверка API Endpoint</h2>
+
+        <h3>1.1. Основной endpoint</h3>
+        <div class="endpoint">
+            <strong>GET</strong> <code>/api/counterparties/normalized?client_id={id}</code>
+        </div>
+        
+        <div class="test-item">
+            <strong>Описание:</strong> Получение списка нормализованных контрагентов для клиента<br>
+            <strong>Параметры:</strong>
+            <ul>
+                <li><code>client_id</code> (обязательный) - ID клиента</li>
+                <li><code>project_id</code> (опциональный) - ID проекта для фильтрации</li>
+                <li><code>page</code> - номер страницы</li>
+                <li><code>limit</code> - количество записей на странице (по умолчанию 20, максимум 1000)</li>
+                <li><code>offset</code> - смещение (альтернатива page)</li>
+                <li><code>search</code> - поисковый запрос (по имени, ИНН, БИН)</li>
+                <li><code>enrichment</code> - фильтр по источнику обогащения</li>
+                <li><code>subcategory</code> - фильтр по подкатегории</li>
+            </ul>
+            <strong>Ответ:</strong>
+            <div class="code-block">
+{
+  "counterparties": [...],
+  "projects": [...],
+  "total": 100,
+  "offset": 0,
+  "limit": 20,
+  "page": 1
+}
+            </div>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h3>1.2. Тестовые запросы</h3>
+        
+        <div class="test-item">
+            <strong>Тест 1:</strong> Получение списка клиентов<br>
+            <div class="code-block">GET /api/clients</div>
+            <strong>Ожидаемый результат:</strong> Список клиентов с ID<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <div class="test-item">
+            <strong>Тест 2:</strong> Получение контрагентов для клиента<br>
+            <div class="code-block">GET /api/counterparties/normalized?client_id=1</div>
+            <strong>Ожидаемый результат:</strong> Список контрагентов с корректной структурой данных<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <div class="test-item">
+            <strong>Тест 3:</strong> Пагинация<br>
+            <div class="code-block">GET /api/counterparties/normalized?client_id=1&page=1&limit=10</div>
+            <strong>Ожидаемый результат:</strong> Возвращается не более 10 записей, корректные значения page, limit, total<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <div class="test-item">
+            <strong>Тест 4:</strong> Поиск<br>
+            <div class="code-block">GET /api/counterparties/normalized?client_id=1&search=тест</div>
+            <strong>Ожидаемый результат:</strong> Возвращаются только контрагенты, соответствующие поисковому запросу<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <div class="test-item">
+            <strong>Тест 5:</strong> Фильтр по проекту<br>
+            <div class="code-block">GET /api/counterparties/normalized?client_id=1&project_id=1</div>
+            <strong>Ожидаемый результат:</strong> Возвращаются только контрагенты указанного проекта<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h3>1.3. Обработка ошибок</h3>
+
+        <div class="test-item">
+            <strong>Тест 6:</strong> Несуществующий клиент<br>
+            <div class="code-block">GET /api/counterparties/normalized?client_id=999999</div>
+            <strong>Ожидаемый результат:</strong> Пустой список или ошибка 404/400<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <div class="test-item">
+            <strong>Тест 7:</strong> Запрос без client_id<br>
+            <div class="code-block">GET /api/counterparties/normalized</div>
+            <strong>Ожидаемый результат:</strong> Ошибка 400 Bad Request<br>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h2>2. Проверка фронтенда</h2>
+
+        <h3>2.1. Страница клиента</h3>
+        <div class="test-item">
+            <strong>URL:</strong> <code>/clients/{clientId}</code><br>
+            <strong>Компонент:</strong> <code>frontend/app/clients/[clientId]/page.tsx</code><br>
+            <strong>Функциональность:</strong>
+            <ul>
+                <li>Отображение информации о клиенте</li>
+                <li>Вкладки: Обзор, Номенклатура, Контрагенты, Базы данных, Статистика</li>
+                <li>Переход на вкладку "Контрагенты"</li>
+            </ul>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h3>2.2. Вкладка "Контрагенты"</h3>
+        <div class="test-item">
+            <strong>Компонент:</strong> <code>frontend/app/clients/[clientId]/components/counterparties-tab.tsx</code><br>
+            <strong>Функциональность:</strong>
+            <ul>
+                <li>Загрузка данных через API</li>
+                <li>Отображение таблицы контрагентов</li>
+                <li>Фильтр по проекту (Select)</li>
+                <li>Поиск по названию или ИНН/БИН</li>
+                <li>Пагинация (кнопки "Назад" и "Вперед")</li>
+                <li>Сортировка по колонкам (название, нормализованное название, ИНН/БИН, тип, страна, статус)</li>
+                <li>Открытие детальной информации о контрагенте (кнопка с иконкой глаза)</li>
+            </ul>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h3>2.3. Детальная информация о контрагенте</h3>
+        <div class="test-item">
+            <strong>Компонент:</strong> <code>frontend/app/clients/[clientId]/components/counterparty-detail-dialog.tsx</code><br>
+            <strong>Функциональность:</strong>
+            <ul>
+                <li>Отображение основной информации (название, нормализованное название, ИНН/БИН, тип, статус)</li>
+                <li>Отображение контактной информации (email, телефон, адрес)</li>
+                <li>Отображение дополнительной информации (страна, описание)</li>
+            </ul>
+            <strong>Статус:</strong> <span class="status pending">Требуется проверка</span>
+        </div>
+
+        <h2>3. Проверка интеграции</h2>
+
+        <h3>3.1. API Route (Next.js)</h3>
+        <div class="test-item">
+            <strong>Файл:</strong> <code>frontend/app/api/counterparties/normalized/route.ts</code><br>
+            <strong>Функциональность:</strong>
+            <ul>
+                <li>Проксирование запросов к backend</li>
+                <li>Конвертация параметра page в offset</li>
+                <li>Валидация обязательных параметров (client_id или project_id)</li>
+                <li>Обработка ошибок</li>
+            </ul>
+            <strong>Статус:</strong> <span class="status ok">Код проверен</span>
+        </div>
+
+        <h3>3.2. Backend Handler</h3>
+        <div class="test-item">
+            <strong>Файл:</strong> <code>server/server.go</code><br>
+            <strong>Функция:</strong> <code>handleNormalizedCounterparties</code><br>
+            <strong>Функциональность:</strong>
+            <ul>
+                <li>Обработка запросов GET /api/counterparties/normalized</li>
+                <li>Поддержка фильтрации по client_id и project_id</li>
+                <li>Поддержка пагинации (page, offset, limit)</li>
+                <li>Поддержка поиска (search)</li>
+                <li>Поддержка дополнительных фильтров (enrichment, subcategory)</li>
+                <li>Возврат структурированного ответа с метаданными</li>
+            </ul>
+            <strong>Статус:</strong> <span class="status ok">Код проверен</span>
+        </div>
+
+        <h2>4. Инструкции для ручной проверки</h2>
+
+        <div class="note">
+            <strong>Внимание:</strong> Для полной проверки необходимо запустить backend и frontend серверы.
+        </div>
+
+        <h3>4.1. Запуск серверов</h3>
+        <div class="code-block">
+# Backend (порт 9999)
+go run main_no_gui.go
+
+# Frontend (порт 3000)
+cd frontend
+npm run dev
+        </div>
+
+        <h3>4.2. Проверка API</h3>
+        <ol>
+            <li>Получить список клиентов: <code>GET http://localhost:9999/api/clients</code></li>
+            <li>Выбрать первого клиента с ID</li>
+            <li>Проверить запрос: <code>GET http://localhost:9999/api/counterparties/normalized?client_id={id}</code></li>
+            <li>Проверить структуру ответа: наличие полей counterparties, projects, total, offset, limit, page</li>
+            <li>Проверить пагинацию: <code>?client_id={id}&page=1&limit=10</code></li>
+            <li>Проверить поиск: <code>?client_id={id}&search=тест</code></li>
+            <li>Проверить фильтр по проекту: <code>?client_id={id}&project_id={projectId}</code></li>
+        </ol>
+
+        <h3>4.3. Проверка фронтенда</h3>
+        <ol>
+            <li>Открыть страницу клиента: <code>http://localhost:3000/clients/{clientId}</code></li>
+            <li>Перейти на вкладку "Контрагенты"</li>
+            <li>Проверить загрузку данных (должна появиться таблица)</li>
+            <li>Проверить отображение таблицы контрагентов (колонки: Название, Нормализованное название, ИНН/БИН, Тип, Страна, Статус)</li>
+            <li>Проверить работу фильтра по проекту (выбрать проект из выпадающего списка)</li>
+            <li>Проверить работу поиска (ввести текст в поле поиска)</li>
+            <li>Проверить работу пагинации (нажать кнопки "Назад" и "Вперед")</li>
+            <li>Проверить работу сортировки (нажать на заголовки колонок)</li>
+            <li>Проверить открытие детальной информации (нажать на кнопку с иконкой глаза)</li>
+        </ol>
+
+        <h2>5. Анализ кода</h2>
+
+        <h3>5.1. Структура данных</h3>
+        <table>
+            <tr>
+                <th>Поле</th>
+                <th>Тип</th>
+                <th>Описание</th>
+            </tr>
+            <tr>
+                <td>counterparties</td>
+                <td>Array</td>
+                <td>Массив объектов контрагентов</td>
+            </tr>
+            <tr>
+                <td>projects</td>
+                <td>Array</td>
+                <td>Массив проектов клиента</td>
+            </tr>
+            <tr>
+                <td>total</td>
+                <td>Number</td>
+                <td>Общее количество контрагентов</td>
+            </tr>
+            <tr>
+                <td>offset</td>
+                <td>Number</td>
+                <td>Смещение для пагинации</td>
+            </tr>
+            <tr>
+                <td>limit</td>
+                <td>Number</td>
+                <td>Лимит записей на странице</td>
+            </tr>
+            <tr>
+                <td>page</td>
+                <td>Number</td>
+                <td>Номер текущей страницы</td>
+            </tr>
+        </table>
+
+        <h3>5.2. Объект контрагента</h3>
+        <table>
+            <tr>
+                <th>Поле</th>
+                <th>Тип</th>
+                <th>Обязательное</th>
+            </tr>
+            <tr>
+                <td>id</td>
+                <td>Number</td>
+                <td>Да</td>
+            </tr>
+            <tr>
+                <td>name</td>
+                <td>String</td>
+                <td>Да</td>
+            </tr>
+            <tr>
+                <td>normalized_name</td>
+                <td>String</td>
+                <td>Да</td>
+            </tr>
+            <tr>
+                <td>tax_id</td>
+                <td>String</td>
+                <td>Нет</td>
+            </tr>
+            <tr>
+                <td>type</td>
+                <td>String</td>
+                <td>Нет</td>
+            </tr>
+            <tr>
+                <td>status</td>
+                <td>String</td>
+                <td>Да</td>
+            </tr>
+            <tr>
+                <td>quality_score</td>
+                <td>Number</td>
+                <td>Нет</td>
+            </tr>
+            <tr>
+                <td>country</td>
+                <td>String</td>
+                <td>Нет</td>
+            </tr>
+            <tr>
+                <td>contact_email</td>
+                <td>String</td>
+                <td>Нет</td>
+            </tr>
+            <tr>
+                <td>contact_phone</td>
+                <td>String</td>
+                <td>Нет</td>
+            </tr>
+        </table>
+
+        <h2>6. Рекомендации</h2>
+
+        <div class="note">
+            <h3>Опциональные улучшения:</h3>
+            <ul>
+                <li>Рассмотреть использование <code>/api/counterparties/all</code> для показа всех контрагентов (из баз и нормализованных)</li>
+                <li>Добавить дополнительные фильтры (по статусу, типу, стране)</li>
+                <li>Добавить экспорт данных в CSV/Excel</li>
+                <li>Добавить массовые операции (выбор нескольких контрагентов)</li>
+            </ul>
+        </div>
+
+        <h2>7. Скрипты для автоматической проверки</h2>
+
+        <div class="test-item">
+            <strong>Python скрипт:</strong> <code>test_counterparties_verification.py</code><br>
+            <strong>PowerShell скрипт:</strong> <code>test_counterparties_verification.ps1</code><br>
+            <strong>Использование:</strong>
+            <div class="code-block">
+# Python
+python test_counterparties_verification.py
+
+# PowerShell
+powershell -ExecutionPolicy Bypass -File test_counterparties_verification.ps1
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('date').textContent = new Date().toLocaleString('ru-RU');
+    </script>
+</body>
+</html>
+

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"httpserver/normalization/algorithms"
 )
 
 // DuplicateType тип дубликата
@@ -21,14 +23,14 @@ const (
 
 // DuplicateGroup группа дубликатов
 type DuplicateGroup struct {
-	GroupID         string           `json:"group_id"`         // Уникальный ID группы
-	Type            DuplicateType    `json:"type"`             // Тип дубликата
-	SimilarityScore float64          `json:"similarity_score"` // Оценка сходства (0-1)
-	ItemIDs         []int            `json:"item_ids"`         // ID записей в группе
-	Items           []DuplicateItem  `json:"items"`            // Полные данные записей
-	SuggestedMaster int              `json:"suggested_master"` // Предлагаемый master record ID
-	Confidence      float64          `json:"confidence"`       // Уверенность в дубликате
-	Reason          string           `json:"reason"`           // Причина определения как дубликат
+	GroupID         string          `json:"group_id"`         // Уникальный ID группы
+	Type            DuplicateType   `json:"type"`             // Тип дубликата
+	SimilarityScore float64         `json:"similarity_score"` // Оценка сходства (0-1)
+	ItemIDs         []int           `json:"item_ids"`         // ID записей в группе
+	Items           []DuplicateItem `json:"items"`            // Полные данные записей
+	SuggestedMaster int             `json:"suggested_master"` // Предлагаемый master record ID
+	Confidence      float64         `json:"confidence"`       // Уверенность в дубликате
+	Reason          string          `json:"reason"`           // Причина определения как дубликат
 }
 
 // DuplicateItem запись в группе дубликатов
@@ -49,26 +51,85 @@ type DuplicateAnalyzer struct {
 	phoneticThreshold       float64 // Порог для phonetic matching
 	wordBasedMinCommonWords int     // Минимальное количество общих слов для группировки
 	wordBasedUseStopWords   bool    // Использовать ли стоп-слова при группировке
+
+	// Универсальный матчер для новых методов
+	universalMatcher   *UniversalMatcher
+	useAdvancedMethods bool // Использовать ли продвинутые методы
+
+	// Метод селектор для автоматического выбора методов
+	methodSelector *MethodSelector
+
+	// Stemmer для токенизации с поддержкой stemming
+	stemmer algorithms.Stemmer
+
+	// Lemmatizer для лемматизации (более точная, чем стемминг)
+	lemmatizer algorithms.Lemmatizer
+
+	// PrefixIndex для оптимизации поиска дубликатов
+	prefixIndex        *algorithms.PrefixIndex
+	usePrefixFiltering bool // Использовать ли префиксную фильтрацию
 }
 
 // NewDuplicateAnalyzer создает новый анализатор дубликатов
 func NewDuplicateAnalyzer() *DuplicateAnalyzer {
+	um := NewUniversalMatcher(true) // Используем кэш
+	ms := NewMethodSelector(um)
+
 	return &DuplicateAnalyzer{
-		exactThreshold:          1.0,  // 100% совпадение
-		semanticThreshold:       0.85, // 85% similarity
-		phoneticThreshold:       0.90, // 90% phonetic similarity
-		wordBasedMinCommonWords: 1,    // Минимум 1 общее слово
+		exactThreshold:          1.0,   // 100% совпадение
+		semanticThreshold:       0.85,  // 85% similarity
+		phoneticThreshold:       0.90,  // 90% phonetic similarity
+		wordBasedMinCommonWords: 1,     // Минимум 1 общее слово
 		wordBasedUseStopWords:   false, // Не использовать стоп-слова по умолчанию
+		universalMatcher:        um,
+		useAdvancedMethods:      true, // Использовать продвинутые методы по умолчанию
+		methodSelector:          ms,
+		stemmer:                 algorithms.NewRussianStemmer(),    // Инициализируем stemmer для токенизации
+		lemmatizer:              algorithms.NewRussianLemmatizer(), // Инициализируем lemmatizer
+		prefixIndex:             algorithms.NewPrefixIndex(3, 3),   // Префиксный индекс для оптимизации
+		usePrefixFiltering:      true,                              // Использовать префиксную фильтрацию по умолчанию
+	}
+}
+
+// SetUniversalMatcher устанавливает универсальный матчер
+func (da *DuplicateAnalyzer) SetUniversalMatcher(um *UniversalMatcher) {
+	da.universalMatcher = um
+	if um != nil {
+		da.methodSelector = NewMethodSelector(um)
+	}
+}
+
+// EnableAdvancedMethods включает/выключает использование продвинутых методов
+func (da *DuplicateAnalyzer) EnableAdvancedMethods(enable bool) {
+	da.useAdvancedMethods = enable
+}
+
+// EnablePrefixFiltering включает/выключает префиксную фильтрацию
+func (da *DuplicateAnalyzer) EnablePrefixFiltering(enable bool) {
+	da.usePrefixFiltering = enable
+}
+
+// SetPrefixIndexLength устанавливает длину префикса для индексации
+func (da *DuplicateAnalyzer) SetPrefixIndexLength(length int) {
+	if length > 0 {
+		da.prefixIndex = algorithms.NewPrefixIndex(length, length)
 	}
 }
 
 // AnalyzeDuplicates находит все дубликаты в списке записей
 // Использует несколько методов: exact matching, semantic similarity, phonetic matching, и word-based grouping
+// Если включены продвинутые методы, использует UniversalMatcher для более точного анализа
 // Пример использования:
 //   analyzer := normalization.NewDuplicateAnalyzer()
 //   groups := analyzer.AnalyzeDuplicates(items)
 func (da *DuplicateAnalyzer) AnalyzeDuplicates(items []DuplicateItem) []DuplicateGroup {
 	var allGroups []DuplicateGroup
+
+	// Если включены продвинутые методы, применяем их для анализа
+	if da.useAdvancedMethods && da.universalMatcher != nil && da.methodSelector != nil {
+		advancedGroups := da.findDuplicatesWithAdvancedMethods(items)
+		allGroups = append(allGroups, advancedGroups...)
+	}
 
 	// 1. Exact duplicates по коду
 	codeGroups := da.findExactDuplicatesByCode(items)
@@ -91,7 +152,7 @@ func (da *DuplicateAnalyzer) AnalyzeDuplicates(items []DuplicateItem) []Duplicat
 	allGroups = append(allGroups, wordGroups...)
 
 	// 6. Объединяем пересекающиеся группы
-	mergedGroups := da.mergeOverlappingGroups(allGroups)
+	mergedGroups := da.MergeOverlappingGroups(allGroups)
 
 	// 7. Для каждой группы выбираем master record
 	for i := range mergedGroups {
@@ -207,16 +268,42 @@ func (da *DuplicateAnalyzer) findExactDuplicatesByName(items []DuplicateItem) []
 func (da *DuplicateAnalyzer) findSemanticDuplicates(items []DuplicateItem) []DuplicateGroup {
 	var groups []DuplicateGroup
 
-	// Строим TF-IDF векторы для каждого item
-	corpus := make([]string, len(items))
-	for i, item := range items {
-		corpus[i] = item.NormalizedName
+	// Используем универсальный матчер или старый метод
+	var computeSimilarity func(s1, s2 string) float64
+	if da.useAdvancedMethods && da.universalMatcher != nil {
+		// Используем гибридный метод
+		methods := []string{"jaccard", "levenshtein", "jaro_winkler"}
+		weights := []float64{0.4, 0.3, 0.3}
+		computeSimilarity = func(s1, s2 string) float64 {
+			sim, err := da.universalMatcher.HybridSimilarity(s1, s2, methods, weights)
+			if err != nil {
+				// Fallback на старый метод
+				metrics := algorithms.NewSimilarityMetrics()
+				return metrics.JaccardIndex(s1, s2)
+			}
+			return sim
+		}
+	} else {
+		// Используем старый метод через SimilarityMetrics
+		metrics := algorithms.NewSimilarityMetrics()
+		computeSimilarity = func(s1, s2 string) float64 {
+			return metrics.JaccardIndex(s1, s2)
+		}
 	}
-	tfidfVectors := buildTFIDFVectors(corpus)
 
-	// Сравниваем каждую пару
+	// Сравниваем каждую пару используя выбранный алгоритм
 	processed := make(map[int]bool)
 	groupCounter := 0
+
+	// Построим префиксный индекс, если включена фильтрация
+	if da.usePrefixFiltering && da.prefixIndex != nil {
+		da.prefixIndex.Clear()
+		for idx, item := range items {
+			if item.NormalizedName != "" {
+				da.prefixIndex.Add(idx, item.NormalizedName)
+			}
+		}
+	}
 
 	for i := 0; i < len(items); i++ {
 		if processed[i] {
@@ -228,13 +315,29 @@ func (da *DuplicateAnalyzer) findSemanticDuplicates(items []DuplicateItem) []Dup
 		duplicates = append(duplicates, items[i])
 		itemIDs = append(itemIDs, items[i].ID)
 
-		for j := i + 1; j < len(items); j++ {
+		// Получаем кандидатов через префиксную фильтрацию
+		var candidates []int
+		if da.usePrefixFiltering && da.prefixIndex != nil && items[i].NormalizedName != "" {
+			candidates = da.prefixIndex.GetCandidates(i, items[i].NormalizedName)
+		} else {
+			// Если фильтрация отключена, сравниваем со всеми
+			candidates = make([]int, 0, len(items)-i-1)
+			for j := i + 1; j < len(items); j++ {
+				candidates = append(candidates, j)
+			}
+		}
+
+		// Сравниваем только с отфильтрованными кандидатами
+		for _, j := range candidates {
 			if processed[j] {
 				continue
 			}
 
-			// Вычисляем косинусную близость
-			similarity := cosineSimilarity(tfidfVectors[i], tfidfVectors[j])
+			// Вычисляем сходство
+			similarity := computeSimilarity(
+				items[i].NormalizedName,
+				items[j].NormalizedName,
+			)
 
 			if similarity >= da.semanticThreshold {
 				duplicates = append(duplicates, items[j])
@@ -250,9 +353,9 @@ func (da *DuplicateAnalyzer) findSemanticDuplicates(items []DuplicateItem) []Dup
 			avgSimilarity := 0.0
 			for k := 0; k < len(duplicates)-1; k++ {
 				for l := k + 1; l < len(duplicates); l++ {
-					avgSimilarity += cosineSimilarity(
-						tfidfVectors[getItemIndex(items, duplicates[k].ID)],
-						tfidfVectors[getItemIndex(items, duplicates[l].ID)],
+					avgSimilarity += computeSimilarity(
+						duplicates[k].NormalizedName,
+						duplicates[l].NormalizedName,
 					)
 				}
 			}
@@ -281,6 +384,19 @@ func (da *DuplicateAnalyzer) findSemanticDuplicates(items []DuplicateItem) []Dup
 func (da *DuplicateAnalyzer) findPhoneticDuplicates(items []DuplicateItem) []DuplicateGroup {
 	var groups []DuplicateGroup
 
+	// Создаем экземпляр фонетического матчера
+	phoneticMatcher := algorithms.NewPhoneticMatcher()
+
+	// Построим префиксный индекс, если включена фильтрация
+	if da.usePrefixFiltering && da.prefixIndex != nil {
+		da.prefixIndex.Clear()
+		for idx, item := range items {
+			if item.NormalizedName != "" {
+				da.prefixIndex.Add(idx, item.NormalizedName)
+			}
+		}
+	}
+
 	processed := make(map[int]bool)
 	groupCounter := 0
 
@@ -294,17 +410,31 @@ func (da *DuplicateAnalyzer) findPhoneticDuplicates(items []DuplicateItem) []Dup
 		duplicates = append(duplicates, items[i])
 		itemIDs = append(itemIDs, items[i].ID)
 
-		phonetic1 := phoneticHash(items[i].NormalizedName)
+		// Используем новый фонетический матчер
+		name1 := items[i].NormalizedName
 
-		for j := i + 1; j < len(items); j++ {
+		// Получаем кандидатов через префиксную фильтрацию
+		var candidates []int
+		if da.usePrefixFiltering && da.prefixIndex != nil && name1 != "" {
+			candidates = da.prefixIndex.GetCandidates(i, name1)
+		} else {
+			// Если фильтрация отключена, сравниваем со всеми
+			candidates = make([]int, 0, len(items)-i-1)
+			for j := i + 1; j < len(items); j++ {
+				candidates = append(candidates, j)
+			}
+		}
+
+		// Сравниваем только с отфильтрованными кандидатами
+		for _, j := range candidates {
 			if processed[j] {
 				continue
 			}
 
-			phonetic2 := phoneticHash(items[j].NormalizedName)
+			name2 := items[j].NormalizedName
 
-			// Levenshtein distance для фонетических хэшей
-			similarity := 1.0 - float64(levenshteinDistance(phonetic1, phonetic2))/float64(max(len(phonetic1), len(phonetic2)))
+			// Используем фонетический матчер для вычисления схожести
+			similarity := phoneticMatcher.Similarity(name1, name2)
 
 			if similarity >= da.phoneticThreshold {
 				duplicates = append(duplicates, items[j])
@@ -342,7 +472,7 @@ func (da *DuplicateAnalyzer) findWordBasedDuplicates(items []DuplicateItem) []Du
 	var groups []DuplicateGroup
 
 	// 1. Извлекаем слова для каждого элемента
-	itemWords := make(map[int]map[string]bool) // itemID -> множество слов
+	itemWords := make(map[int]map[string]bool)   // itemID -> множество слов
 	wordToItems := make(map[string]map[int]bool) // слово -> множество itemID
 
 	for _, item := range items {
@@ -351,7 +481,8 @@ func (da *DuplicateAnalyzer) findWordBasedDuplicates(items []DuplicateItem) []Du
 		}
 
 		// Токенизируем с учетом настройки стоп-слов
-		words := tokenizeWithOptions(item.NormalizedName, da.wordBasedUseStopWords)
+		// Используем лемматизацию для более точного сравнения
+		words := da.tokenizeWithLemmatization(item.NormalizedName, da.wordBasedUseStopWords)
 		if len(words) == 0 {
 			continue
 		}
@@ -528,8 +659,8 @@ func (da *DuplicateAnalyzer) findWordBasedDuplicates(items []DuplicateItem) []Du
 	return groups
 }
 
-// mergeOverlappingGroups объединяет пересекающиеся группы дубликатов
-func (da *DuplicateAnalyzer) mergeOverlappingGroups(groups []DuplicateGroup) []DuplicateGroup {
+// MergeOverlappingGroups объединяет пересекающиеся группы дубликатов
+func (da *DuplicateAnalyzer) MergeOverlappingGroups(groups []DuplicateGroup) []DuplicateGroup {
 	if len(groups) == 0 {
 		return groups
 	}
@@ -724,6 +855,46 @@ func tokenizeWithOptions(text string, useStopWords bool) []string {
 	return tokens
 }
 
+// tokenizeWithStemming - метод DuplicateAnalyzer для токенизации с поддержкой stemming
+func (da *DuplicateAnalyzer) tokenizeWithStemming(text string, useStopWords bool) []string {
+	// Сначала используем стандартную токенизацию
+	tokens := tokenizeWithOptions(text, useStopWords)
+
+	// Применяем stemming для улучшения поиска дубликатов
+	// Используем stemmer из структуры (инициализирован в NewDuplicateAnalyzer)
+	if da.stemmer != nil {
+		stemmedTokens := da.stemmer.StemTokens(tokens)
+		return stemmedTokens
+	}
+
+	// Если stemmer не инициализирован, возвращаем токены без stemming
+	return tokens
+}
+
+// tokenizeWithLemmatization - метод DuplicateAnalyzer для токенизации с поддержкой лемматизации
+// Лемматизация более точная, чем стемминг, так как возвращает нормальную форму слова
+// Пример: "маслами" -> "масло", "сливочного" -> "сливочный"
+func (da *DuplicateAnalyzer) tokenizeWithLemmatization(text string, useStopWords bool) []string {
+	// Сначала используем стандартную токенизацию
+	tokens := tokenizeWithOptions(text, useStopWords)
+
+	// Применяем лемматизацию для улучшения поиска дубликатов
+	// Используем lemmatizer из структуры (инициализирован в NewDuplicateAnalyzer)
+	if da.lemmatizer != nil {
+		lemmatizedTokens := da.lemmatizer.LemmatizeTokens(tokens)
+		return lemmatizedTokens
+	}
+
+	// Если lemmatizer не инициализирован, пробуем использовать stemmer как fallback
+	if da.stemmer != nil {
+		stemmedTokens := da.stemmer.StemTokens(tokens)
+		return stemmedTokens
+	}
+
+	// Если ничего не инициализировано, возвращаем токены как есть
+	return tokens
+}
+
 // phoneticHash создает фонетический хэш для русского текста
 func phoneticHash(text string) string {
 	text = strings.ToLower(text)
@@ -890,10 +1061,125 @@ func min(a, b, c int) int {
 	return c
 }
 
-// max возвращает максимум из двух чисел
-func max(a, b int) int {
-	if a > b {
-		return a
+// max удален - используется функция из method_selector.go
+
+// findDuplicatesWithAdvancedMethods находит дубликаты используя продвинутые методы через UniversalMatcher
+func (da *DuplicateAnalyzer) findDuplicatesWithAdvancedMethods(items []DuplicateItem) []DuplicateGroup {
+	var groups []DuplicateGroup
+	processed := make(map[int]bool)
+	groupCounter := 0
+
+	if da.universalMatcher == nil || da.methodSelector == nil {
+		return groups
 	}
-	return b
+
+	minSimilarity := da.semanticThreshold
+
+	for i := 0; i < len(items); i++ {
+		if processed[i] {
+			continue
+		}
+
+		var duplicates []DuplicateItem
+		var itemIDs []int
+		duplicates = append(duplicates, items[i])
+		itemIDs = append(itemIDs, items[i].ID)
+
+		for j := i + 1; j < len(items); j++ {
+			if processed[j] {
+				continue
+			}
+
+			// Используем метод селектор для выбора оптимального метода
+			method, methods, err := da.methodSelector.SelectMethod(items[i].NormalizedName, items[j].NormalizedName)
+			if err != nil {
+				continue
+			}
+
+			// Вычисляем схожесть используя выбранный метод
+			var similarity float64
+			// Пробуем использовать улучшенный гибридный метод
+			advancedWeights := algorithms.DefaultSimilarityWeights()
+			similarity, err = da.universalMatcher.HybridSimilarityAdvanced(items[i].NormalizedName, items[j].NormalizedName, advancedWeights)
+			if err != nil {
+				// Fallback на старый метод
+				if len(methods) > 1 {
+					// Используем гибридный метод
+					weights := make([]float64, len(methods))
+					for k := range weights {
+						weights[k] = 1.0 / float64(len(methods))
+					}
+					similarity, err = da.universalMatcher.HybridSimilarity(items[i].NormalizedName, items[j].NormalizedName, methods, weights)
+					if err != nil {
+						continue
+					}
+				} else {
+					// Используем один метод
+					similarity, err = da.universalMatcher.Similarity(items[i].NormalizedName, items[j].NormalizedName, method)
+					if err != nil {
+						continue
+					}
+				}
+			}
+
+			// Проверяем, являются ли строки дубликатами
+			if similarity >= minSimilarity {
+				duplicates = append(duplicates, items[j])
+				itemIDs = append(itemIDs, items[j].ID)
+				processed[j] = true
+			}
+		}
+
+		if len(duplicates) >= 2 {
+			processed[i] = true
+
+			// Вычисляем среднюю схожесть
+			avgSimilarity := 0.0
+			count := 0
+			for k := 0; k < len(duplicates); k++ {
+				for l := k + 1; l < len(duplicates); l++ {
+					method, methods, err := da.methodSelector.SelectMethod(duplicates[k].NormalizedName, duplicates[l].NormalizedName)
+					if err != nil {
+						continue
+					}
+					var sim float64
+					// Используем улучшенный гибридный метод
+					advancedWeights := algorithms.DefaultSimilarityWeights()
+					sim, err = da.universalMatcher.HybridSimilarityAdvanced(duplicates[k].NormalizedName, duplicates[l].NormalizedName, advancedWeights)
+					if err != nil {
+						// Fallback на старый метод
+						if len(methods) > 1 {
+							weights := make([]float64, len(methods))
+							for m := range weights {
+								weights[m] = 1.0 / float64(len(methods))
+							}
+							sim, err = da.universalMatcher.HybridSimilarity(duplicates[k].NormalizedName, duplicates[l].NormalizedName, methods, weights)
+						} else {
+							sim, err = da.universalMatcher.Similarity(duplicates[k].NormalizedName, duplicates[l].NormalizedName, method)
+						}
+					}
+					if err == nil {
+						avgSimilarity += sim
+						count++
+					}
+				}
+			}
+			if count > 0 {
+				avgSimilarity /= float64(count)
+			}
+
+			groups = append(groups, DuplicateGroup{
+				GroupID:         formatGroupID("advanced", groupCounter),
+				Type:            DuplicateTypeSemantic,
+				SimilarityScore: avgSimilarity,
+				ItemIDs:         itemIDs,
+				Items:           duplicates,
+				Confidence:      avgSimilarity,
+				Reason:          "Advanced methods similarity",
+			})
+			groupCounter++
+		}
+	}
+
+	return groups
 }

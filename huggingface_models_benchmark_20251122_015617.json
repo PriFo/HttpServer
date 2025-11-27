@@ -1,0 +1,20 @@
+{
+  "models": [
+    {
+      "avg_response_time_ms": 500,
+      "error_count": 10,
+      "max_response_time_ms": 0,
+      "median_response_time_ms": 0,
+      "min_response_time_ms": 0,
+      "model": "failed-model",
+      "p95_response_time_ms": 0,
+      "priority": 1,
+      "speed": 0,
+      "status": "✗ FAILED",
+      "success_count": 0,
+      "success_rate": 0,
+      "total_requests": 10
+    }
+  ],
+  "timestamp": "2025-11-22T01:56:17+03:00"
+}

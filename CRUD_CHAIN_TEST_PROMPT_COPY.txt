@@ -1,0 +1,386 @@
+Промпт для генерации интеграционных тестов CRUD API
+
+Скопируй этот промпт в новый чат для автоматической генерации интеграционных тестов, проверяющих полную цепочку вызовов всех CRUD-операций:
+
+---
+
+## Роль
+
+Ты — старший Go-разработчик и QA-автоматизатор. Твоя задача — создать исчерпывающий набор интеграционных тестов для проверки полной цепочки вызовов всех CRUD-операций в сервисе.
+
+## Цель
+
+Создать один Go-файл с интеграционными тестами (например, {entity}_service_integration_test.go), который будет проверять полный путь HTTP-запроса через все слои приложения: HTTP Handler → Application UseCase → Domain Service → Repository → Database.
+
+## Контекст и Технологический стек
+
+Язык: Go
+
+Веб-фреймворк: net/http (стандартная библиотека Go)
+
+База данных: SQL (SQLite для тестов, используется :memory: для изоляции)
+
+ORM/Query Builder: Прямая работа с database/sql через database.ServiceDB
+
+Тестируемый ресурс: {entity} (например, Client, Project, Database) с полями:
+- id (int) - уникальный идентификатор
+- name (string) - название
+- created_at (time.Time) - время создания
+- updated_at (time.Time) - время обновления
+- Другие поля специфичные для сущности
+
+Архитектура: Слоистая Clean Architecture:
+- Presentation Layer (internal/api/handlers/{entity}/handler.go) - HTTP handlers
+- Application Layer (internal/application/{entity}/usecase.go) - Use cases для координации
+- Domain Layer (internal/domain/{entity}/service.go) - Бизнес-логика
+- Infrastructure Layer (internal/infrastructure/persistence/{entity}_repository.go) - Репозитории для работы с БД
+
+База данных: database.ServiceDB - сервисная база данных для хранения метаданных (клиенты, проекты, базы данных)
+
+## Задачи и шаги для генерации кода теста
+
+### 1. Настройка тестового окружения (TestMain)
+
+Создай функцию TestMain(m *testing.M):
+- В ней настрой подключение к отдельной тестовой базе данных. Используй database.NewServiceDB(":memory:") для создания in-memory SQLite базы.
+- Никогда не используй базу для разработки или продакшена.
+- Перед запуском тестов (m.Run()) выполни все необходимые миграции базы данных, чтобы создать таблицы. Используй методы ServiceDB для инициализации схемы.
+- После завершения тестов (m.Run()) очисти базу данных (закрой соединение через defer serviceDB.Close()).
+
+### 2. Создание тестового набора (TestSuite)
+
+Используй testify/suite для организации тестов:
+
+Структура TestSuite должна включать:
+- serviceDB *database.ServiceDB
+- tx *sql.Tx (для транзакций)
+- router http.Handler
+- server *httptest.Server
+- handler *{entity}.Handler
+- useCase *{entity}app.UseCase
+- repository repositories.{Entity}Repository
+
+Методы настройки:
+
+SetupSuite():
+- Инициализируй подключение к тестовой БД через database.NewServiceDB(":memory:")
+- Выполни миграции (если требуется)
+- Инициализируй все зависимости: repository → useCase → handler
+- Создай HTTP router и зарегистрируй handlers
+- Запусти реальный HTTP-сервер на случайном порту через httptest.NewServer(router)
+
+TearDownSuite():
+- Останови сервер (suite.server.Close())
+- Закрой соединение с БД (suite.serviceDB.Close())
+
+SetupTest():
+- Оберни каждый тест в транзакцию. В начале SetupTest() начинай транзакцию через suite.serviceDB.DB.Begin()
+- Сохрани транзакцию в suite.tx
+- Важно: Передай транзакцию в репозитории/сервисы для изоляции тестов. Это может потребовать изменения архитектуры для тестов или использования интерфейсов с поддержкой транзакций.
+
+TearDownTest():
+- Сделай откат транзакции (suite.tx.Rollback()). Это обеспечит изоляцию тестов и чистое состояние БД для каждого из них.
+
+### 3. Реализация тестов для каждой CRUD-операции
+
+Для каждой операции (Create, Read, ReadAll, Update, Delete) создай отдельный метод в тестовом наборе:
+
+#### 3.1. Create (POST) - Test{Entity}_Create_Success
+
+Проверка цепочки вызовов:
+
+1. HTTP-уровень:
+   - Отправь корректный HTTP POST-запрос с помощью httptest.NewRequest("POST", "/api/v2/{entities}", body)
+   - Используй httptest.NewRecorder() для записи ответа
+   - Проверь HTTP-статус-код ответа (ожидай 201 Created)
+   - Распарси тело ответа (JSON) и проверь его содержимое:
+     - Проверь наличие всех полей в ответе
+     - Проверь, что id был присвоен
+     - Проверь, что created_at и updated_at установлены
+
+2. Уровень базы данных (самое важное!):
+   - После операции Create сделай ПРЯМОЙ SQL-запрос к БД (в рамках той же транзакции suite.tx)
+   - Используй suite.tx.QueryRow("SELECT id, name, created_at, updated_at FROM {table} WHERE id = ?", createdID)
+   - Убедись, что запись действительно была создана с правильными данными
+   - Проверь, что все поля соответствуют отправленным в запросе
+   - Проверь, что временные метки (created_at, updated_at) установлены корректно
+
+#### 3.2. Read by ID (GET) - Test{Entity}_GetByID_Success
+
+Проверка цепочки вызовов:
+
+1. Подготовка данных:
+   - Предварительно создай запись в БД через suite.tx.Exec("INSERT INTO {table} ...") или используй метод репозитория в транзакции
+   - Сохрани созданный id для дальнейшего использования
+
+2. HTTP-уровень:
+   - Отправь GET-запрос к /api/v2/{entities}/{id}
+   - Проверь HTTP-статус-код ответа (ожидай 200 OK)
+   - Распарси тело ответа и проверь его содержимое
+
+3. Уровень базы данных:
+   - Убедись, что данные в ответе совпадают с данными, предварительно добавленными в БД
+   - Сделай прямой SQL-запрос к БД и сравните результаты
+
+#### 3.3. Read All (GET) - Test{Entity}_GetAll_Success
+
+Проверка цепочки вызовов:
+
+1. Подготовка данных:
+   - Создай несколько записей в БД (минимум 2-3)
+   - Используй разные значения для проверки корректности списка
+
+2. HTTP-уровень:
+   - Отправь GET-запрос к /api/v2/{entities}
+   - Проверь HTTP-статус-код ответа (ожидай 200 OK)
+   - Проверь, что ответ является массивом/списком
+   - Проверь, что количество элементов в ответе соответствует количеству созданных записей
+
+3. Уровень базы данных:
+   - Сделай прямой SQL-запрос SELECT COUNT(*) FROM {table} и сравните с количеством в ответе
+   - Проверь, что все созданные записи присутствуют в ответе
+
+#### 3.4. Update (PUT/PATCH) - Test{Entity}_Update_Success
+
+Проверка цепочки вызовов:
+
+1. Подготовка данных:
+   - Создай запись в БД и сохрани её id
+
+2. HTTP-уровень:
+   - Отправь PUT/PATCH-запрос к /api/v2/{entities}/{id} с обновленными данными
+   - Проверь HTTP-статус-код ответа (ожидай 200 OK или 204 No Content)
+   - Если есть тело ответа, проверь его содержимое
+
+3. Уровень базы данных (критично!):
+   - Сделай ПРЯМОЙ SQL-запрос к БД через suite.tx.QueryRow(...)
+   - Убедись, что запись была обновлена с новыми значениями
+   - Проверь, что updated_at был изменен (если применимо)
+   - Проверь, что поля, которые не должны были измениться, остались прежними
+
+#### 3.5. Delete (DELETE) - Test{Entity}_Delete_Success
+
+Проверка цепочки вызовов:
+
+1. Подготовка данных:
+   - Создай запись в БД и сохрани её id
+
+2. HTTP-уровень:
+   - Отправь DELETE-запрос к /api/v2/{entities}/{id}
+   - Проверь HTTP-статус-код ответа (ожидай 200 OK, 204 No Content или 204)
+
+3. Уровень базы данных (критично!):
+   - Сделай ПРЯМОЙ SQL-запрос к БД через suite.tx.QueryRow("SELECT id FROM {table} WHERE id = ?", id)
+   - Убедись, что запись была удалена (ожидай sql.ErrNoRows)
+   - Альтернативно: проверь SELECT COUNT(*) и убедись, что количество уменьшилось
+
+### 4. Тестирование негативных сценариев
+
+Для каждой операции добавь тесты для некорректных данных:
+
+#### 4.1. Create - Невалидные данные
+
+Test{Entity}_Create_InvalidData:
+- Создание с невалидными данными (например, пустое обязательное поле name)
+- Ожидай статус 400 Bad Request
+- Проверь, что в теле ответа есть описание ошибки
+- Проверь в БД: Сделай прямой SQL-запрос и убедись, что в БД ничего не добавилось (SELECT COUNT(*) должен остаться прежним)
+
+#### 4.2. Read/Update/Delete - Несуществующий ID
+
+Test{Entity}_GetByID_NotFound:
+- Обращение к несуществующему ID (например, 999999)
+- Ожидай статус 404 Not Found
+- Проверь тело ответа с сообщением об ошибке
+
+Test{Entity}_Update_NotFound:
+- Попытка обновить несуществующую сущность
+- Ожидай статус 404 Not Found
+- Проверь в БД: Убедись, что никакие записи не были изменены
+
+Test{Entity}_Delete_NotFound:
+- Попытка удалить несуществующую сущность
+- Ожидай статус 404 Not Found
+- Проверь в БД: Убедись, что количество записей не изменилось
+
+#### 4.3. Update - Невалидные данные
+
+Test{Entity}_Update_InvalidData:
+- Попытка обновить с невалидными данными
+- Ожидай статус 400 Bad Request
+- Проверь в БД: Убедись, что запись не была изменена (сравни значения до и после запроса)
+
+### 5. Структура генерируемого файла
+
+Создай файл {entity}_service_integration_test.go со следующей структурой:
+
+package {entity}
+
+import (
+    "database/sql"
+    "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+    
+    "httpserver/database"
+    {entity}app "httpserver/internal/application/{entity}"
+    "httpserver/internal/api/handlers/{entity}"
+    "httpserver/internal/domain/repositories"
+    "httpserver/internal/infrastructure/persistence"
+    
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/suite"
+)
+
+// TestMain для настройки и очистки
+func TestMain(m *testing.M) {
+    // Настройка тестовой БД (если требуется глобальная настройка)
+    code := m.Run()
+    // Очистка (если требуется)
+    os.Exit(code)
+}
+
+// {Entity}IntegrationTestSuite тестовый набор
+type {Entity}IntegrationTestSuite struct {
+    suite.Suite
+    serviceDB    *database.ServiceDB
+    tx           *sql.Tx
+    router       http.Handler
+    server       *httptest.Server
+    handler      *{entity}.Handler
+    useCase      *{entity}app.UseCase
+    repository   repositories.{Entity}Repository
+}
+
+// SetupSuite настройка перед всеми тестами
+func (suite *{Entity}IntegrationTestSuite) SetupSuite() {
+    // Инициализация БД, сервера, зависимостей
+}
+
+// TearDownSuite очистка после всех тестов
+func (suite *{Entity}IntegrationTestSuite) TearDownSuite() {
+    // Закрытие соединений
+}
+
+// SetupTest настройка перед каждым тестом
+func (suite *{Entity}IntegrationTestSuite) SetupTest() {
+    // Начало транзакции
+}
+
+// TearDownTest очистка после каждого теста
+func (suite *{Entity}IntegrationTestSuite) TearDownTest() {
+    // Откат транзакции
+}
+
+// Тесты для CRUD операций
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Create_Success() {
+    // 1. Отправка POST-запроса
+    // 2. Проверка статуса 201 и тела ответа
+    // 3. ПРЯМАЯ ПРОВЕРКА В БД: suite.tx.QueryRow(...) для проверки создания записи
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_GetByID_Success() {
+    // 1. Предварительно создать запись в БД через suite.tx.Exec(...)
+    // 2. Отправить GET-запрос
+    // 3. Проверить статус 200 и тело ответа
+    // 4. Сравнить данные из ответа с данными из БД
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_GetAll_Success() {
+    // 1. Создать несколько записей
+    // 2. Отправить GET-запрос
+    // 3. Проверить список и количество
+    // 4. Проверить в БД через COUNT(*)
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Update_Success() {
+    // 1. Создать запись
+    // 2. Отправить PUT/PATCH-запрос
+    // 3. Проверить статус
+    // 4. ПРЯМАЯ ПРОВЕРКА В БД: убедиться, что запись обновлена
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Delete_Success() {
+    // 1. Создать запись
+    // 2. Отправить DELETE-запрос
+    // 3. Проверить статус
+    // 4. ПРЯМАЯ ПРОВЕРКА В БД: убедиться, что запись удалена (sql.ErrNoRows)
+}
+
+// Тесты негативных сценариев
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Create_InvalidData() {
+    // Невалидные данные, статус 400, проверка что в БД ничего не добавилось
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_GetByID_NotFound() {
+    // Несуществующий ID, статус 404
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Update_NotFound() {
+    // Обновление несуществующей записи, статус 404, проверка БД
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Update_InvalidData() {
+    // Невалидные данные при обновлении, статус 400, проверка БД
+}
+
+func (suite *{Entity}IntegrationTestSuite) Test{Entity}_Delete_NotFound() {
+    // Удаление несуществующей записи, статус 404, проверка БД
+}
+
+// Запуск тестов
+func Test{Entity}IntegrationSuite(t *testing.T) {
+    suite.Run(t, new({Entity}IntegrationTestSuite))
+}
+
+### 6. Дополнительные требования
+
+Использование библиотек:
+- Используй github.com/stretchr/testify/assert для assertions
+- Используй github.com/stretchr/testify/suite для организации тестов
+- Используй net/http/httptest для HTTP тестирования
+- Используй database/sql для прямых SQL-запросов к БД
+
+Комментарии:
+- Добавь четкие комментарии, объясняющие что делает каждый тест
+- Комментируй критичные проверки (особенно прямые SQL-запросы к БД)
+- Объясни, почему используется транзакция для изоляции
+
+Placeholders:
+- Используй placeholders: {entity}, {Entity}, {table}, {entities} для создания переиспользуемого шаблона
+- Замени их на конкретные значения при генерации кода (например, Client, client, clients, clients_table)
+
+Обработка транзакций:
+- Если текущая архитектура не поддерживает передачу транзакций в репозитории, добавь комментарий с объяснением, что требуется рефакторинг для полной изоляции тестов
+- В качестве временного решения можно использовать отдельную тестовую БД для каждого теста или очистку данных после каждого теста
+
+## Ожидаемый результат
+
+Предоставь полный, готовый к запуску Go-файл с интеграционными тестами, который реализует все описанные выше шаги для CRUD API сущности (например, Client, Project, Database). Код должен быть:
+
+- Хорошо прокомментирован
+- Следовать лучшим практикам Go
+- Проверять полную цепочку вызовов (HTTP → UseCase → Service → Repository → DB)
+- Использовать транзакции для изоляции тестов
+- Включать прямые SQL-запросы для проверки состояния БД после каждой операции
+- Покрывать как позитивные, так и негативные сценарии
+- Быть готовым к запуску после замены placeholders на конкретные значения
+
+---
+
+## Инструкция по использованию:
+
+1. Скопируй промпт выше (текст между "---" и "---")
+2. Замени placeholders ({entity}, {Entity}, {table}, {entities}) на конкретные значения для тестируемой сущности
+3. Вставь в новый чат с AI
+4. AI автоматически сгенерирует полный файл интеграционных тестов
+
+## Что будет создано:
+
+- {entity}_service_integration_test.go - полный файл с интеграционными тестами
+- Тесты для всех CRUD операций (Create, Read, ReadAll, Update, Delete)
+- Тесты для негативных сценариев
+- Проверка цепочки вызовов на всех уровнях архитектуры
+- Прямые проверки состояния базы данных после каждой операции
+

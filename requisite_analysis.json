@@ -1,0 +1,47 @@
+[
+  {
+    "DBName": "Выгрузка_Контрагенты_ERPWE_Unknown_Unknown_2025_11_20_13_27_39.db",
+    "DBPath": "data\\uploads\\Выгрузка_Контрагенты_ERPWE_Unknown_Unknown_2025_11_20_13_27_39.db",
+    "TableName": "catalog_items",
+    "Confidence": 0.1111111111111111,
+    "Requisites": {
+      "Наименование": "name"
+    }
+  },
+  {
+    "DBName": "Выгрузка_Контрагенты_ERPWE_Unknown_Unknown_2025_11_20_13_27_39_20251120_222356.db",
+    "DBPath": "data\\uploads\\Выгрузка_Контрагенты_ERPWE_Unknown_Unknown_2025_11_20_13_27_39_20251120_222356.db",
+    "TableName": "catalog_items",
+    "Confidence": 0.1111111111111111,
+    "Requisites": {
+      "Наименование": "name"
+    }
+  },
+  {
+    "DBName": "Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025.db",
+    "DBPath": "data\\uploads\\Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025.db",
+    "TableName": "catalog_items",
+    "Confidence": 0.1111111111111111,
+    "Requisites": {
+      "Наименование": "name"
+    }
+  },
+  {
+    "DBName": "Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025_20251121_125915.db",
+    "DBPath": "data\\uploads\\Выгрузка_Контрагенты_БухгалтерияДляКазахстана_Unknown_Unknown_2025_20251121_125915.db",
+    "TableName": "catalog_items",
+    "Confidence": 0.1111111111111111,
+    "Requisites": {
+      "Наименование": "name"
+    }
+  },
+  {
+    "DBName": "Выгрузка_Контрагенты_УправлениеПредприятиемДляКазахстана_Unknown.db",
+    "DBPath": "data\\uploads\\Выгрузка_Контрагенты_УправлениеПредприятиемДляКазахстана_Unknown.db",
+    "TableName": "catalog_items",
+    "Confidence": 0.1111111111111111,
+    "Requisites": {
+      "Наименование": "name"
+    }
+  }
+]

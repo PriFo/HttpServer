@@ -271,11 +271,11 @@ func (v *PreValidator) ValidateBatch(names []string) []PreValidationResult {
 // GetStatistics возвращает статистику валидации
 func (v *PreValidator) GetStatistics(results []PreValidationResult) map[string]interface{} {
 	stats := map[string]interface{}{
-		"total":        len(results),
-		"valid":        0,
-		"invalid":      0,
+		"total":          len(results),
+		"valid":          0,
+		"invalid":        0,
 		"avg_confidence": 0.0,
-		"reasons": make(map[string]int),
+		"reasons":        make(map[string]int),
 	}
 
 	validCount := 0

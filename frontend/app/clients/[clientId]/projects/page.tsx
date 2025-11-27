@@ -12,10 +12,20 @@ import {
   Target,
   FileText,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Building2
 } from "lucide-react"
 import { LoadingState } from "@/components/common/loading-state"
 import { EmptyState } from "@/components/common/empty-state"
+import { ErrorState } from "@/components/common/error-state"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+import { formatDate } from '@/lib/locale'
+import { Breadcrumb } from "@/components/ui/breadcrumb"
+import { BreadcrumbList } from "@/components/seo/breadcrumb-list"
+import { motion } from "framer-motion"
+import { FadeIn } from "@/components/animations/fade-in"
+import { useRouter } from "next/navigation"
 
 interface Project {
   id: number
@@ -29,25 +39,54 @@ interface Project {
 
 export default function ClientProjectsPage() {
   const params = useParams()
+  const router = useRouter()
   const clientId = params.clientId
   const [projects, setProjects] = useState<Project[]>([])
+  const [clientName, setClientName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (clientId) {
       fetchProjects(clientId as string)
+      fetchClientName(clientId as string)
     }
   }, [clientId])
 
+  const fetchClientName = async (id: string) => {
+    try {
+      const response = await fetch(`/api/clients/${id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setClientName(data.client?.name || null)
+      }
+    } catch (error) {
+      console.error('Failed to fetch client name:', error)
+    }
+  }
+
   const fetchProjects = async (id: string) => {
     setIsLoading(true)
+    setError(null)
     try {
       const response = await fetch(`/api/clients/${id}/projects`)
-      if (!response.ok) throw new Error('Failed to fetch projects')
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Failed to fetch projects')
+        throw new Error(errorText || 'Не удалось загрузить проекты')
+      }
       const data = await response.json()
-      setProjects(data)
+      // Обрабатываем как массив, так и объект с полем projects
+      if (Array.isArray(data)) {
+        setProjects(data)
+      } else if (data && typeof data === 'object' && 'projects' in data) {
+        setProjects(Array.isArray(data.projects) ? data.projects : [])
+      } else {
+        setProjects([])
+      }
     } catch (error) {
       console.error('Failed to fetch projects:', error)
+      setError(error instanceof Error ? error.message : 'Не удалось загрузить проекты')
+      setProjects([])
     } finally {
       setIsLoading(false)
     }
@@ -57,32 +96,74 @@ export default function ClientProjectsPage() {
     const labels: Record<string, string> = {
       nomenclature: 'Номенклатура',
       counterparties: 'Контрагенты',
+      nomenclature_counterparties: 'Номенклатура + Контрагенты',
       mixed: 'Смешанный'
     }
     return labels[type] || type
   }
 
+  const breadcrumbItems = [
+    { label: 'Клиенты', href: '/clients', icon: Building2 },
+    { label: clientName || 'Клиент', href: `/clients/${clientId}`, icon: Building2 },
+    { label: 'Проекты', href: `/clients/${clientId}/projects`, icon: Target },
+  ]
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
-          <Link href={`/clients/${clientId}`}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">Проекты клиента</h1>
-          <p className="text-muted-foreground">
-            Управление проектами нормализации
-          </p>
-        </div>
-        <Button asChild>
-          <Link href={`/clients/${clientId}/projects/new`}>
-            <Plus className="mr-2 h-4 w-4" />
-            Новый проект
-          </Link>
-        </Button>
+    <div className="container-wide mx-auto px-4 py-8 space-y-6">
+      <BreadcrumbList items={breadcrumbItems.map(item => ({ label: item.label, href: item.href || '#' }))} />
+      <div className="mb-4">
+        <Breadcrumb items={breadcrumbItems} />
       </div>
+
+      <FadeIn>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-4"
+        >
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => router.push(`/clients/${clientId}`)}
+            aria-label="Назад к клиенту"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <Target className="h-8 w-8 text-primary" />
+              Проекты клиента
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Управление проектами нормализации
+            </p>
+          </div>
+          <Button asChild>
+            <Link href={`/clients/${clientId}/projects/new`}>
+              <Plus className="mr-2 h-4 w-4" />
+              Новый проект
+            </Link>
+          </Button>
+        </motion.div>
+      </FadeIn>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-4"
+              onClick={() => clientId && fetchProjects(clientId as string)}
+            >
+              Повторить
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {isLoading ? (
         <LoadingState message="Загрузка проектов..." size="lg" fullScreen />
@@ -112,7 +193,7 @@ export default function ClientProjectsPage() {
                 </div>
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Создан:</span>
-                  <span>{new Date(project.created_at).toLocaleDateString('ru-RU')}</span>
+                  <span>{formatDate(project.created_at)}</span>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button asChild variant="outline" className="flex-1">

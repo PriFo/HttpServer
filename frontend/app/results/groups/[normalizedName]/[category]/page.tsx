@@ -24,6 +24,19 @@ import { LoadingState } from '@/components/common/loading-state'
 import { EmptyState } from '@/components/common/empty-state'
 import { FilterBar, type FilterConfig } from '@/components/common/filter-bar'
 import { StatCard } from '@/components/common/stat-card'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { BreadcrumbList } from '@/components/seo/breadcrumb-list'
+import { motion } from 'framer-motion'
+import { FadeIn } from '@/components/animations/fade-in'
+import { BarChart3 } from 'lucide-react'
+import { Pagination } from '@/components/ui/pagination'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface ItemAttribute {
   id: number
@@ -59,6 +72,10 @@ interface GroupDetails {
   kpved_code?: string
   kpved_name?: string
   kpved_confidence?: number
+  total?: number
+  total_pages?: number
+  page?: number
+  limit?: number
 }
 
 export default function GroupDetailPage() {
@@ -71,6 +88,11 @@ export default function GroupDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(50)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
   const fetchGroupData = useCallback(async () => {
     setLoading(true)
@@ -80,9 +102,20 @@ export default function GroupDetailPage() {
         normalized_name: normalizedName,
         category: category,
         include_ai: 'true',
+        include_attributes: 'true',
+        page: page.toString(),
+        limit: limit.toString(),
+        sort_by: 'created_at',
+        sort_order: 'desc',
       })
 
-      const response = await fetch(`/api/normalization/group-items?${params}`)
+      if (debouncedSearch) {
+        params.set('search', debouncedSearch)
+      }
+
+      const response = await fetch(`/api/normalization/group-items?${params}`, {
+        cache: 'no-store',
+      })
 
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.status}`)
@@ -90,31 +123,30 @@ export default function GroupDetailPage() {
 
       const data = await response.json()
       setGroupDetails(data)
+      setTotalItems(data.total ?? data.items?.length ?? 0)
+      setTotalPages(data.total_pages ?? 1)
     } catch (error) {
       console.error('Failed to fetch group data:', error)
       setError(error instanceof Error ? error.message : 'Не удалось загрузить данные группы')
     } finally {
       setLoading(false)
     }
-  }, [normalizedName, category])
+  }, [normalizedName, category, page, limit, debouncedSearch])
 
   useEffect(() => {
     fetchGroupData()
   }, [fetchGroupData])
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setPage(1)
+      setDebouncedSearch(searchTerm.trim())
+    }, 400)
+    return () => clearTimeout(handler)
+  }, [searchTerm])
+
   // Оптимизированная фильтрация с useMemo
-  const filteredItems = useMemo(() => {
-    if (!groupDetails) return []
-
-    const lowerSearchTerm = searchTerm.toLowerCase()
-    if (!lowerSearchTerm) return groupDetails.items
-
-    return groupDetails.items.filter(item =>
-      item.code.toLowerCase().includes(lowerSearchTerm) ||
-      item.source_name.toLowerCase().includes(lowerSearchTerm) ||
-      item.source_reference.toLowerCase().includes(lowerSearchTerm)
-    )
-  }, [searchTerm, groupDetails])
+  const filteredItems = useMemo(() => groupDetails?.items ?? [], [groupDetails])
 
   // Оптимизированный расчет средней уверенности с useMemo
   const avgConfidence = useMemo(() => {
@@ -129,7 +161,7 @@ export default function GroupDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container-wide mx-auto px-4 py-8">
         <LoadingState message="Загрузка данных группы..." size="lg" fullScreen />
       </div>
     )
@@ -137,7 +169,7 @@ export default function GroupDetailPage() {
 
   if (error || !groupDetails) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container-wide mx-auto px-4 py-8">
         <EmptyState
           icon={FileQuestion}
           title={error || 'Группа не найдена'}
@@ -151,47 +183,61 @@ export default function GroupDetailPage() {
     )
   }
 
+  const breadcrumbItems = [
+    { label: 'Результаты', href: '/results', icon: BarChart3 },
+    { label: groupDetails.normalized_name, href: '#', icon: FileQuestion },
+  ]
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Хлебные крошки */}
-      <div className="flex items-center gap-2 text-sm">
-        <Link href="/results" className="text-muted-foreground hover:text-foreground">
-          Результаты
-        </Link>
-        <span className="text-muted-foreground">/</span>
-        <span className="text-foreground font-medium">{groupDetails.normalized_name}</span>
+    <div className="container-wide mx-auto px-4 py-8 space-y-6">
+      <BreadcrumbList items={breadcrumbItems.map(item => ({ label: item.label, href: item.href || '#' }))} />
+      <div className="mb-4">
+        <Breadcrumb items={breadcrumbItems} />
       </div>
 
-      {/* Заголовок и действия */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()} aria-label="Вернуться назад">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">{groupDetails.normalized_name}</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="secondary">{groupDetails.category}</Badge>
-              <span className="text-sm text-muted-foreground">
-                {groupDetails.items.length} элементов
-              </span>
-              {avgConfidence && avgConfidence > 0 && (
-                <>
-                  <span className="text-sm text-muted-foreground">•</span>
-                  <span className="text-sm text-muted-foreground">
-                    Средняя уверенность: {(avgConfidence * 100).toFixed(1)}%
-                  </span>
-                </>
-              )}
+      <FadeIn>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center justify-between"
+        >
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={() => router.push('/results')} 
+              aria-label="Вернуться к результатам"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <FileQuestion className="h-8 w-8 text-primary" />
+                {groupDetails.normalized_name}
+              </h1>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="secondary">{groupDetails.category}</Badge>
+                <span className="text-sm text-muted-foreground">
+                  {totalItems.toLocaleString('ru-RU')} элементов
+                </span>
+                {avgConfidence && avgConfidence > 0 && (
+                  <>
+                    <span className="text-sm text-muted-foreground">•</span>
+                    <span className="text-sm text-muted-foreground">
+                      Средняя уверенность: {(avgConfidence * 100).toFixed(1)}%
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-
-        <ExportGroupButton
-          normalizedName={groupDetails.normalized_name}
-          category={groupDetails.category}
-        />
-      </div>
+          <ExportGroupButton
+            normalizedName={groupDetails.normalized_name}
+            category={groupDetails.category}
+          />
+        </motion.div>
+      </FadeIn>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Основная информация */}
@@ -205,24 +251,59 @@ export default function GroupDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <FilterBar
-                filters={[
-                  {
-                    type: 'search',
-                    key: 'search',
-                    label: 'Поиск',
-                    placeholder: 'Поиск по коду, названию или reference...',
-                  },
-                ]}
-                values={{ search: searchTerm }}
-                onChange={(values) => setSearchTerm(values.search || '')}
-                onReset={() => setSearchTerm('')}
-              />
-              <div className="mt-2 text-sm text-muted-foreground" role="status" aria-live="polite">
-                Найдено: {filteredItems.length} из {groupDetails.items.length}
+              <div className="flex flex-col gap-4">
+                <FilterBar
+                  filters={[
+                    {
+                      type: 'search',
+                      key: 'search',
+                      label: 'Поиск',
+                      placeholder: 'Поиск по коду, названию или reference...',
+                    },
+                  ]}
+                  values={{ search: searchTerm }}
+                  onChange={(values) => setSearchTerm(values.search || '')}
+                  onReset={() => setSearchTerm('')}
+                />
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="text-sm text-muted-foreground" role="status" aria-live="polite">
+                    Найдено: {filteredItems.length.toLocaleString('ru-RU')} из {totalItems.toLocaleString('ru-RU')}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">На странице:</span>
+                    <Select
+                      value={limit.toString()}
+                      onValueChange={(value) => {
+                        setPage(1)
+                        setLimit(Number(value))
+                      }}
+                    >
+                      <SelectTrigger className="w-[100px]">
+                        <SelectValue placeholder="50" />
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        {[25, 50, 100, 200].map((option) => (
+                          <SelectItem key={option} value={option.toString()}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
-              <GroupItemsTable items={filteredItems} loading={false} />
+              <GroupItemsTable items={filteredItems} loading={loading} />
+
+              <div className="pt-4">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  itemsPerPage={limit}
+                  totalItems={totalItems}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -237,7 +318,7 @@ export default function GroupDetailPage() {
             <CardContent className="space-y-3">
               <StatCard
                 title="Всего элементов"
-                value={groupDetails.items.length}
+                value={totalItems}
                 variant="primary"
                 className="p-0"
               />

@@ -4,71 +4,72 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
 // QualityAssessment оценка качества записи
 type QualityAssessment struct {
-	ID                  int       `json:"id"`
-	NormalizedItemID    int       `json:"normalized_item_id"`
-	AssessmentDate      time.Time `json:"assessment_date"`
-	OverallScore        float64   `json:"overall_score"`
-	CategoryConfidence  float64   `json:"category_confidence"`
-	NameClarity         float64   `json:"name_clarity"`
-	Consistency         float64   `json:"consistency"`
-	Completeness        float64   `json:"completeness"`
-	Standardization     float64   `json:"standardization"`
-	KpvedAccuracy       float64   `json:"kpved_accuracy"`
-	DuplicateScore      float64   `json:"duplicate_score"`
-	DataEnrichment      float64   `json:"data_enrichment"`
-	IsBenchmark         bool      `json:"is_benchmark"`
-	Issues              []string  `json:"issues"` // Десериализуется из issues_json
+	ID                 int       `json:"id"`
+	NormalizedItemID   int       `json:"normalized_item_id"`
+	AssessmentDate     time.Time `json:"assessment_date"`
+	OverallScore       float64   `json:"overall_score"`
+	CategoryConfidence float64   `json:"category_confidence"`
+	NameClarity        float64   `json:"name_clarity"`
+	Consistency        float64   `json:"consistency"`
+	Completeness       float64   `json:"completeness"`
+	Standardization    float64   `json:"standardization"`
+	KpvedAccuracy      float64   `json:"kpved_accuracy"`
+	DuplicateScore     float64   `json:"duplicate_score"`
+	DataEnrichment     float64   `json:"data_enrichment"`
+	IsBenchmark        bool      `json:"is_benchmark"`
+	Issues             []string  `json:"issues"` // Десериализуется из issues_json
 }
 
 // QualityViolation нарушение правила качества
 type QualityViolation struct {
-	ID               int       `json:"id"`
-	NormalizedItemID int       `json:"normalized_item_id"`
-	RuleName         string    `json:"rule_name"`
-	Category         string    `json:"category"`
-	Severity         string    `json:"severity"`
-	Description      string    `json:"description"`
-	Field            string    `json:"field"`
-	CurrentValue     string    `json:"current_value"`
-	Recommendation   string    `json:"recommendation"`
-	DetectedAt       time.Time `json:"detected_at"`
+	ID               int        `json:"id"`
+	NormalizedItemID int        `json:"normalized_item_id"`
+	RuleName         string     `json:"rule_name"`
+	Category         string     `json:"category"`
+	Severity         string     `json:"severity"`
+	Description      string     `json:"description"`
+	Field            string     `json:"field"`
+	CurrentValue     string     `json:"current_value"`
+	Recommendation   string     `json:"recommendation"`
+	DetectedAt       time.Time  `json:"detected_at"`
 	ResolvedAt       *time.Time `json:"resolved_at,omitempty"`
-	ResolvedBy       string    `json:"resolved_by,omitempty"`
+	ResolvedBy       string     `json:"resolved_by,omitempty"`
 }
 
 // QualitySuggestion предложение по улучшению
 type QualitySuggestion struct {
-	ID              int        `json:"id"`
-	NormalizedItemID int       `json:"normalized_item_id"`
-	SuggestionType  string     `json:"suggestion_type"`
-	Priority        string     `json:"priority"`
-	Field           string     `json:"field"`
-	CurrentValue    string     `json:"current_value"`
-	SuggestedValue  string     `json:"suggested_value"`
-	Confidence      float64    `json:"confidence"`
-	Reasoning       string     `json:"reasoning"`
-	AutoApplyable   bool       `json:"auto_applyable"`
-	Applied         bool       `json:"applied"`
-	AppliedAt       *time.Time `json:"applied_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	ID               int        `json:"id"`
+	NormalizedItemID int        `json:"normalized_item_id"`
+	SuggestionType   string     `json:"suggestion_type"`
+	Priority         string     `json:"priority"`
+	Field            string     `json:"field"`
+	CurrentValue     string     `json:"current_value"`
+	SuggestedValue   string     `json:"suggested_value"`
+	Confidence       float64    `json:"confidence"`
+	Reasoning        string     `json:"reasoning"`
+	AutoApplyable    bool       `json:"auto_applyable"`
+	Applied          bool       `json:"applied"`
+	AppliedAt        *time.Time `json:"applied_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 // DuplicateGroup группа дубликатов
 type DuplicateGroup struct {
-	ID                int       `json:"id"`
-	GroupHash         string    `json:"group_hash"`
-	DuplicateType     string    `json:"duplicate_type"`
-	SimilarityScore   float64   `json:"similarity_score"`
-	ItemIDs           []int     `json:"item_ids"` // Десериализуется из item_ids_json
-	SuggestedMasterID int       `json:"suggested_master_id"`
-	Confidence        float64   `json:"confidence"`
-	Reason            string    `json:"reason"`
-	Merged            bool      `json:"merged"`
+	ID                int        `json:"id"`
+	GroupHash         string     `json:"group_hash"`
+	DuplicateType     string     `json:"duplicate_type"`
+	SimilarityScore   float64    `json:"similarity_score"`
+	ItemIDs           []int      `json:"item_ids"` // Десериализуется из item_ids_json
+	SuggestedMasterID int        `json:"suggested_master_id"`
+	Confidence        float64    `json:"confidence"`
+	Reason            string     `json:"reason"`
+	Merged            bool       `json:"merged"`
 	MergedAt          *time.Time `json:"merged_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
@@ -573,8 +574,58 @@ func buildWhereClause(filters map[string]interface{}) (string, []interface{}) {
 	var args []interface{}
 
 	for key, value := range filters {
-		conditions = append(conditions, fmt.Sprintf("%s = ?", key))
-		args = append(args, value)
+		switch key {
+		case "resolved":
+			boolVal, ok := value.(bool)
+			if !ok {
+				continue
+			}
+			if boolVal {
+				conditions = append(conditions, "resolved_at IS NOT NULL")
+			} else {
+				conditions = append(conditions, "resolved_at IS NULL")
+			}
+		case "search", "suggestion_search":
+			searchStr, ok := value.(string)
+			if !ok {
+				continue
+			}
+			searchStr = strings.TrimSpace(searchStr)
+			if searchStr == "" {
+				continue
+			}
+			like := "%" + strings.ToLower(searchStr) + "%"
+
+			var columns []string
+			if key == "search" {
+				columns = []string{"rule_name", "description", "recommendation"}
+			} else if key == "suggestion_search" {
+				columns = []string{"suggestion_type", "field", "current_value", "suggested_value", "reasoning"}
+			}
+
+			if len(columns) == 0 {
+				continue
+			}
+
+			// Строим условие с OR
+			condition := "("
+			for i, column := range columns {
+				if i > 0 {
+					condition += " OR "
+				}
+				condition += fmt.Sprintf("LOWER(%s) LIKE ?", column)
+				args = append(args, like)
+			}
+			condition += ")"
+			conditions = append(conditions, condition)
+		default:
+			conditions = append(conditions, fmt.Sprintf("%s = ?", key))
+			args = append(args, value)
+		}
+	}
+
+	if len(conditions) == 0 {
+		return "", args
 	}
 
 	whereClause := " WHERE " + joinStrings(conditions, " AND ")

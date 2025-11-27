@@ -57,39 +57,139 @@ export function handleApiError(error: unknown, fallbackKey: ErrorMessageKey = 'U
 import { NextResponse } from 'next/server'
 
 /**
- * Custom application error class
+ * Custom application error class for client-side
+ * Основной класс для всех ошибок приложения
  */
 export class AppError extends Error {
   constructor(
-    message: string,
-    public statusCode: number = 500,
-    public code?: string,
-    public details?: unknown
+    message: string, // Сообщение для пользователя
+    public readonly technicalDetails?: string, // Детали для логов
+    public readonly statusCode?: number, // HTTP статус, если применимо
+    public readonly code?: string
   ) {
     super(message)
     this.name = 'AppError'
-    Error.captureStackTrace(this, this.constructor)
+    // Сохраняем stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor)
+    }
   }
+}
+
+/**
+ * Фабрики для создания типичных ошибок
+ */
+export const createNetworkError = (message: string, statusCode?: number, technical?: string) =>
+  new AppError(message, technical, statusCode, 'NETWORK_ERROR')
+
+export const createValidationError = (message: string, technical?: string) =>
+  new AppError(message, technical, 400, 'VALIDATION_ERROR')
+
+export const createUnknownError = (error: unknown): AppError => {
+  if (error instanceof AppError) return error
+  if (error instanceof Error) {
+    return new AppError(
+      'Произошла непредвиденная ошибка',
+      error.message,
+      undefined,
+      'UNKNOWN_ERROR'
+    )
+  }
+  return new AppError('Произошла непредвиденная ошибка', String(error), undefined, 'UNKNOWN_ERROR')
+}
+
+/**
+ * Утилита для структурированного логирования ошибок
+ */
+export function logError(error: unknown, context?: Record<string, unknown>): void {
+  const timestamp = new Date().toISOString()
+  const errorInfo: Record<string, unknown> = {
+    timestamp,
+    error: error instanceof Error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    } : String(error),
+  }
+
+  if (error instanceof AppError) {
+    errorInfo.userMessage = error.message
+    errorInfo.technicalDetails = error.technicalDetails
+    errorInfo.statusCode = error.statusCode
+    errorInfo.code = error.code
+  }
+
+  if (context) {
+    errorInfo.context = context
+  }
+
+  console.error('[Error Handler]', errorInfo)
+  
+  // Здесь можно добавить интеграцию с Sentry в будущем
+  // if (typeof window !== 'undefined' && window.Sentry) {
+  //   window.Sentry.captureException(error, { contexts: { custom: context } })
+  // }
 }
 
 export class ValidationError extends AppError {
   constructor(message: string, details?: unknown) {
-    super(message, 400, 'VALIDATION_ERROR', details)
+    super(message, typeof details === 'string' ? details : JSON.stringify(details), 400, 'VALIDATION_ERROR')
     this.name = 'ValidationError'
   }
 }
 
 export class UnauthorizedError extends AppError {
-  constructor(message: string = 'Unauthorized') {
-    super(message, 401, 'UNAUTHORIZED')
+  constructor(message: string = 'Необходима авторизация') {
+    super(message, undefined, 401, 'UNAUTHORIZED')
     this.name = 'UnauthorizedError'
   }
 }
 
 export class BackendError extends AppError {
   constructor(message: string, statusCode: number = 502, details?: unknown) {
-    super(message, statusCode, 'BACKEND_ERROR', details)
+    super(
+      message,
+      typeof details === 'string' ? details : JSON.stringify(details),
+      statusCode,
+      'BACKEND_ERROR'
+    )
     this.name = 'BackendError'
+  }
+}
+
+export class BackendConnectionError extends AppError {
+  constructor(message: string = 'Не удалось подключиться к бэкенду', details?: unknown) {
+    super(
+      message,
+      typeof details === 'string' ? details : JSON.stringify(details),
+      503,
+      'BACKEND_CONNECTION_ERROR'
+    )
+    this.name = 'BackendConnectionError'
+  }
+}
+
+export class BackendResponseError extends AppError {
+  constructor(message: string, statusCode: number = 502, details?: unknown) {
+    super(
+      message,
+      typeof details === 'string' ? details : JSON.stringify(details),
+      statusCode,
+      'BACKEND_RESPONSE_ERROR'
+    )
+    this.name = 'BackendResponseError'
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(resource: string, details?: unknown) {
+    super(
+      `${resource} не найден`,
+      typeof details === 'string' ? details : JSON.stringify(details),
+      404,
+      'NOT_FOUND'
+    )
+    this.name = 'NotFoundError'
   }
 }
 
@@ -125,8 +225,8 @@ export function createErrorResponse(
       timestamp: new Date().toISOString(),
     }
 
-    if (error.details) {
-      response.details = error.details
+    if (error.technicalDetails) {
+      response.details = error.technicalDetails
     }
 
     if (options?.path) {
@@ -135,12 +235,12 @@ export function createErrorResponse(
 
     if (includeStack && error.stack) {
       response.details = {
-        ...(typeof response.details === 'object' ? response.details : {}),
+        ...(typeof response.details === 'object' && response.details !== null ? response.details : {}),
         stack: error.stack,
       }
     }
 
-    return NextResponse.json(response, { status: error.statusCode })
+    return NextResponse.json(response, { status: error.statusCode || 500 })
   }
 
   // Handle standard Error instances

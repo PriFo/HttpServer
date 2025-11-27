@@ -60,7 +60,7 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
     if (selectedDatabase) {
       loadTables(selectedDatabase)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [selectedDatabase])
 
   // Загрузка колонок при выборе таблицы
@@ -200,8 +200,8 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
               <SelectValue placeholder="Выберите базу данных" />
             </SelectTrigger>
             <SelectContent>
-              {databases.map((db) => (
-                <SelectItem key={db.path} value={db.path}>
+              {databases.map((db, index) => (
+                <SelectItem key={`data-source-${db.path || db.name}-${index}`} value={db.path}>
                   {db.name} {db.type === 'current' && '(текущая)'}
                 </SelectItem>
               ))}
@@ -224,8 +224,8 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
               <SelectValue placeholder={loading ? "Загрузка..." : "Выберите таблицу"} />
             </SelectTrigger>
             <SelectContent>
-              {tables.map((table) => (
-                <SelectItem key={table.name} value={table.name}>
+              {tables.map((table, index) => (
+                <SelectItem key={`table-${table.name}-${index}`} value={table.name}>
                   {table.name} ({table.count} записей)
                 </SelectItem>
               ))}
@@ -247,8 +247,8 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
                   <SelectValue placeholder="Колонка ID" />
                 </SelectTrigger>
                 <SelectContent>
-                  {columns.map((col) => (
-                    <SelectItem key={col.name} value={col.name}>
+                  {columns.map((col, index) => (
+                    <SelectItem key={`col-ref-${col.name}-${index}`} value={col.name}>
                       {col.name}
                     </SelectItem>
                   ))}
@@ -267,8 +267,8 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
                   <SelectValue placeholder="Колонка кода" />
                 </SelectTrigger>
                 <SelectContent>
-                  {columns.map((col) => (
-                    <SelectItem key={col.name} value={col.name}>
+                  {columns.map((col, index) => (
+                    <SelectItem key={`col-ref-${col.name}-${index}`} value={col.name}>
                       {col.name}
                     </SelectItem>
                   ))}
@@ -287,8 +287,8 @@ export function DataSourceSelector({ disabled }: { disabled?: boolean }) {
                   <SelectValue placeholder="Колонка названия" />
                 </SelectTrigger>
                 <SelectContent>
-                  {columns.map((col) => (
-                    <SelectItem key={col.name} value={col.name}>
+                  {columns.map((col, index) => (
+                    <SelectItem key={`col-ref-${col.name}-${index}`} value={col.name}>
                       {col.name}
                     </SelectItem>
                   ))}

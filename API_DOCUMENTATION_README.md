@@ -94,6 +94,11 @@ redoc-cli serve openapi.yaml
 GET /api/v1/health
 ```
 
+### Системные эндпоинты
+```
+GET /api/system/summary
+```
+
 ### Управление выгрузками
 ```
 POST /api/v1/upload/handshake

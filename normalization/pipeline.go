@@ -19,13 +19,13 @@ const (
 
 // PipelineStats статистика работы пайплайна
 type PipelineStats struct {
-	TotalProcessed    int            `json:"total_processed"`
-	BasicCount        int            `json:"basic_count"`
-	AIEnhancedCount   int            `json:"ai_enhanced_count"`
-	BenchmarkCount    int            `json:"benchmark_count"`
-	AverageQuality    float64        `json:"average_quality"`
-	QualityByLevel    map[string]float64 `json:"quality_by_level"`
-	ProcessingTime    time.Duration  `json:"processing_time"`
+	TotalProcessed  int                `json:"total_processed"`
+	BasicCount      int                `json:"basic_count"`
+	AIEnhancedCount int                `json:"ai_enhanced_count"`
+	BenchmarkCount  int                `json:"benchmark_count"`
+	AverageQuality  float64            `json:"average_quality"`
+	QualityByLevel  map[string]float64 `json:"quality_by_level"`
+	ProcessingTime  time.Duration      `json:"processing_time"`
 }
 
 // NormalizationPipeline управляет многоуровневой обработкой
@@ -61,7 +61,7 @@ func (p *NormalizationPipeline) ProcessWithQuality() error {
 	log.Println("Запуск многоуровневой нормализации с контролем качества...")
 
 	// Сначала выполняем обычную нормализацию
-	if err := p.normalizer.ProcessNormalization(); err != nil {
+	if err := p.normalizer.ProcessNormalization(0); err != nil { // uploadID: 0 = не указан
 		return fmt.Errorf("normalization failed: %w", err)
 	}
 

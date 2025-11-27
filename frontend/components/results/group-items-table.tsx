@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import {
   Table,
   TableBody,
@@ -167,7 +167,7 @@ export function GroupItemsTable({ items, loading }: GroupItemsTableProps) {
             const canExpand = hasReasoning || hasAttributes
 
             return (
-              <>
+              <Fragment key={item.id}>
                 <TableRow key={item.id}>
                   <TableCell>
                     {canExpand && (
@@ -302,7 +302,7 @@ export function GroupItemsTable({ items, loading }: GroupItemsTableProps) {
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </Fragment>
             )
           })}
         </TableBody>

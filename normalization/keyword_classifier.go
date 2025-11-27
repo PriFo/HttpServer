@@ -318,11 +318,11 @@ func (kc *KeywordClassifier) cleanName(name string) string {
 	// Удаляем размеры, артикулы, специальные символы
 	regs := []*regexp.Regexp{
 		regexp.MustCompile(`\b(арт\.?|art\.?|№)\s*[a-zA-Z0-9.-]+\b`),
-		regexp.MustCompile(`\b\d+[xх]\d+`),                    // размеры типа 120x70
-		regexp.MustCompile(`\b\d+[.,]\d+\b`),                 // десятичные числа
+		regexp.MustCompile(`\b\d+[xх]\d+`),                          // размеры типа 120x70
+		regexp.MustCompile(`\b\d+[.,]\d+\b`),                        // десятичные числа
 		regexp.MustCompile(`\b\d*[.,]?\d+\s*(мм|см|м|kg|кг|g|г)\b`), // единицы измерения
-		regexp.MustCompile(`[^a-zA-Zа-яА-Я0-9\s]`),           // специальные символы
-		regexp.MustCompile(`\b(din|iso|ral)\s*[a-zA-Z0-9]*\b`), // стандарты
+		regexp.MustCompile(`[^a-zA-Zа-яА-Я0-9\s]`),                  // специальные символы
+		regexp.MustCompile(`\b(din|iso|ral)\s*[a-zA-Z0-9]*\b`),      // стандарты
 		regexp.MustCompile(`\b(не использовать|not use)\b`),
 	}
 
@@ -359,7 +359,7 @@ func (kc *KeywordClassifier) extractRootWord(normalizedName string) string {
 		{"контрольный кабель", "контрольный"},
 		{"кабель контрольный", "кабель"},
 	}
-	
+
 	for _, pattern := range phrasePatterns {
 		if strings.Contains(cleanNameLower, pattern.phrase) {
 			if _, exists := kc.patterns[pattern.key]; exists {
@@ -416,49 +416,49 @@ func (kc *KeywordClassifier) isProduct(normalizedName string) bool {
 // detectProductType определяет тип товара по ключевым словам и контексту
 func (kc *KeywordClassifier) detectProductType(normalizedName string) string {
 	cleanName := strings.ToLower(kc.cleanName(normalizedName))
-	
+
 	// Сэндвич-панели (приоритетная проверка)
 	if kc.containsSandwichPanel(cleanName) {
 		return "sandwich_panel"
 	}
-	
+
 	// Строительные материалы и элементы
-	if strings.Contains(cleanName, "фасонные") || strings.Contains(cleanName, "элемент") && 
+	if strings.Contains(cleanName, "фасонные") || strings.Contains(cleanName, "элемент") &&
 		(strings.Contains(cleanName, "панель") || strings.Contains(cleanName, "строитель") || strings.Contains(cleanName, "конструкц")) {
 		return "construction"
 	}
-	
+
 	// Датчики и измерительные приборы
 	if strings.Contains(cleanName, "преобразователь") || strings.Contains(cleanName, "датчик") {
-		if strings.Contains(cleanName, "давлен") || strings.Contains(cleanName, "температур") || 
-		   strings.Contains(cleanName, "уровен") || strings.Contains(cleanName, "расход") {
+		if strings.Contains(cleanName, "давлен") || strings.Contains(cleanName, "температур") ||
+			strings.Contains(cleanName, "уровен") || strings.Contains(cleanName, "расход") {
 			return "sensor"
 		}
 	}
-	
+
 	// Кабели и провода
-	if strings.Contains(cleanName, "кабель") || strings.Contains(cleanName, "провод") || 
-	   strings.Contains(cleanName, "контрольный") && strings.Contains(cleanName, "кабель") {
+	if strings.Contains(cleanName, "кабель") || strings.Contains(cleanName, "провод") ||
+		strings.Contains(cleanName, "контрольный") && strings.Contains(cleanName, "кабель") {
 		return "cable"
 	}
-	
+
 	// Метизы и крепеж
-	if strings.Contains(cleanName, "болт") || strings.Contains(cleanName, "винт") || 
-	   strings.Contains(cleanName, "гайка") || strings.Contains(cleanName, "саморез") {
+	if strings.Contains(cleanName, "болт") || strings.Contains(cleanName, "винт") ||
+		strings.Contains(cleanName, "гайка") || strings.Contains(cleanName, "саморез") {
 		return "fastener"
 	}
-	
+
 	// Инструменты
-	if strings.Contains(cleanName, "ключ") || strings.Contains(cleanName, "сверло") || 
-	   strings.Contains(cleanName, "фреза") || strings.Contains(cleanName, "инструмент") {
+	if strings.Contains(cleanName, "ключ") || strings.Contains(cleanName, "сверло") ||
+		strings.Contains(cleanName, "фреза") || strings.Contains(cleanName, "инструмент") {
 		return "tool"
 	}
-	
+
 	// Панели и строительные материалы
 	if strings.Contains(cleanName, "панель") || strings.Contains(cleanName, "профиль") {
 		return "construction"
 	}
-	
+
 	return "unknown"
 }
 
@@ -469,7 +469,7 @@ func (kc *KeywordClassifier) containsSandwichPanel(input string) bool {
 		"isowall", "sandwich panel", "sandwich",
 		"isopan", "изопан", "isofire",
 	}
-	
+
 	inputLower := strings.ToLower(input)
 	for _, kw := range keywords {
 		if strings.Contains(inputLower, kw) {
@@ -486,7 +486,7 @@ func (kc *KeywordClassifier) ClassifyByKeyword(normalizedName, category string) 
 		// Если это не товар, не используем keyword классификатор
 		return nil, false
 	}
-	
+
 	rootWord := kc.extractRootWord(normalizedName)
 	if rootWord == "" {
 		return nil, false
@@ -503,7 +503,7 @@ func (kc *KeywordClassifier) ClassifyByKeyword(normalizedName, category string) 
 	// Определяем тип товара для уточнения уверенности
 	productType := kc.detectProductType(normalizedName)
 	confidence := pattern.Confidence
-	
+
 	// Специальная обработка для сэндвич-панелей
 	if productType == "sandwich_panel" {
 		// Если это сэндвич-панель, но паттерн указывает на неправильную категорию, исправляем
@@ -516,7 +516,7 @@ func (kc *KeywordClassifier) ClassifyByKeyword(normalizedName, category string) 
 			confidence = 0.98
 		}
 	}
-	
+
 	// Повышаем уверенность, если тип товара соответствует паттерну
 	if productType != "unknown" && productType != "sandwich_panel" {
 		// Для строительных элементов
@@ -670,7 +670,7 @@ func (kc *KeywordClassifier) isLikelyProduct(input string) bool {
 			return true
 		}
 	}
-	
+
 	// Признаки товара, а не услуги
 	productIndicators := []string{
 		"кабель", "датчик", "преобразователь", "элемент",
@@ -716,13 +716,13 @@ func (kc *KeywordClassifier) isLikelyProduct(input string) bool {
 func (kc *KeywordClassifier) hasProductCharacteristics(input string) bool {
 	// Паттерны технических характеристик
 	characteristicPatterns := []string{
-		`\b\d+\s*(мм|см|м|кг|г|л|мл|шт)\b`,                    // Размеры и единицы измерения
-		`\b\d+[xх]\d+`,                                      // Размеры типа 120x70
-		`\b\d+[.,]\d+\s*(мм|см|м|кг|г)\b`,                   // Десятичные размеры
-		`\b(арт\.?|art\.?|№)\s*[a-zA-Z0-9.-]+\b`,            // Артикулы
-		`\b(ral|din|iso|gost|гост)\s*[a-zA-Z0-9]+\b`,         // Стандарты
+		`\b\d+\s*(мм|см|м|кг|г|л|мл|шт)\b`, // Размеры и единицы измерения
+		`\b\d+[xх]\d+`, // Размеры типа 120x70
+		`\b\d+[.,]\d+\s*(мм|см|м|кг|г)\b`,                      // Десятичные размеры
+		`\b(арт\.?|art\.?|№)\s*[a-zA-Z0-9.-]+\b`,               // Артикулы
+		`\b(ral|din|iso|gost|гост)\s*[a-zA-Z0-9]+\b`,           // Стандарты
 		`\b(марка|модель|тип|серия)\s*[:\-]?\s*[a-zA-Z0-9]+\b`, // Марки и модели
-		`\b[a-zA-Z]{2,}\d+\b`,                                // Коды типа AKS32R, HELUKABEL
+		`\b[a-zA-Z]{2,}\d+\b`,                                  // Коды типа AKS32R, HELUKABEL
 	}
 
 	for _, patternStr := range characteristicPatterns {
@@ -734,4 +734,3 @@ func (kc *KeywordClassifier) hasProductCharacteristics(input string) bool {
 
 	return false
 }
-

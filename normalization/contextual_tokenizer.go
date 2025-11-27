@@ -290,13 +290,13 @@ func (ct *ContextualTokenizer) GetTokensByDepthRange(input string, minDepth, max
 
 // AnalyzeStructure анализирует структуру строки и возвращает статистику
 type StructureInfo struct {
-	TotalTokens      int
-	TextTokens       int
-	NumberTokens     int
-	BracketPairs     int
-	MaxDepth         int
-	HasQuotes        bool
-	DelimiterCount   int
+	TotalTokens       int
+	TextTokens        int
+	NumberTokens      int
+	BracketPairs      int
+	MaxDepth          int
+	HasQuotes         bool
+	DelimiterCount    int
 	DepthDistribution map[int]int // Количество токенов на каждой глубине
 }
 

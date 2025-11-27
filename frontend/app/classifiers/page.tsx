@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Database
 } from 'lucide-react'
+import Link from 'next/link'
 import { DatabaseSelector } from '@/components/database-selector'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -36,6 +37,18 @@ import { LoadingState } from '@/components/common/loading-state'
 import { EmptyState } from '@/components/common/empty-state'
 import { ErrorState } from '@/components/common/error-state'
 import { StatCard } from '@/components/common/stat-card'
+// import dynamic from 'next/dynamic'
+
+// const BackendStatusIndicator = dynamic(
+//   () => import('@/components/common/backend-status-indicator').then(mod => ({ default: mod.BackendStatusIndicator })),
+//   { ssr: false }
+// )
+import { FadeIn } from '@/components/animations/fade-in'
+import { StaggerContainer, StaggerItem } from '@/components/animations/stagger-container'
+import { motion } from 'framer-motion'
+import { Progress } from '@/components/ui/progress'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { BreadcrumbList } from '@/components/seo/breadcrumb-list'
 import {
   Select,
   SelectContent,
@@ -74,7 +87,7 @@ export default function ClassifiersPage() {
   const [loading, setLoading] = useState(false)
   const [loadingNodes, setLoadingNodes] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const [selectedClassifier, setSelectedClassifier] = useState<'kpved' | 'other'>('kpved')
+  const [selectedClassifier, setSelectedClassifier] = useState<'kpved' | 'okpd2' | 'other'>('kpved')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -84,53 +97,78 @@ export default function ClassifiersPage() {
   const [nodePath, setNodePath] = useState<string[]>([])
   const [exporting, setExporting] = useState(false)
   const [loadingKpved, setLoadingKpved] = useState(false)
-  const [kpvedFilePath, setKpvedFilePath] = useState('КПВЭД.txt')
+  const [kpvedFilePath, setKpvedFilePath] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [showLoadDialog, setShowLoadDialog] = useState(false)
   const [loadSuccess, setLoadSuccess] = useState<string | null>(null)
   
   // Защита от рендеринга объектов
   const safeRenderNumber = (value: unknown): string => {
     if (typeof value === 'number') {
-      return value.toLocaleString()
+      return value.toLocaleString('ru-RU')
     }
     if (typeof value === 'string') {
       const num = Number(value)
-      return isNaN(num) ? '0' : num.toLocaleString()
+      return isNaN(num) ? '0' : num.toLocaleString('ru-RU')
     }
     return '0'
   }
 
   useEffect(() => {
-    if (selectedDatabase && selectedClassifier === 'kpved') {
+    // Обновляем путь к файлу в зависимости от выбранного классификатора
+    if (selectedClassifier === 'okpd2') {
+      setKpvedFilePath('okpd2_data.txt')
+    } else if (selectedClassifier === 'kpved') {
+      setKpvedFilePath('КПВЭД.txt')
+    }
+  }, [selectedClassifier])
+
+  useEffect(() => {
+    // Для ОКПД2 и КПВЭД база данных не обязательна (данные в service.db)
+    if (selectedClassifier === 'okpd2' || selectedClassifier === 'kpved') {
       fetchHierarchy()
       fetchStats()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDatabase, selectedClassifier])
+  }, [selectedClassifier])
 
   const fetchStats = async () => {
-    if (!selectedDatabase) return
+    // Для ОКПД2 и КПВЭД база данных не нужна (данные в service.db)
+    if (selectedClassifier !== 'okpd2' && selectedClassifier !== 'kpved') return
     
     try {
-      const response = await fetch(`/api/kpved/stats?database=${encodeURIComponent(selectedDatabase)}`)
+      const apiPath = selectedClassifier === 'okpd2' ? '/api/okpd2/stats' : '/api/kpved/stats'
+      const response = await fetch(apiPath)
       if (response.ok) {
         const data = await response.json()
         // Убеждаемся, что данные в правильном формате
-        if (data && typeof data.total === 'number' && typeof data.levels === 'number') {
-          setStats({
-            total: Number(data.total),
-            levels: Number(data.levels)
-          })
-        }
+        const total = data.total_codes || data.total || 0
+        const maxLevel = data.max_level || data.levels || 0
+        setStats({
+          total: Number(total),
+          levels: Number(maxLevel)
+        })
+      } else if (response.status === 404) {
+        // При 404 устанавливаем нулевые статистики
+        setStats({
+          total: 0,
+          levels: 0
+        })
       }
     } catch (err) {
       console.error('Error fetching stats:', err)
+      // При ошибке устанавливаем нулевые статистики
+      setStats({
+        total: 0,
+        levels: 0
+      })
     }
   }
 
   const fetchHierarchy = async (parent?: string, level?: number) => {
-    if (!selectedDatabase) {
-      setError('Выберите базу данных')
+    // Для ОКПД2 и КПВЭД база данных не нужна (данные в service.db)
+    if (selectedClassifier !== 'okpd2' && selectedClassifier !== 'kpved') {
+      setError('Выберите классификатор')
       return
     }
 
@@ -146,12 +184,21 @@ export default function ClassifiersPage() {
       const params = new URLSearchParams()
       if (parent) params.append('parent', parent)
       if (level !== undefined) params.append('level', level.toString())
-      params.append('database', selectedDatabase)
 
-      const response = await fetch(`/api/kpved/hierarchy?${params.toString()}`)
+      const apiPath = selectedClassifier === 'okpd2' ? '/api/okpd2/hierarchy' : '/api/kpved/hierarchy'
+      const url = params.toString() ? `${apiPath}?${params.toString()}` : apiPath
+      const response = await fetch(url)
       
       // Если ответ не OK, но это не критическая ошибка (таблица не существует), обрабатываем как пустой результат
       if (!response.ok) {
+        // При 404 возвращаем пустую иерархию
+        if (response.status === 404) {
+          if (isRootLoad) {
+            setHierarchy([])
+          }
+          return
+        }
+        
         const errorData = await response.json().catch(() => ({ error: 'Failed to fetch hierarchy' }))
         const errorMessage = errorData.error || 'Failed to fetch hierarchy'
         
@@ -227,15 +274,27 @@ export default function ClassifiersPage() {
       }
       setError(null)
     } catch (err) {
-      // При ошибке подключения не показываем ошибку, просто пустой список
+      // При ошибке подключения показываем информативное сообщение
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      if (!errorMessage.includes('fetch') && !errorMessage.includes('ECONNREFUSED')) {
-        setError(errorMessage)
+      
+      // Определяем тип ошибки
+      const isConnectionError = 
+        errorMessage.includes('fetch') || 
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('network')
+      
+      if (isConnectionError) {
+        setError('Не удалось подключиться к серверу. Проверьте, что backend запущен и доступен.')
+      } else if (!errorMessage.includes('no such table') && !errorMessage.includes('empty')) {
+        setError(`Ошибка загрузки: ${errorMessage}`)
       } else {
         setError(null)
-        if (isRootLoad) {
-          setHierarchy([])
-        }
+      }
+      
+      if (isRootLoad) {
+        setHierarchy([])
       }
     } finally {
       if (isRootLoad) {
@@ -359,8 +418,9 @@ export default function ClassifiersPage() {
       setSearchResults([])
       return
     }
-    if (!selectedDatabase) {
-      setError('Выберите базу данных')
+    // Для ОКПД2 и КПВЭД база данных не нужна (данные в service.db)
+    if (selectedClassifier !== 'okpd2' && selectedClassifier !== 'kpved') {
+      setError('Выберите классификатор')
       return
     }
 
@@ -370,10 +430,10 @@ export default function ClassifiersPage() {
     try {
       const params = new URLSearchParams()
       params.append('q', searchQuery)
-      params.append('database', selectedDatabase)
       params.append('limit', '50')
       
-      const response = await fetch(`/api/kpved/search?${params.toString()}`)
+      const apiPath = selectedClassifier === 'okpd2' ? '/api/okpd2/search' : '/api/kpved/search'
+      const response = await fetch(`${apiPath}?${params.toString()}`)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to search' }))
         throw new Error(errorData.error || 'Failed to search')
@@ -384,7 +444,21 @@ export default function ClassifiersPage() {
       setSearchResults(results)
       setShowSearchResults(results.length > 0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      
+      // Определяем тип ошибки
+      const isConnectionError = 
+        errorMessage.includes('fetch') || 
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('Failed to fetch') ||
+        errorMessage.includes('NetworkError')
+      
+      if (isConnectionError) {
+        setError('Не удалось подключиться к серверу. Проверьте, что backend запущен и доступен.')
+      } else {
+        setError(`Ошибка поиска: ${errorMessage}`)
+      }
+      
       setSearchResults([])
       setShowSearchResults(false)
     } finally {
@@ -497,13 +571,16 @@ export default function ClassifiersPage() {
   }
 
   const loadKpved = async () => {
-    if (!selectedDatabase) {
-      setError('Выберите базу данных')
+    // Для ОКПД2 и КПВЭД база данных не нужна (данные в service.db)
+    if (selectedClassifier !== 'okpd2' && selectedClassifier !== 'kpved') {
+      setError('Выберите классификатор')
       return
     }
 
-    if (!kpvedFilePath.trim()) {
-      setError('Укажите путь к файлу КПВЭД.txt')
+    // Проверяем, что указан либо путь к файлу, либо выбран файл
+    if (!kpvedFilePath.trim() && !selectedFile) {
+      const fileType = selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'
+      setError(`Укажите путь к файлу ${fileType} или выберите файл для загрузки`)
       return
     }
 
@@ -512,26 +589,47 @@ export default function ClassifiersPage() {
     setLoadSuccess(null)
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9999'
-      const response = await fetch(`${backendUrl}/api/kpved/load`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const fileType = selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'
+      
+      // Используем API route фронтенда для проксирования запросов
+      const apiPath = selectedClassifier === 'okpd2' ? '/api/okpd2/load' : '/api/kpved/load'
+      
+      let response: Response
+      
+      // Если выбран файл, загружаем через multipart/form-data
+      if (selectedFile) {
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        
+        response = await fetch(apiPath, {
+          method: 'POST',
+          body: formData,
+        })
+      } else {
+        // Используем JSON с путем к файлу
+        const body: { file_path: string } = {
           file_path: kpvedFilePath,
-          database: selectedDatabase,
-        }),
-      })
+        }
+        
+        response = await fetch(apiPath, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        })
+      }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to load KPVED' }))
-        throw new Error(errorData.error || 'Ошибка загрузки КПВЭД')
+        const errorData = await response.json().catch(() => ({ error: `Failed to load ${fileType}` }))
+        throw new Error(errorData.error || `Ошибка загрузки ${fileType}`)
       }
 
       const data = await response.json()
       setLoadSuccess(`Классификатор успешно загружен! Загружено записей: ${data.total_codes || 0}`)
       setShowLoadDialog(false)
+      setSelectedFile(null)
+      setKpvedFilePath(selectedClassifier === 'okpd2' ? 'okpd2_data.txt' : 'КПВЭД.txt')
       
       // Обновляем статистику и иерархию
       await fetchStats()
@@ -542,14 +640,15 @@ export default function ClassifiersPage() {
         setLoadSuccess(null)
       }, 5000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки КПВЭД')
+      const fileType = selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'
+      setError(err instanceof Error ? err.message : `Ошибка загрузки ${fileType}`)
     } finally {
       setLoadingKpved(false)
     }
   }
 
   const exportHierarchy = async (format: 'csv' | 'json') => {
-    if (!selectedDatabase || !hierarchy || hierarchy.length === 0) {
+    if (!hierarchy || hierarchy.length === 0) {
       setError('Нет данных для экспорта')
       return
     }
@@ -772,51 +871,93 @@ export default function ClassifiersPage() {
     )
   }
 
+  const breadcrumbItems = [
+    { label: 'Классификаторы', href: '/classifiers', icon: BookOpen },
+  ]
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BookOpen className="w-8 h-8 text-blue-500" />
-            Классификаторы
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Просмотр иерархии классификаторов (КПВЭД и другие)
-          </p>
-        </div>
-        <DatabaseSelector
-          value={selectedDatabase || undefined}
-          onChange={(val) => setSelectedDatabase(val || null)}
-        />
+    <div className="container-wide mx-auto px-4 py-8 space-y-6">
+      <BreadcrumbList items={breadcrumbItems.map(item => ({ label: item.label, href: item.href || '#' }))} />
+      <div className="mb-4">
+        <Breadcrumb items={breadcrumbItems} />
       </div>
 
-      {/* Classifier Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Выберите классификатор</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Button
-              variant={selectedClassifier === 'kpved' ? 'default' : 'outline'}
-              onClick={() => setSelectedClassifier('kpved')}
+      <FadeIn>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <motion.h1 
+                className="text-3xl font-bold flex items-center gap-2"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                  <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                Классификаторы
+              </motion.h1>
+              {/* {typeof window !== 'undefined' && <BackendStatusIndicator showLabel={true} />} */}
+            </div>
+            <motion.p 
+              className="text-muted-foreground mt-2"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
             >
-              <FileText className="w-4 h-4 mr-2" />
-              КПВЭД
-            </Button>
-            <Button
-              variant={selectedClassifier === 'other' ? 'default' : 'outline'}
-              onClick={() => setSelectedClassifier('other')}
-              disabled
-            >
-              Другие (в разработке)
-            </Button>
+              Просмотр иерархии классификаторов (КПВЭД, ОКПД2 и другие)
+            </motion.p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FadeIn>
 
-      {selectedClassifier === 'kpved' && (
+      {/* Classifier Selection */}
+      <FadeIn>
+        <Card>
+          <CardHeader>
+            <CardTitle>Выберите классификатор</CardTitle>
+            <CardDescription>
+              Перейдите на отдельную страницу классификатора для детального просмотра
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 flex-wrap">
+              <Link href="/classifiers/kpved">
+                <Button variant={selectedClassifier === 'kpved' ? 'default' : 'outline'} className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  КПВЭД
+                </Button>
+              </Link>
+              <Link href="/classifiers/okpd2">
+                <Button variant={selectedClassifier === 'okpd2' ? 'default' : 'outline'} className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  ОКПД2
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </FadeIn>
+
+      {(selectedClassifier === 'kpved' || selectedClassifier === 'okpd2') && (
         <>
+          {(selectedClassifier === 'okpd2' || selectedClassifier === 'kpved') && (
+            <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Классификатор {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'}
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                      Данные {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'} хранятся в сервисной базе данных. Выбор базы данных не требуется.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Search and Filters */}
           <Card>
             <CardHeader>
@@ -913,8 +1054,8 @@ export default function ClassifiersPage() {
             </CardContent>
           </Card>
 
-          {/* Load KPVED Button - показываем всегда, если выбрана БД */}
-          {selectedDatabase && (
+          {/* Load Classifier Button - для ОКПД2 и КПВЭД показываем всегда */}
+          {(selectedClassifier === 'okpd2' || selectedClassifier === 'kpved') && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -922,7 +1063,7 @@ export default function ClassifiersPage() {
                   Управление классификатором
                 </CardTitle>
                 <CardDescription>
-                  Загрузите классификатор КПВЭД из файла в базу данных
+                  Загрузите классификатор {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'} из файла в базу данных
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -939,7 +1080,7 @@ export default function ClassifiersPage() {
                   ) : (
                     <>
                       <Upload className="h-4 w-4 mr-2" />
-                      Загрузить КПВЭД из файла
+                      Загрузить {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'} из файла
                     </>
                   )}
                 </Button>
@@ -980,25 +1121,97 @@ export default function ClassifiersPage() {
           <Dialog open={showLoadDialog} onOpenChange={setShowLoadDialog}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Загрузка классификатора КПВЭД</DialogTitle>
+                <DialogTitle>Загрузка классификатора {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'}</DialogTitle>
                 <DialogDescription>
-                  Укажите путь к файлу КПВЭД.txt для загрузки в базу данных
+                  Укажите путь к файлу {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД.txt'} для загрузки в базу данных
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="kpved-file-path">Путь к файлу</Label>
+                  <Label htmlFor="classifier-file-upload">Загрузить файл с компьютера</Label>
                   <Input
-                    id="kpved-file-path"
-                    value={kpvedFilePath}
-                    onChange={(e) => setKpvedFilePath(e.target.value)}
-                    placeholder="КПВЭД.txt"
+                    id="classifier-file-upload"
+                    type="file"
+                    accept=".txt,.csv"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        // Валидация размера файла (максимум 100MB для классификаторов)
+                        const maxSize = 100 * 1024 * 1024 // 100MB
+                        if (file.size > maxSize) {
+                          setError(`Файл слишком большой. Максимальный размер: ${(maxSize / 1024 / 1024).toFixed(0)}MB`)
+                          setSelectedFile(null)
+                          return
+                        }
+                        
+                        // Валидация типа файла
+                        const validExtensions = ['.txt', '.csv']
+                        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+                        if (!validExtensions.includes(fileExtension)) {
+                          setError(`Неподдерживаемый тип файла. Разрешенные форматы: ${validExtensions.join(', ')}`)
+                          setSelectedFile(null)
+                          return
+                        }
+                        
+                        setError(null)
+                        setSelectedFile(file)
+                        setKpvedFilePath('')
+                      } else {
+                        setSelectedFile(null)
+                      }
+                    }}
                     disabled={loadingKpved}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Укажите полный путь к файлу КПВЭД.txt на сервере
+                    Выберите файл {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'} для загрузки (максимум 100MB)
                   </p>
                 </div>
+                {selectedFile && (
+                  <div className="p-3 bg-muted rounded-lg space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Выбранный файл:</span>
+                      <span className="text-muted-foreground">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate" title={selectedFile.name}>
+                      {selectedFile.name}
+                    </p>
+                  </div>
+                )}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">или</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="kpved-file-path">Путь к файлу на сервере</Label>
+                  <Input
+                    id="kpved-file-path"
+                    value={kpvedFilePath}
+                    onChange={(e) => {
+                      setKpvedFilePath(e.target.value)
+                      if (e.target.value) {
+                        setSelectedFile(null)
+                      }
+                    }}
+                    placeholder={selectedClassifier === 'okpd2' ? 'okpd2_data.txt' : 'КПВЭД.txt'}
+                    disabled={loadingKpved}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Укажите полный путь к файлу {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'} на сервере
+                  </p>
+                </div>
+                {loadingKpved && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Загрузка файла...</span>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                    <Progress value={undefined} className="h-2" />
+                  </div>
+                )}
                 {error && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -1012,6 +1225,7 @@ export default function ClassifiersPage() {
                   onClick={() => {
                     setShowLoadDialog(false)
                     setError(null)
+                    setSelectedFile(null)
                   }}
                   disabled={loadingKpved}
                 >
@@ -1019,7 +1233,10 @@ export default function ClassifiersPage() {
                 </Button>
                 <Button
                   onClick={loadKpved}
-                  disabled={loadingKpved || !kpvedFilePath.trim() || !selectedDatabase}
+                  disabled={
+                    loadingKpved || 
+                    (!kpvedFilePath.trim() && !selectedFile)
+                  }
                 >
                   {loadingKpved ? (
                     <>
@@ -1091,7 +1308,7 @@ export default function ClassifiersPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Иерархия КПВЭД</CardTitle>
+                  <CardTitle>Иерархия {selectedClassifier === 'okpd2' ? 'ОКПД2' : 'КПВЭД'}</CardTitle>
                   <CardDescription>
                     Древовидная структура классификатора
                   </CardDescription>
@@ -1198,18 +1415,29 @@ export default function ClassifiersPage() {
             </CardHeader>
             <CardContent>
               {error && (
-                <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded">
-                  {error}
-                </div>
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{error}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setError(null)
+                        // Повторная попытка загрузки
+                        if (selectedClassifier === 'okpd2' || selectedClassifier === 'kpved') {
+                          fetchHierarchy()
+                        }
+                      }}
+                      className="ml-2 h-6 text-xs"
+                    >
+                      Повторить
+                    </Button>
+                  </AlertDescription>
+                </Alert>
               )}
 
-              {!selectedDatabase ? (
-                <EmptyState
-                  icon={Database}
-                  title="Выберите базу данных"
-                  description="Для просмотра классификатора необходимо выбрать базу данных"
-                />
-              ) : loading && (!hierarchy || hierarchy.length === 0) ? (
+              {loading && (!hierarchy || hierarchy.length === 0) ? (
                 <LoadingState message="Загрузка иерархии..." size="lg" fullScreen />
               ) : !hierarchy || hierarchy.length === 0 ? (
                 <EmptyState

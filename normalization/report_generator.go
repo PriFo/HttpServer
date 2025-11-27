@@ -12,46 +12,46 @@ import (
 
 // NormalizationReport отчет по нормализации
 type NormalizationReport struct {
-	GeneratedAt       string                 `json:"generated_at"`
-	TotalItems        int                    `json:"total_items"`
-	StageStatistics   map[string]StageStats  `json:"stage_statistics"`
-	QualityMetrics    QualityMetrics         `json:"quality_metrics"`
-	ProcessingMethods map[string]int         `json:"processing_methods"`
-	ItemTypes         map[string]int         `json:"item_types"`
-	ManualReview      ManualReviewInfo       `json:"manual_review"`
-	TopIssues         []IssueInfo            `json:"top_issues"`
+	GeneratedAt       string                `json:"generated_at"`
+	TotalItems        int                   `json:"total_items"`
+	StageStatistics   map[string]StageStats `json:"stage_statistics"`
+	QualityMetrics    QualityMetrics        `json:"quality_metrics"`
+	ProcessingMethods map[string]int        `json:"processing_methods"`
+	ItemTypes         map[string]int        `json:"item_types"`
+	ManualReview      ManualReviewInfo      `json:"manual_review"`
+	TopIssues         []IssueInfo           `json:"top_issues"`
 }
 
 // StageStats статистика по этапу
 type StageStats struct {
-	StageName       string  `json:"stage_name"`
-	Completed       int     `json:"completed"`
-	Pending         int     `json:"pending"`
-	CompletionRate  float64 `json:"completion_rate"`
-	AvgConfidence   float64 `json:"avg_confidence,omitempty"`
+	StageName      string  `json:"stage_name"`
+	Completed      int     `json:"completed"`
+	Pending        int     `json:"pending"`
+	CompletionRate float64 `json:"completion_rate"`
+	AvgConfidence  float64 `json:"avg_confidence,omitempty"`
 }
 
 // QualityMetrics метрики качества
 type QualityMetrics struct {
-	AverageScore      float64 `json:"average_score"`
-	HighQuality       int     `json:"high_quality"`      // score >= 0.8
-	MediumQuality     int     `json:"medium_quality"`    // 0.5 <= score < 0.8
-	LowQuality        int     `json:"low_quality"`       // score < 0.5
-	ValidationPassed  int     `json:"validation_passed"`
-	ValidationFailed  int     `json:"validation_failed"`
+	AverageScore     float64 `json:"average_score"`
+	HighQuality      int     `json:"high_quality"`   // score >= 0.8
+	MediumQuality    int     `json:"medium_quality"` // 0.5 <= score < 0.8
+	LowQuality       int     `json:"low_quality"`    // score < 0.5
+	ValidationPassed int     `json:"validation_passed"`
+	ValidationFailed int     `json:"validation_failed"`
 }
 
 // ManualReviewInfo информация о ручной проверке
 type ManualReviewInfo struct {
-	TotalRequired int      `json:"total_required"`
+	TotalRequired int            `json:"total_required"`
 	ByReason      map[string]int `json:"by_reason"`
 }
 
 // IssueInfo информация о проблеме
 type IssueInfo struct {
-	Issue       string `json:"issue"`
-	Count       int    `json:"count"`
-	Percentage  float64 `json:"percentage"`
+	Issue      string  `json:"issue"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
 }
 
 // ReportGenerator генератор отчетов

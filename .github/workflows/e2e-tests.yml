@@ -1,0 +1,91 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      # Запускаем бэкенд в Docker
+      backend:
+        image: your-backend-image:latest
+        ports:
+          - 9999:9999
+        env:
+          DATABASE_PATH: /app/data/test.db
+        options: >-
+          --health-cmd "wget --quiet --tries=1 --spider http://localhost:9999/health || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:9999
+
+      - name: Start frontend server
+        working-directory: frontend
+        run: npm start &
+        env:
+          NODE_ENV: production
+          PORT: 3000
+
+      - name: Wait for frontend
+        run: |
+          timeout 120 bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+
+      - name: Wait for backend
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:9999/health; do sleep 2; done'
+
+      - name: Run E2E tests
+        working-directory: frontend
+        run: npx playwright test
+        env:
+          BACKEND_URL: http://localhost:9999
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+      - name: Upload test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: frontend/test-results/
+          retention-days: 7
+

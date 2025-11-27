@@ -24,12 +24,31 @@ import {
   Key,
   TestTube,
   Download,
-  Award
+  Award,
+  Activity,
+  TrendingUp,
+  Clock,
+  BarChart3,
+  Play
 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { LoadingState } from '@/components/common/loading-state'
 import { ErrorState } from '@/components/common/error-state'
+import { WorkersPageSkeleton } from '@/components/common/workers-skeleton'
 import { StatCard } from '@/components/common/stat-card'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { BreadcrumbList } from '@/components/seo/breadcrumb-list'
+import { motion } from 'framer-motion'
+import { FadeIn } from '@/components/animations/fade-in'
+import { Gauge } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { useApiClient } from '@/hooks/useApiClient'
+import { BenchmarkResultsTable } from '@/components/workers/benchmark-results-table'
+import { BenchmarkRadarChart } from '@/components/workers/benchmark-radar-chart'
+import { PerformanceHeatmap } from '@/components/workers/performance-heatmap'
+import { ModelRecommendationEngine } from '@/components/workers/model-recommendation-engine'
+import { BenchmarkTimeSeries } from '@/components/workers/benchmark-time-series'
 
 interface ModelConfig {
   name: string
@@ -61,9 +80,58 @@ interface WorkerConfig {
   default_provider: string
   default_model: string
   global_max_workers: number
+  isFallback?: boolean
+  fallbackReason?: string
+  lastSync?: string
+}
+
+interface BenchmarkResult {
+  // Существующие поля
+  model: string
+  priority: number
+  speed: number
+  avg_response_time_ms: number
+  median_response_time_ms?: number
+  p75_response_time_ms?: number
+  p90_response_time_ms?: number
+  p95_response_time_ms?: number
+  p99_response_time_ms?: number
+  min_response_time_ms?: number
+  max_response_time_ms?: number
+  success_count: number
+  error_count: number
+  total_requests: number
+  success_rate: number
+  status: string
+  
+  // Новые поля для качества и стабильности
+  avg_confidence?: number
+  min_confidence?: number
+  max_confidence?: number
+  avg_ai_calls_count?: number
+  avg_retries?: number
+  coefficient_of_variation?: number
+  throughput_items_per_sec?: number
+  error_breakdown?: {
+    quota_exceeded: number
+    rate_limit: number
+    timeout: number
+    network: number
+    auth: number
+    other: number
+  }
+}
+
+interface BenchmarkResponse {
+  models: BenchmarkResult[]
+  total: number
+  test_count?: number // Опциональное, так как API может не возвращать это поле
+  timestamp: string
+  message?: string
 }
 
 export default function WorkersPage() {
+  const { get, post } = useApiClient()
   const [config, setConfig] = useState<WorkerConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -75,9 +143,19 @@ export default function WorkersPage() {
   const [refreshingModels, setRefreshingModels] = useState<Record<string, boolean>>({})
   const [savingApiKey, setSavingApiKey] = useState<Record<string, boolean>>({})
   const successTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const refreshingRef = useRef<Record<string, boolean>>({}) // Ref для отслеживания активных обновлений
+  const [workerMetrics, setWorkerMetrics] = useState<any>(null)
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
+  const [runningBenchmark, setRunningBenchmark] = useState<Record<string, boolean>>({})
+  const [benchmarkResults, setBenchmarkResults] = useState<Record<string, BenchmarkResponse>>({})
+  const [benchmarkProgress, setBenchmarkProgress] = useState<Record<string, { current: number; total: number }>>({})
 
   useEffect(() => {
     fetchConfig()
+    fetchWorkerMetrics()
+    
+    // Обновляем метрики каждые 30 секунд
+    const metricsInterval = setInterval(fetchWorkerMetrics, 30000)
     
     // Cleanup timeout при размонтировании
     return () => {
@@ -85,8 +163,39 @@ export default function WorkersPage() {
         clearTimeout(successTimeoutRef.current)
         successTimeoutRef.current = null
       }
+      clearInterval(metricsInterval)
     }
   }, [])
+
+  const fetchWorkerMetrics = async () => {
+    setLoadingMetrics(true)
+    try {
+      const data = await get<any>('/api/monitoring/metrics', {
+        skipErrorHandler: true,
+        timeoutMs: 15000,
+      })
+      setWorkerMetrics(data)
+    } catch (err) {
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
+      console.error('Error fetching worker metrics:', err)
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }
+
+  const ensureBackendAvailable = (actionDescription?: string) => {
+    if (config?.isFallback) {
+      const reason = config.fallbackReason
+        ? `Причина: ${config.fallbackReason}`
+        : 'Backend конфигурации (порт 9999) недоступен.'
+      const message = actionDescription ? `${actionDescription}. ${reason}` : reason
+      toast.error('Backend недоступен', {
+        description: message,
+      })
+      return false
+    }
+    return true
+  }
 
   const testAPIKey = async (providerName: string) => {
     if (!config) {
@@ -100,16 +209,24 @@ export default function WorkersPage() {
       return
     }
 
+    if (!ensureBackendAvailable('Невозможно проверить API ключ пока backend недоступен')) {
+      return
+    }
+
     // Устанавливаем статус тестирования
     setApiKeyStatus(prev => ({ ...prev, [providerName]: { connected: false, testing: true } }))
 
     try {
-      let response
+      let endpoint: string | null = null
       if (providerName === 'arliai') {
         // Используем специальный эндпоинт для Arliai
-        response = await fetch('/api/workers/arliai/status', {
-          cache: 'no-store',
-        })
+        endpoint = '/api/workers/arliai/status'
+      } else if (providerName === 'openrouter') {
+        // Используем специальный эндпоинт для OpenRouter
+        endpoint = '/api/workers/openrouter/status'
+      } else if (providerName === 'huggingface') {
+        // Используем специальный эндпоинт для Hugging Face
+        endpoint = '/api/workers/huggingface/status'
       } else {
         // Для других провайдеров можно добавить аналогичные эндпоинты
         setApiKeyStatus(prev => ({ 
@@ -123,21 +240,11 @@ export default function WorkersPage() {
         return
       }
 
-      if (!response.ok) {
-        let errorMessage = 'Не удалось проверить подключение'
-        try {
-          const errorData = await response.json().catch(() => null)
-          if (errorData?.error) {
-            errorMessage = errorData.error
-          }
-        } catch {
-          // Используем дефолтное сообщение
-        }
-        throw new Error(errorMessage)
-      }
-
-      const responseJson = await response.json()
-      const data = responseJson.data || responseJson
+      const responseData = await get<{ data?: { connected: boolean; error?: string; has_api_key?: boolean }; connected?: boolean; error?: string; has_api_key?: boolean }>(endpoint, {
+        skipErrorHandler: true,
+        timeoutMs: 20000,
+      })
+      const data = responseData.data || responseData
 
       // Определяем сообщение об ошибке
       let errorMessage: string | undefined
@@ -160,16 +267,46 @@ export default function WorkersPage() {
         } 
       }))
       
+      if (data.connected) {
+        toast.success('Подключение установлено', {
+          description: `Провайдер ${providerName} успешно подключен`,
+        })
+      } else {
+        toast.error('Ошибка подключения', {
+          description: errorMessage || `Не удалось подключиться к провайдеру ${providerName}`,
+        })
+      }
+      
       // Если подключение успешно, автоматически обновляем список моделей
-      if (data.connected && providerName === 'arliai') {
+      // Только если еще не обновляется
+      if (data.connected && (providerName === 'arliai' || providerName === 'openrouter' || providerName === 'huggingface') && !refreshingRef.current[providerName]) {
         setTimeout(() => {
           refreshModels(providerName)
         }, 500)
       }
     } catch (err) {
-      const errorMessage = err instanceof Error 
-        ? err.message 
-        : 'Ошибка проверки подключения'
+      let errorMessage = 'Ошибка проверки подключения'
+      
+      if (err instanceof Error) {
+        if (err.message.includes('timeout') || err.message.includes('Превышено время ожидания')) {
+          errorMessage = `Таймаут при проверке подключения для ${providerName}. Сервер может быть перегружен.`
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+          errorMessage = `Не удалось подключиться к серверу для ${providerName}. Проверьте, что бэкенд запущен.`
+        } else if (err.message.includes('API key') || err.message.includes('401') || err.message.includes('403')) {
+          errorMessage = `Неверный API ключ для ${providerName}. Проверьте правильность ключа.`
+        } else {
+          errorMessage = err.message
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMessage = String((err as { message: string }).message)
+      }
+      
+      toast.error('Ошибка проверки подключения', {
+        description: errorMessage,
+        duration: 5000,
+      })
       
       setApiKeyStatus(prev => ({ 
         ...prev, 
@@ -183,6 +320,11 @@ export default function WorkersPage() {
   }
 
   const refreshModels = async (providerName: string) => {
+    // Защита от повторных вызовов
+    if (refreshingRef.current[providerName]) {
+      return
+    }
+    
     if (!config) {
       setError('Конфигурация не загружена')
       return
@@ -194,30 +336,105 @@ export default function WorkersPage() {
       return
     }
 
+    if (!ensureBackendAvailable('Невозможно обновить список моделей пока backend недоступен')) {
+      return
+    }
+
+    refreshingRef.current[providerName] = true
     setRefreshingModels(prev => ({ ...prev, [providerName]: true }))
     setError(null)
 
     try {
-      // Запрашиваем список моделей из API
-      const response = await fetch('/api/workers/models', {
-        cache: 'no-store',
+      // Запрашиваем список моделей из API с указанием провайдера и принудительным обновлением
+      const data = await get<{ 
+        success: boolean; 
+        data?: { 
+          models?: any[]; 
+          api_error?: string; 
+          api_available?: boolean;
+          error_type?: string;
+          error_message?: string;
+          api_models_count?: number;
+          local_models_count?: number;
+        } 
+      }>(`/api/workers/models?provider=${providerName}&refresh=1`, {
+        skipErrorHandler: true,
+        timeoutMs: 30000,
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch models' }))
-        throw new Error(errorData.error || 'Не удалось получить список моделей')
-      }
-
-      const data = await response.json()
       
       if (data.success) {
-        // После получения моделей перезагружаем конфигурацию
-        await fetchConfig()
+        // Обновляем конфигурацию напрямую, не вызывая fetchConfig (чтобы избежать бесконечного цикла)
+        setConfig((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            providers: {
+              ...prev.providers,
+              [providerName]: {
+                ...prev.providers[providerName],
+                available_models: data.data?.models || [],
+              },
+            },
+          }
+        })
         
-        if (data.data?.models && data.data.models.length > 0) {
-          setSuccess(`Список моделей обновлен (найдено моделей: ${data.data.models.length})`)
+        // Проверяем наличие ошибки API
+        if (data.data?.api_error) {
+          const errorType = data.data.error_type as string
+          const errorMessage = data.data.error_message as string || data.data.api_error
+          
+          let toastTitle = 'Ошибка загрузки моделей'
+          let toastVariant: 'error' | 'warning' = 'error'
+          
+          // Определяем тип ошибки и соответствующее сообщение
+          if (errorType === 'missing_api_key') {
+            toastTitle = 'API ключ не установлен'
+            toastVariant = 'warning'
+          } else if (errorType === 'unauthorized' || errorType === 'forbidden') {
+            toastTitle = 'Ошибка авторизации'
+            toastVariant = 'error'
+          } else if (errorType === 'timeout') {
+            toastTitle = 'Таймаут запроса'
+            toastVariant = 'warning'
+          }
+          
+          const errorMsg = errorMessage || `Ошибка при загрузке моделей: ${data.data.api_error}`
+          
+          if (toastVariant === 'error') {
+            toast.error(toastTitle, {
+              description: errorMsg,
+              duration: 6000,
+            })
+          } else {
+            toast.warning(toastTitle, {
+              description: errorMsg,
+              duration: 6000,
+            })
+          }
+          setSuccess(errorMsg)
+        } else if (data.data?.models && data.data.models.length > 0) {
+          const message = `Список моделей обновлен (найдено моделей: ${data.data.models.length})`
+          toast.success('Модели загружены', {
+            description: message,
+          })
+          setSuccess(message)
         } else {
-          setSuccess('Список моделей обновлен (модели не найдены)')
+          // Проверяем, доступен ли API
+          if (data.data?.api_available === false) {
+            const message = 'Список моделей обновлен (API недоступен. Проверьте API ключ и подключение)'
+            toast.warning('API недоступен', {
+              description: message,
+              duration: 5000,
+            })
+            setSuccess(message)
+          } else {
+            const message = 'Список моделей обновлен (модели не найдены. Возможно, API ключ не установлен или неверен)'
+            toast.info('Модели не найдены', {
+              description: message,
+              duration: 5000,
+            })
+            setSuccess(message)
+          }
         }
         
         if (successTimeoutRef.current) {
@@ -228,21 +445,50 @@ export default function WorkersPage() {
           successTimeoutRef.current = null
         }, 3000)
       } else {
-        throw new Error(data.error || 'Не удалось обновить список моделей')
+        throw new Error('Не удалось обновить список моделей')
       }
     } catch (err) {
-      const errorMessage = err instanceof Error 
-        ? err.message 
-        : 'Ошибка обновления списка моделей'
-      setError(errorMessage)
-      console.error('Error refreshing models:', err)
+      let errorMessage = 'Ошибка обновления списка моделей'
+      
+      if (err instanceof Error) {
+        if (err.message.includes('timeout') || err.message.includes('Превышено время ожидания')) {
+          errorMessage = `Таймаут при загрузке моделей для ${providerName}. Попробуйте позже.`
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+          errorMessage = `Не удалось подключиться к серверу для ${providerName}. Проверьте подключение.`
+        } else if (err.message.includes('API key') || err.message.includes('401') || err.message.includes('403')) {
+          errorMessage = `API ключ для ${providerName} не настроен или неверен. Проверьте настройки.`
+        } else {
+          errorMessage = err.message
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMessage = String((err as { message: string }).message)
+      }
+      
+      console.error('[Workers] Error refreshing models:', {
+        provider: providerName,
+        error: err,
+        message: errorMessage,
+      })
       
       // Если это ошибка из-за отсутствия подключения, не показываем критическую ошибку
-      if (errorMessage.includes('API key') || errorMessage.includes('подключ')) {
+      if (errorMessage.includes('API key') || errorMessage.includes('подключ') || errorMessage.includes('401') || errorMessage.includes('403')) {
         // Это не критическая ошибка, просто не удалось обновить модели
         // Статус подключения уже установлен в testAPIKey
+        toast.warning('Не удалось загрузить модели', {
+          description: errorMessage,
+          duration: 4000,
+        })
+      } else {
+        toast.error('Ошибка загрузки моделей', {
+          description: errorMessage,
+          duration: 5000,
+        })
+        setError(errorMessage)
       }
     } finally {
+      refreshingRef.current[providerName] = false
       setRefreshingModels(prev => ({ ...prev, [providerName]: false }))
     }
   }
@@ -251,16 +497,10 @@ export default function WorkersPage() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/workers/config', {
-        cache: 'no-store',
+      const data = await get<WorkerConfig>('/api/workers/config', {
+        skipErrorHandler: true,
+        timeoutMs: 15000,
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch config' }))
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch config`)
-      }
-      
-      const data = await response.json()
       
       // Проверяем, что данные валидны
       if (!data || typeof data !== 'object') {
@@ -268,6 +508,8 @@ export default function WorkersPage() {
       }
       
       setConfig(data)
+      // Очищаем ошибку после успешной загрузки
+      setError(null)
       // Разворачиваем все провайдеры по умолчанию
       setExpandedProviders(new Set(Object.keys(data.providers || {})))
       // Сохраняем уже введенные API ключи, не сбрасываем их при обновлении конфигурации
@@ -294,13 +536,16 @@ export default function WorkersPage() {
       })
       
       // Проверяем статус подключения для Arliai после небольшой задержки
-      if (data.providers?.arliai) {
+      // Только если еще не проверяли (избегаем бесконечных циклов)
+      if (data.providers?.arliai && !apiKeyStatus['arliai']?.testing && !apiKeyStatus['arliai']?.connected) {
         setTimeout(() => {
+          // Вызываем testAPIKey после того, как config установлен
+          // Используем setTimeout для гарантии, что состояние обновлено
           testAPIKey('arliai')
-        }, 100)
+        }, 200)
       }
     } catch (err) {
-      console.error('Error fetching worker config:', err)
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
@@ -308,6 +553,9 @@ export default function WorkersPage() {
   }
 
   const updateConfig = async (action: string, data: Record<string, unknown>) => {
+    if (!ensureBackendAvailable('Невозможно обновить конфигурацию воркеров')) {
+      return
+    }
     setSaving(true)
     setError(null)
     setSuccess(null)
@@ -319,39 +567,15 @@ export default function WorkersPage() {
     }
     
     try {
-      const response = await fetch('/api/workers/config/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, data }),
+      const responseData = await post<{ message?: string }>('/api/workers/config', { action, data }, {
+        skipErrorHandler: true,
+        timeoutMs: 20000,
       })
-      
-      // Читаем ответ один раз
-      let responseData: any = {}
-      try {
-        const contentType = response.headers.get('content-type')
-        if (contentType && contentType.includes('application/json')) {
-          responseData = await response.json()
-        } else {
-          const text = await response.text()
-          if (text) {
-            try {
-              responseData = JSON.parse(text)
-            } catch {
-              responseData = { error: text }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error parsing response:', err)
-        responseData = {}
-      }
-      
-      if (!response.ok) {
-        const errorMessage = responseData.error || responseData.message || `Ошибка ${response.status}: ${response.statusText || 'Failed to update config'}`
-        throw new Error(errorMessage)
-      }
       const message = responseData.message || 'Конфигурация обновлена успешно'
       
+      toast.success('Конфигурация сохранена', {
+        description: message,
+      })
       setSuccess(message)
       await fetchConfig()
       successTimeoutRef.current = setTimeout(() => {
@@ -359,11 +583,11 @@ export default function WorkersPage() {
         successTimeoutRef.current = null
       }, 3000)
     } catch (err) {
+      // Ошибка уже обработана через ErrorContext, если не skipErrorHandler
       const errorMessage = err instanceof Error 
         ? err.message 
         : 'Неизвестная ошибка при обновлении конфигурации'
       setError(errorMessage)
-      console.error('Error updating config:', err)
     } finally {
       setSaving(false)
     }
@@ -430,6 +654,10 @@ export default function WorkersPage() {
       return
     }
 
+    if (!ensureBackendAvailable('Невозможно сохранить API ключ, сервер недоступен')) {
+      return
+    }
+
     const apiKey = apiKeys[providerName] || ''
     setSavingApiKey(prev => ({ ...prev, [providerName]: true }))
     setError(null)
@@ -455,7 +683,7 @@ export default function WorkersPage() {
       }, 3000)
 
       // После сохранения проверяем подключение и обновляем модели
-      if (providerName === 'arliai' && apiKey.trim() !== '') {
+      if ((providerName === 'arliai' || providerName === 'openrouter' || providerName === 'huggingface') && apiKey.trim() !== '') {
         // Увеличиваем задержку до 1000ms для надежности
         setTimeout(async () => {
           try {
@@ -469,8 +697,9 @@ export default function WorkersPage() {
             // Используем функциональное обновление для получения актуального значения
             setApiKeyStatus(prev => {
               const status = prev[providerName]
-              if (status?.connected) {
+              if (status?.connected && !refreshingRef.current[providerName]) {
                 // Явно вызываем обновление моделей после успешной проверки
+                // Только если еще не обновляется
                 refreshModels(providerName).catch(err => {
                   console.error('Error refreshing models after API key save:', err)
                 })
@@ -563,9 +792,235 @@ export default function WorkersPage() {
     })
   }
 
+  const runBenchmark = async (providerName: string) => {
+    if (!config) {
+      const errorMsg = 'Конфигурация не загружена'
+      console.error('[Benchmark] Cannot run benchmark:', {
+        provider: providerName,
+        error: errorMsg,
+      })
+      setError(errorMsg)
+      return
+    }
+
+    const provider = config.providers[providerName]
+    if (!provider) {
+      const errorMsg = `Провайдер ${providerName} не найден`
+      console.error('[Benchmark] Provider not found:', {
+        provider: providerName,
+        availableProviders: Object.keys(config.providers),
+      })
+      setError(errorMsg)
+      return
+    }
+
+    if (!ensureBackendAvailable('Невозможно запустить бэнчмарк, сервер недоступен')) {
+      console.error('[Benchmark] Backend unavailable:', {
+        provider: providerName,
+      })
+      return
+    }
+
+    // Проверяем наличие API ключа
+    if (!provider.has_api_key && !apiKeys[providerName]) {
+      console.warn('[Benchmark] API key not set:', {
+        provider: providerName,
+        hasApiKey: provider.has_api_key,
+      })
+      toast.error('API ключ не установлен', {
+        description: 'Пожалуйста, сохраните API ключ перед запуском бэнчмарка',
+      })
+      return
+    }
+
+    setRunningBenchmark(prev => ({ ...prev, [providerName]: true }))
+    setBenchmarkProgress(prev => ({ ...prev, [providerName]: { current: 0, total: 0 } }))
+    setError(null)
+
+    try {
+      // Получаем датасет из нормализации с таймаутом
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 секунд для получения датасета
+
+      let testProducts: string[] = []
+      try {
+        const datasetResponse = await fetch('/api/normalization/benchmark-dataset?limit=50', {
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+
+        // Обрабатываем как успешные, так и неуспешные ответы
+        // API route возвращает пустой массив при ошибках, поэтому всегда парсим JSON
+        try {
+          const datasetData = await datasetResponse.json()
+          if (datasetData?.data && Array.isArray(datasetData.data)) {
+            testProducts = datasetData.data
+              .filter((item: unknown): item is string => typeof item === 'string' && item.trim() !== '')
+              .slice(0, 50) // Ограничиваем максимум 50 элементами
+          }
+          if (!datasetResponse.ok && datasetData?.message) {
+            console.warn(`[Benchmark] Dataset fetch warning: ${datasetData.message}`, {
+              status: datasetResponse.status,
+              provider: providerName,
+            })
+          }
+        } catch (parseError) {
+          console.warn('[Benchmark] Failed to parse dataset response, using empty array', {
+            status: datasetResponse.status,
+            provider: providerName,
+            error: parseError,
+          })
+        }
+      } catch (datasetError: any) {
+        clearTimeout(timeoutId)
+        if (datasetError.name === 'AbortError') {
+          console.warn('[Benchmark] Dataset fetch timeout, using empty array (backend will use default data)', {
+            provider: providerName,
+          })
+        } else {
+          console.warn('[Benchmark] Error fetching dataset, using empty array (backend will use default data):', {
+            error: datasetError,
+            message: datasetError?.message,
+            provider: providerName,
+          })
+        }
+      }
+
+      // Если не получили датасет, используем пустой массив (бэкенд использует дефолтные)
+      // Это нормально, бэкенд имеет fallback на дефолтные данные
+
+      // Запускаем бэнчмарк
+      const benchmarkResponse = await post<{
+        models?: Array<{
+          model: string
+          priority: number
+          speed: number
+          avg_response_time_ms: number
+          success_count: number
+          error_count: number
+          success_rate: number
+          status: string
+        }>
+        total?: number
+        timestamp?: string
+        message?: string
+      }>('/api/models/benchmark', {
+        provider: providerName,
+        use_normalization_dataset: true,
+        test_products: testProducts,
+        max_retries: 5,
+        retry_delay_ms: 200,
+        auto_update_priorities: false,
+      }, {
+        timeoutMs: 60000,
+      })
+
+      if (benchmarkResponse?.models && Array.isArray(benchmarkResponse.models) && benchmarkResponse.models.length > 0) {
+        // Преобразуем ответ API в BenchmarkResponse с обязательными полями
+        const formattedModels: BenchmarkResult[] = benchmarkResponse.models.map((model: any): BenchmarkResult => ({
+          model: model.model,
+          priority: model.priority,
+          speed: model.speed,
+          avg_response_time_ms: model.avg_response_time_ms,
+          success_count: model.success_count,
+          error_count: model.error_count,
+          success_rate: model.success_rate,
+          status: model.status,
+          // Вычисляем total_requests из success_count + error_count
+          total_requests: model.total_requests || (model.success_count + model.error_count),
+          // Перцентили времени ответа
+          median_response_time_ms: model.median_response_time_ms,
+          p75_response_time_ms: model.p75_response_time_ms,
+          p90_response_time_ms: model.p90_response_time_ms,
+          p95_response_time_ms: model.p95_response_time_ms,
+          p99_response_time_ms: model.p99_response_time_ms,
+          min_response_time_ms: model.min_response_time_ms,
+          max_response_time_ms: model.max_response_time_ms,
+          // Метрики качества классификации
+          avg_confidence: model.avg_confidence,
+          min_confidence: model.min_confidence,
+          max_confidence: model.max_confidence,
+          avg_ai_calls_count: model.avg_ai_calls_count,
+          // Метрики надежности
+          avg_retries: model.avg_retries,
+          coefficient_of_variation: model.coefficient_of_variation,
+          // Дополнительные метрики
+          throughput_items_per_sec: model.throughput_items_per_sec || model.speed,
+          // Детальная статистика ошибок
+          error_breakdown: model.error_breakdown,
+        }))
+        
+        const formattedResponse: BenchmarkResponse = {
+          models: formattedModels,
+          total: benchmarkResponse.total ?? benchmarkResponse.models.length,
+          test_count: benchmarkResponse.total ?? benchmarkResponse.models.length, // Используем total как test_count если доступно
+          timestamp: benchmarkResponse.timestamp ?? new Date().toISOString(),
+          message: benchmarkResponse.message,
+        }
+        // Явно типизируем обновление state для избежания проблем с типами
+        setBenchmarkResults((prev: Record<string, BenchmarkResponse>) => ({
+          ...prev,
+          [providerName]: formattedResponse,
+        }))
+        console.log(`[Benchmark] Completed for ${providerName}`, {
+          models: formattedResponse.models.length,
+          timestamp: formattedResponse.timestamp,
+        })
+        toast.success(`Бэнчмарк для ${providerName} завершен`, {
+          description: `Протестировано ${formattedResponse.models.length} моделей`,
+        })
+      } else {
+        const errorMsg = benchmarkResponse?.message || 'Неверный формат ответа от сервера'
+        console.error('[Benchmark] Invalid response format', {
+          provider: providerName,
+          response: benchmarkResponse,
+          message: errorMsg,
+        })
+        throw new Error(errorMsg)
+      }
+    } catch (err) {
+      let errorMessage = 'Ошибка запуска бэнчмарка'
+      
+      if (err instanceof Error) {
+        // Улучшаем сообщения об ошибках для пользователя
+        if (err.message.includes('timeout') || err.message.includes('Превышено время ожидания')) {
+          errorMessage = `Таймаут при запуске бэнчмарка для ${providerName}. Сервер может быть перегружен. Попробуйте позже.`
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+          errorMessage = `Не удалось подключиться к серверу для ${providerName}. Проверьте, что бэкенд запущен и доступен.`
+        } else if (err.message.includes('API key') || err.message.includes('ARLIAI_API_KEY')) {
+          errorMessage = `API ключ для ${providerName} не настроен. Настройте его в разделе 'Воркеры'.`
+        } else if (err.message.includes('No models available') || err.message.includes('нет доступных моделей')) {
+          errorMessage = `Нет доступных моделей для ${providerName}. Проверьте конфигурацию воркеров.`
+        } else {
+          errorMessage = err.message
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMessage = String((err as { message: string }).message)
+      }
+      
+      console.error('[Benchmark] Failed to run benchmark', {
+        provider: providerName,
+        error: err,
+        message: errorMessage,
+        errorType: err instanceof Error ? err.constructor.name : typeof err,
+      })
+      
+      setError(errorMessage)
+      toast.error('Ошибка бэнчмарка', {
+        description: errorMessage,
+        duration: 7000, // Увеличиваем время показа для важных ошибок
+      })
+    } finally {
+      setRunningBenchmark(prev => ({ ...prev, [providerName]: false }))
+      setBenchmarkProgress(prev => ({ ...prev, [providerName]: { current: 0, total: 0 } }))
+    }
+  }
+
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container-wide mx-auto px-4 py-8">
         <LoadingState message="Загрузка конфигурации воркеров..." size="lg" fullScreen />
       </div>
     )
@@ -573,7 +1028,7 @@ export default function WorkersPage() {
 
   if (!config && !loading) {
     return (
-      <div className="container mx-auto px-4 py-8 space-y-4">
+      <div className="container-wide mx-auto px-4 py-8 space-y-4">
         <ErrorState
           title="Ошибка загрузки конфигурации"
           message={error || 'Не удалось загрузить конфигурацию'}
@@ -599,23 +1054,43 @@ export default function WorkersPage() {
   }
 
   const providers = Object.entries(config?.providers || {})
+  const isFallbackConfig = Boolean(config?.isFallback)
+
+  const breadcrumbItems = [
+    { label: 'Воркеры', href: '/workers', icon: Cpu },
+  ]
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Управление воркерами и моделями</h1>
-          <p className="text-muted-foreground mt-2">
-            Настройка провайдеров AI, моделей и количества воркеров для нормализации
-          </p>
-        </div>
-        <Button onClick={fetchConfig} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Обновить
-        </Button>
+    <div className="container-wide mx-auto px-4 py-8 space-y-6">
+      <BreadcrumbList items={breadcrumbItems.map(item => ({ label: item.label, href: item.href || '#' }))} />
+      <div className="mb-4">
+        <Breadcrumb items={breadcrumbItems} />
       </div>
 
-      {error && (
+      <FadeIn>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center justify-between"
+        >
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <Cpu className="h-8 w-8 text-primary" />
+              Управление воркерами и моделями
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Настройка провайдеров AI, моделей и количества воркеров для нормализации
+            </p>
+          </div>
+          <Button onClick={fetchConfig} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+            Обновить
+          </Button>
+        </motion.div>
+      </FadeIn>
+
+      {error && error !== 'Конфигурация не загружена' && (
         <ErrorState
           title="Ошибка"
           message={error}
@@ -624,6 +1099,26 @@ export default function WorkersPage() {
           onDismiss={() => setError(null)}
           className="mb-4"
         />
+      )}
+
+      {isFallbackConfig && (
+        <Alert className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertTitle>Backend конфигурации недоступен</AlertTitle>
+          </div>
+          <AlertDescription className="mt-2 space-y-1 text-sm">
+            <p>Показаны данные по умолчанию. Изменения будут доступны после восстановления соединения с сервером.</p>
+            <p className="text-muted-foreground">
+              {config?.fallbackReason || 'Перезапустите Go-сервер на порту 9999 и попробуйте снова.'}
+            </p>
+            {config?.lastSync && (
+              <p className="text-xs text-muted-foreground">
+                Последняя попытка подключения: {new Date(config.lastSync).toLocaleTimeString('ru-RU')}
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       {success && (
@@ -649,6 +1144,7 @@ export default function WorkersPage() {
         <TabsList>
           <TabsTrigger value="providers">Провайдеры и модели</TabsTrigger>
           <TabsTrigger value="workers">Воркеры</TabsTrigger>
+          <TabsTrigger value="monitoring">Мониторинг</TabsTrigger>
           <TabsTrigger value="defaults">Настройки по умолчанию</TabsTrigger>
         </TabsList>
 
@@ -677,7 +1173,12 @@ export default function WorkersPage() {
                             <ChevronDown className="h-4 w-4" />
                           )}
                         </Button>
-                        <CardTitle className="text-lg">{name}</CardTitle>
+                        <CardTitle className="text-lg">
+                          {name === 'arliai' ? 'Arli AI' :
+                           name === 'openrouter' ? 'OpenRouter' :
+                           name === 'huggingface' ? 'Hugging Face' :
+                           name}
+                        </CardTitle>
                         {provider.enabled ? (
                           <Badge variant="default">Включен</Badge>
                         ) : (
@@ -718,7 +1219,7 @@ export default function WorkersPage() {
                               <Key className="h-4 w-4" />
                               API Ключ
                             </Label>
-                            {name === 'arliai' && (
+                            {(name === 'arliai' || name === 'openrouter' || name === 'huggingface') && (
                               <div className="flex gap-2">
                                 <Button
                                   type="button"
@@ -758,6 +1259,27 @@ export default function WorkersPage() {
                                     <>
                                       <Download className="h-3 w-3 mr-2" />
                                       Обновить модели
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => runBenchmark(name)}
+                                  disabled={saving || runningBenchmark[name] || !apiKeyStatus[name]?.connected}
+                                  className="h-8"
+                                  title="Запустить бэнчмарк моделей провайдера с датасетом из нормализации"
+                                >
+                                  {runningBenchmark[name] ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                                      Бэнчмарк...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <BarChart3 className="h-3 w-3 mr-2" />
+                                      Бэнчмарк
                                     </>
                                   )}
                                 </Button>
@@ -900,9 +1422,72 @@ export default function WorkersPage() {
                         </div>
                       </div>
 
+                      {/* Результаты бэнчмарка */}
+                      {benchmarkResults[name] && benchmarkResults[name].models && Array.isArray(benchmarkResults[name].models) && benchmarkResults[name].models.length > 0 && (
+                        <div className="space-y-4">
+                          <Tabs defaultValue="table" className="w-full">
+                            <TabsList className="grid w-full grid-cols-5">
+                              <TabsTrigger value="table">Таблица</TabsTrigger>
+                              <TabsTrigger value="radar">Радар</TabsTrigger>
+                              <TabsTrigger value="heatmap">Тепловая карта</TabsTrigger>
+                              <TabsTrigger value="timeseries">Временные ряды</TabsTrigger>
+                              <TabsTrigger value="recommendations">Рекомендации</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="table" className="space-y-4">
+                              <BenchmarkResultsTable
+                                results={benchmarkResults[name].models}
+                                timestamp={benchmarkResults[name].timestamp}
+                                onClose={() => setBenchmarkResults(prev => {
+                                  const newResults = { ...prev }
+                                  delete newResults[name]
+                                  return newResults
+                                })}
+                              />
+                            </TabsContent>
+                            
+                            <TabsContent value="radar" className="space-y-4">
+                              <BenchmarkRadarChart
+                                results={benchmarkResults[name].models}
+                                maxModels={5}
+                              />
+                            </TabsContent>
+                            
+                            <TabsContent value="heatmap" className="space-y-4">
+                              <PerformanceHeatmap
+                                results={benchmarkResults[name].models}
+                                metric="speed"
+                              />
+                            </TabsContent>
+                            
+                            <TabsContent value="timeseries" className="space-y-4">
+                              <BenchmarkTimeSeries
+                                provider={name}
+                                timeRange="7d"
+                              />
+                            </TabsContent>
+                            
+                            <TabsContent value="recommendations" className="space-y-4">
+                              <ModelRecommendationEngine
+                                results={benchmarkResults[name].models}
+                                priority="balanced"
+                                scenario="realtime"
+                              />
+                            </TabsContent>
+                          </Tabs>
+                        </div>
+                      )}
+
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <Label className="block">Модели ({provider.models.length})</Label>
+                          <Label className="block">
+                            Модели ({provider.models.length})
+                            {provider.models.length > 0 && (
+                              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                                (прокрутите вниз, чтобы увидеть все)
+                              </span>
+                            )}
+                          </Label>
                           {provider.models.length === 0 && (
                             <Button
                               variant="outline"
@@ -936,7 +1521,14 @@ export default function WorkersPage() {
                             </p>
                           </div>
                         ) : (
-                          <div className="space-y-2">
+                          <div className="space-y-2 max-h-[600px] overflow-y-auto overflow-x-hidden pr-2">
+                            <div className="sticky top-0 bg-background z-10 pb-2 mb-2 border-b">
+                              <p className="text-xs text-muted-foreground">
+                                Всего моделей: {provider.models.length} | 
+                                Включено: {provider.models.filter(m => m.enabled).length} | 
+                                Выключено: {provider.models.filter(m => !m.enabled).length}
+                              </p>
+                            </div>
                             {provider.models.map((model) => (
                               <Card key={model.name} className="p-3 hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between">
@@ -1027,6 +1619,188 @@ export default function WorkersPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="monitoring" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Мониторинг производительности
+                  </CardTitle>
+                  <CardDescription>
+                    Метрики работы AI воркеров и провайдеров
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchWorkerMetrics}
+                  disabled={loadingMetrics}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loadingMetrics ? 'animate-spin' : ''}`} />
+                  Обновить
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingMetrics && !workerMetrics ? (
+                <LoadingState message="Загрузка метрик..." />
+              ) : workerMetrics?.ai ? (
+                <div className="space-y-6">
+                  {/* Общая статистика */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard
+                      title="Всего запросов"
+                      value={workerMetrics.ai.total_requests.toLocaleString('ru-RU')}
+                      description="За все время"
+                      icon={Activity}
+                      variant="default"
+                    />
+                    <StatCard
+                      title="Успешных"
+                      value={workerMetrics.ai.successful.toLocaleString('ru-RU')}
+                      description={`${(workerMetrics.ai.success_rate * 100).toFixed(1)}% успешности`}
+                      icon={CheckCircle2}
+                      variant="success"
+                      progress={workerMetrics.ai.success_rate * 100}
+                    />
+                    <StatCard
+                      title="Ошибок"
+                      value={workerMetrics.ai.failed.toLocaleString('ru-RU')}
+                      description={`${((1 - workerMetrics.ai.success_rate) * 100).toFixed(1)}% ошибок`}
+                      icon={XCircle}
+                      variant={workerMetrics.ai.failed > 0 ? 'danger' : 'default'}
+                    />
+                    <StatCard
+                      title="Средняя латентность"
+                      value={`${workerMetrics.ai.average_latency_ms.toFixed(0)}ms`}
+                      description="Время ответа"
+                      icon={Clock}
+                      variant="primary"
+                    />
+                  </div>
+
+                  {/* Детальная статистика */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" />
+                          Успешность запросов
+                        </CardTitle>
+                        <CardDescription>Процент успешных AI запросов</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">Success Rate</span>
+                            <span className="text-2xl font-bold">
+                              {(workerMetrics.ai.success_rate * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="h-3 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-green-500 transition-all"
+                              style={{ width: `${workerMetrics.ai.success_rate * 100}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 pt-2">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Успешно</p>
+                              <p className="text-lg font-semibold text-green-600">
+                                {workerMetrics.ai.successful.toLocaleString('ru-RU')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Ошибки</p>
+                              <p className="text-lg font-semibold text-red-600">
+                                {workerMetrics.ai.failed.toLocaleString('ru-RU')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5" />
+                          Производительность
+                        </CardTitle>
+                        <CardDescription>Метрики производительности системы</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Пропускная способность</span>
+                              <span className="text-lg font-bold">
+                                {workerMetrics.throughput_items_per_second.toFixed(2)} записей/сек
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Время работы</span>
+                              <span className="text-lg font-bold">
+                                {Math.floor(workerMetrics.uptime_seconds / 3600)}ч{' '}
+                                {Math.floor((workerMetrics.uptime_seconds % 3600) / 60)}м
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Кеширование */}
+                  {workerMetrics.cache && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Zap className="h-5 w-5" />
+                          Кеширование
+                        </CardTitle>
+                        <CardDescription>Эффективность кеша AI результатов</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Hit Rate</p>
+                            <p className="text-2xl font-bold">
+                              {(workerMetrics.cache.hit_rate * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Попадания</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {workerMetrics.cache.hits.toLocaleString('ru-RU')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Размер кеша</p>
+                            <p className="text-2xl font-bold">
+                              {workerMetrics.cache.size.toLocaleString('ru-RU')}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Метрики недоступны</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Убедитесь, что система мониторинга активна
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="workers" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1095,19 +1869,28 @@ export default function WorkersPage() {
               <div>
                 <Label>Провайдер по умолчанию</Label>
                 <Select
-                  value={config?.default_provider}
-                  onValueChange={setDefaultProvider}
+                  value={config?.default_provider || undefined}
+                  onValueChange={(providerName) => {
+                    if (!providerName) return
+                    setDefaultProvider(providerName)
+                  }}
                   disabled={saving}
                 >
                   <SelectTrigger className="mt-2">
-                    <SelectValue />
+                    <SelectValue placeholder="Выберите провайдера" />
                   </SelectTrigger>
                   <SelectContent>
-                    {providers.map(([name, provider]) => (
-                      <SelectItem key={name} value={name} disabled={!provider.enabled}>
-                        {name} {!provider.enabled && '(выключен)'}
+                    {providers.length > 0 ? (
+                      providers.map(([name, provider]) => (
+                        <SelectItem key={name} value={name || `provider-${name}`} disabled={!provider.enabled}>
+                          {name} {!provider.enabled && '(выключен)'}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-providers" disabled>
+                        Нет доступных провайдеров
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1115,8 +1898,9 @@ export default function WorkersPage() {
               <div>
                 <Label>Модель по умолчанию</Label>
                 <Select
-                  value={config?.default_model}
+                  value={config?.default_model || undefined}
                   onValueChange={(modelName) => {
+                    if (!modelName) return
                     const provider = providers.find(([_, p]) => 
                       p.models.some(m => m.name === modelName)
                     )
@@ -1127,17 +1911,23 @@ export default function WorkersPage() {
                   disabled={saving}
                 >
                   <SelectTrigger className="mt-2">
-                    <SelectValue />
+                    <SelectValue placeholder="Выберите модель" />
                   </SelectTrigger>
                   <SelectContent>
-                    {providers.map(([providerName, provider]) =>
-                      provider.models
-                        .filter(m => m.enabled)
-                        .map((model) => (
-                          <SelectItem key={`${providerName}-${model.name}`} value={model.name}>
-                            {model.name} ({providerName})
-                          </SelectItem>
-                        ))
+                    {providers.length > 0 && providers.some(([_, p]) => p.models.some(m => m.enabled)) ? (
+                      providers.map(([providerName, provider]) =>
+                        provider.models
+                          .filter(m => m.enabled && m.name)
+                          .map((model) => (
+                            <SelectItem key={`${providerName}-${model.name}`} value={model.name || `model-${providerName}-${model.name}`}>
+                              {model.name} ({providerName})
+                            </SelectItem>
+                          ))
+                      )
+                    ) : (
+                      <SelectItem value="no-models" disabled>
+                        Нет доступных моделей
+                      </SelectItem>
                     )}
                   </SelectContent>
                 </Select>

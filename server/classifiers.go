@@ -1,0 +1,100 @@
+package server
+
+// TODO:legacy-migration revisit dependencies after handler extraction
+// Файл физически перемещен в server/handlers/legacy/ для организации,
+// но остается в пакете server для доступа к методам Server
+// TODO:legacy-migration revisit dependencies after handler extraction
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+)
+
+// handleGetClassifiers возвращает список всех классификаторов
+func (s *Server) handleGetClassifiers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Получаем параметры фильтрации
+	query := r.URL.Query()
+	activeOnly := query.Get("active_only") == "true"
+	clientIDStr := query.Get("client_id")
+	projectIDStr := query.Get("project_id")
+
+	var clientID *int
+	var projectID *int
+
+	if clientIDStr != "" {
+		if id, err := strconv.Atoi(clientIDStr); err == nil {
+			clientID = &id
+		}
+	}
+
+	if projectIDStr != "" {
+		if id, err := strconv.Atoi(projectIDStr); err == nil {
+			projectID = &id
+		}
+	}
+
+	// Получаем классификаторы с фильтрацией
+	classifiers, err := s.db.GetCategoryClassifiersByFilter(clientID, projectID, activeOnly)
+	if err != nil {
+		s.writeJSONError(w, r, fmt.Sprintf("Failed to get classifiers: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Преобразуем в формат для фронтенда
+	type ClassifierResponse struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		IsActive    bool   `json:"is_active"`
+		MaxDepth    int    `json:"max_depth"`
+	}
+
+	response := make([]ClassifierResponse, 0, len(classifiers))
+	for _, classifier := range classifiers {
+		response = append(response, ClassifierResponse{
+			ID:          classifier.ID,
+			Name:        classifier.Name,
+			Description: classifier.Description,
+			IsActive:    classifier.IsActive,
+			MaxDepth:    classifier.MaxDepth,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetClassifiersByProjectType возвращает классификаторы для типа проекта
+func (s *Server) handleGetClassifiersByProjectType(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	projectType := r.URL.Query().Get("project_type")
+	if projectType == "" {
+		s.writeJSONError(w, r, "project_type parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем классификаторы для типа проекта
+	classifiers, err := s.serviceDB.GetClassifiersByProjectType(projectType)
+	if err != nil {
+		s.writeJSONError(w, r, fmt.Sprintf("Failed to get classifiers: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.writeJSONResponse(w, r, map[string]interface{}{
+		"classifiers": classifiers,
+		"project_type": projectType,
+		"total": len(classifiers),
+	}, http.StatusOK)
+}
+

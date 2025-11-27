@@ -165,8 +165,23 @@ func InitSchema(db *sql.DB) error {
 	}
 
 	// Добавляем поля для отслеживания стадий обработки в normalized_data
-	if err := MigrateNormalizedDataStageFields(db); err != nil {
+	if err := ensureMigrationApplied(db, "normalized_data_stage_fields_v1", MigrateNormalizedDataStageFields); err != nil {
 		return fmt.Errorf("failed to migrate stage tracking fields: %w", err)
+	}
+
+	// Добавляем поле normalization_session_id в normalized_data
+	if err := ensureMigrationApplied(db, "normalized_data_session_id_v1", MigrateAddSessionIdToNormalizedData); err != nil {
+		return fmt.Errorf("failed to migrate session ID field: %w", err)
+	}
+
+	// Добавляем поле project_id в normalized_data
+	if err := ensureMigrationApplied(db, "normalized_data_project_id_v1", MigrateAddProjectIdToNormalizedData); err != nil {
+		return fmt.Errorf("failed to migrate project ID field: %w", err)
+	}
+
+	// Добавляем поле normalized_item_id в catalog_items
+	if err := MigrateAddNormalizedItemIdToCatalogItems(db); err != nil {
+		return fmt.Errorf("failed to migrate normalized_item_id to catalog_items: %w", err)
 	}
 
 	// Создаем таблицы системы качества (DQAS)
@@ -301,6 +316,13 @@ func CreateNormalizedDataTable(db *sql.DB) error {
 			normalized_reference TEXT,
 			category TEXT,
 			merged_count INTEGER DEFAULT 1,
+			ai_confidence REAL DEFAULT 0.0,
+			ai_reasoning TEXT,
+			processing_level TEXT DEFAULT 'basic',
+			kpved_code TEXT,
+			kpved_name TEXT,
+			kpved_confidence REAL DEFAULT 0.0,
+			normalization_session_id INTEGER,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`
@@ -344,6 +366,15 @@ func CreateNormalizedDataTable(db *sql.DB) error {
 	for _, indexSQL := range indexes {
 		_, err = db.Exec(indexSQL)
 		if err != nil {
+			// Игнорируем ошибки, если индекс уже существует или колонка отсутствует
+			// (для совместимости со старыми БД, где колонки могут быть добавлены через миграции)
+			errStr := strings.ToLower(err.Error())
+			if strings.Contains(errStr, "duplicate index") ||
+				strings.Contains(errStr, "already exists") ||
+				strings.Contains(errStr, "no such column") {
+				// Пропускаем ошибку - индекс будет создан позже через миграции
+				continue
+			}
 			return fmt.Errorf("failed to create index: %w", err)
 		}
 	}
@@ -448,8 +479,32 @@ func InitServiceSchema(db *sql.DB) error {
 		contact_email TEXT,
 		contact_phone TEXT,
 		tax_id TEXT,
+		country TEXT,
 		status TEXT DEFAULT 'active',
 		created_by TEXT,
+		-- Бизнес-информация
+		industry TEXT,
+		company_size TEXT,
+		legal_form TEXT,
+		-- Расширенные контакты
+		contact_person TEXT,
+		contact_position TEXT,
+		alternate_phone TEXT,
+		website TEXT,
+		-- Юридические данные
+		ogrn TEXT,
+		kpp TEXT,
+		legal_address TEXT,
+		postal_address TEXT,
+		bank_name TEXT,
+		bank_account TEXT,
+		correspondent_account TEXT,
+		bik TEXT,
+		-- Договорные данные
+		contract_number TEXT,
+		contract_date TIMESTAMP,
+		contract_terms TEXT,
+		contract_expires_at TIMESTAMP,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
@@ -484,6 +539,19 @@ func InitServiceSchema(db *sql.DB) error {
 		approved_at TIMESTAMP,
 		source_database TEXT,
 		usage_count INTEGER DEFAULT 0,
+		-- Поля для контрагентов
+		tax_id TEXT,              -- ИНН
+		kpp TEXT,                 -- КПП
+		legal_address TEXT,       -- Юридический адрес
+		postal_address TEXT,      -- Почтовый адрес
+		contact_phone TEXT,       -- Телефон
+		contact_email TEXT,       -- Email
+		contact_person TEXT,      -- Контактное лицо
+		legal_form TEXT,          -- Организационно-правовая форма (ООО, ИП и т.д.)
+		bank_name TEXT,           -- Банк
+		bank_account TEXT,         -- Расчетный счет
+		correspondent_account TEXT, -- Корреспондентский счет
+		bik TEXT,                 -- БИК
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY(client_project_id) REFERENCES client_projects(id) ON DELETE CASCADE
@@ -521,6 +589,18 @@ func InitServiceSchema(db *sql.DB) error {
 		FOREIGN KEY(client_project_id) REFERENCES client_projects(id) ON DELETE CASCADE
 	);
 
+	-- Таблица конфигурации нормализации для проекта
+	CREATE TABLE IF NOT EXISTS project_normalization_config (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		client_project_id INTEGER NOT NULL UNIQUE,
+		auto_map_counterparties BOOLEAN DEFAULT TRUE,
+		auto_merge_duplicates BOOLEAN DEFAULT TRUE,
+		master_selection_strategy TEXT DEFAULT 'max_data',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(client_project_id) REFERENCES client_projects(id) ON DELETE CASCADE
+	);
+
 	-- Таблица конфигурации нормализации
 	CREATE TABLE IF NOT EXISTS normalization_config (
 		id INTEGER PRIMARY KEY CHECK (id = 1), -- Только одна конфигурация
@@ -548,7 +628,39 @@ func InitServiceSchema(db *sql.DB) error {
 		metadata_json TEXT
 	);
 
-	-- Индексы для оптимизации запросов
+	-- Таблица для кэширования структуры контрагентов в БД
+	CREATE TABLE IF NOT EXISTS database_table_metadata (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		database_id INTEGER NOT NULL,
+		table_name TEXT NOT NULL,
+		entity_type TEXT NOT NULL, -- 'counterparty', 'nomenclature', 'document'
+		column_mappings TEXT NOT NULL, -- JSON: {"name": "Наименование", "inn": "ИНН"}
+		detection_confidence REAL DEFAULT 0.0, -- 0.0-1.0
+		last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(database_id, table_name, entity_type),
+		FOREIGN KEY(database_id) REFERENCES project_databases(id) ON DELETE CASCADE
+	);
+
+	-- Таблица ожидающих индексации баз данных
+	CREATE TABLE IF NOT EXISTS pending_databases (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		file_path TEXT NOT NULL UNIQUE,
+		file_name TEXT NOT NULL,
+		file_size INTEGER,
+		detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		indexing_status TEXT DEFAULT 'pending',
+		indexing_started_at TIMESTAMP,
+		indexing_completed_at TIMESTAMP,
+		error_message TEXT,
+		client_id INTEGER,
+		project_id INTEGER,
+		moved_to_uploads BOOLEAN DEFAULT FALSE,
+		original_path TEXT,
+		FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE SET NULL,
+		FOREIGN KEY(project_id) REFERENCES client_projects(id) ON DELETE SET NULL
+	);
+
+	-- Индексы для оптимизации запросов (базовые, без полей контрагентов)
 	CREATE INDEX IF NOT EXISTS idx_client_projects_client_id ON client_projects(client_id);
 	CREATE INDEX IF NOT EXISTS idx_client_benchmarks_project_id ON client_benchmarks(client_project_id);
 	CREATE INDEX IF NOT EXISTS idx_client_benchmarks_normalized_name ON client_benchmarks(normalized_name);
@@ -557,39 +669,224 @@ func InitServiceSchema(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);
 	CREATE INDEX IF NOT EXISTS idx_project_databases_project_id ON project_databases(client_project_id);
 	CREATE INDEX IF NOT EXISTS idx_project_databases_active ON project_databases(is_active);
+	CREATE INDEX IF NOT EXISTS idx_project_normalization_config_project_id ON project_normalization_config(client_project_id);
 	CREATE INDEX IF NOT EXISTS idx_database_metadata_file_path ON database_metadata(file_path);
 	CREATE INDEX IF NOT EXISTS idx_database_metadata_type ON database_metadata(database_type);
+	CREATE INDEX IF NOT EXISTS idx_pending_databases_status ON pending_databases(indexing_status);
+	CREATE INDEX IF NOT EXISTS idx_pending_databases_file_path ON pending_databases(file_path);
+	CREATE INDEX IF NOT EXISTS idx_pending_databases_project_id ON pending_databases(project_id);
+	CREATE INDEX IF NOT EXISTS idx_database_table_metadata_db_id ON database_table_metadata(database_id);
+	CREATE INDEX IF NOT EXISTS idx_database_table_metadata_entity_type ON database_table_metadata(entity_type);
+	CREATE INDEX IF NOT EXISTS idx_database_table_metadata_confidence ON database_table_metadata(detection_confidence);
 
-	-- Таблица конфигурации воркеров и провайдеров AI
-	CREATE TABLE IF NOT EXISTS worker_config (
+	-- Таблица конфигурации приложения
+	CREATE TABLE IF NOT EXISTS app_config (
 		id INTEGER PRIMARY KEY CHECK (id = 1), -- Только одна конфигурация
-		config_json TEXT NOT NULL, -- JSON с полной конфигурацией (включая API ключи)
+		config_json TEXT NOT NULL, -- JSON с полной конфигурацией приложения
+		version INTEGER DEFAULT 1, -- Версия конфигурации для отслеживания изменений
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 
-	-- Индекс для оптимизации
-	CREATE INDEX IF NOT EXISTS idx_worker_config_updated_at ON worker_config(updated_at);
-
-	-- Таблица классификатора КПВЭД
-	CREATE TABLE IF NOT EXISTS kpved_classifier (
+	-- Таблица истории изменений конфигурации
+	CREATE TABLE IF NOT EXISTS app_config_history (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		code TEXT NOT NULL UNIQUE,
-		name TEXT NOT NULL,
-		parent_code TEXT,
-		level INTEGER,
+		version INTEGER NOT NULL,
+		config_json TEXT NOT NULL,
+		changed_by TEXT, -- Кто изменил (можно добавить авторизацию)
+		change_reason TEXT, -- Причина изменения
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 
-	-- Индексы для таблицы kpved_classifier
-	CREATE INDEX IF NOT EXISTS idx_kpved_code ON kpved_classifier(code);
-	CREATE INDEX IF NOT EXISTS idx_kpved_parent ON kpved_classifier(parent_code);
-	CREATE INDEX IF NOT EXISTS idx_kpved_level ON kpved_classifier(level);
+	CREATE INDEX IF NOT EXISTS idx_app_config_history_version ON app_config_history(version);
+	CREATE INDEX IF NOT EXISTS idx_app_config_history_created_at ON app_config_history(created_at);
+
+	-- Таблица конфигурации воркеров (для AI провайдеров)
+	CREATE TABLE IF NOT EXISTS worker_config (
+		id INTEGER PRIMARY KEY CHECK (id = 1), -- Только одна конфигурация
+		config_json TEXT NOT NULL, -- JSON с полной конфигурацией воркеров
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	-- Таблица уведомлений
+	CREATE TABLE IF NOT EXISTS notifications (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		type TEXT NOT NULL CHECK(type IN ('info', 'success', 'warning', 'error')),
+		title TEXT NOT NULL,
+		message TEXT NOT NULL,
+		timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		read BOOLEAN DEFAULT FALSE,
+		client_id INTEGER,
+		project_id INTEGER,
+		metadata_json TEXT, -- JSON с дополнительными данными
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE,
+		FOREIGN KEY(project_id) REFERENCES client_projects(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_notifications_timestamp ON notifications(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+	CREATE INDEX IF NOT EXISTS idx_notifications_client_id ON notifications(client_id);
+	CREATE INDEX IF NOT EXISTS idx_notifications_project_id ON notifications(project_id);
+	
+	-- Композитные индексы для оптимизации частых запросов
+	-- Для запросов с фильтром по read и сортировкой по timestamp
+	CREATE INDEX IF NOT EXISTS idx_notifications_read_timestamp ON notifications(read, timestamp DESC);
+	-- Для запросов с фильтром по client_id, read и сортировкой по timestamp
+	CREATE INDEX IF NOT EXISTS idx_notifications_client_read_timestamp ON notifications(client_id, read, timestamp DESC);
+	-- Для запросов с фильтром по project_id, read и сортировкой по timestamp
+	CREATE INDEX IF NOT EXISTS idx_notifications_project_read_timestamp ON notifications(project_id, read, timestamp DESC);
+	-- Для комбинированных фильтров client_id + project_id + read + timestamp
+	CREATE INDEX IF NOT EXISTS idx_notifications_client_project_read_timestamp ON notifications(client_id, project_id, read, timestamp DESC);
+
+	-- Таблица документов клиента
+	CREATE TABLE IF NOT EXISTS client_documents (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		client_id INTEGER NOT NULL,
+		file_name TEXT NOT NULL,
+		file_path TEXT NOT NULL,
+		file_type TEXT NOT NULL,
+		file_size INTEGER NOT NULL,
+		category TEXT DEFAULT 'technical',
+		description TEXT,
+		uploaded_by TEXT,
+		uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_client_documents_client_id ON client_documents(client_id);
+	CREATE INDEX IF NOT EXISTS idx_client_documents_category ON client_documents(category);
+	CREATE INDEX IF NOT EXISTS idx_client_documents_uploaded_at ON client_documents(uploaded_at DESC);
 	`
 
 	_, err := db.Exec(schema)
 	if err != nil {
-		return fmt.Errorf("failed to create service schema: %w", err)
+		return fmt.Errorf("failed to initialize service schema: %w", err)
+	}
+
+	// Выполняем миграции для сессий нормализации
+	if err := MigrateNormalizationSessions(db); err != nil {
+		return fmt.Errorf("failed to migrate normalization sessions: %w", err)
+	}
+
+	// Создаем таблицы для системы классификации в ServiceDB
+	if err := CreateClassificationTables(db); err != nil {
+		return fmt.Errorf("failed to create classification tables: %w", err)
+	}
+
+	// Выполняем миграцию для добавления полей контрагентов (для старых баз данных)
+	if err := MigrateBenchmarkCounterpartyFields(db); err != nil {
+		return fmt.Errorf("failed to migrate benchmark counterparty fields: %w", err)
+	}
+
+	// Выполняем миграцию для добавления полей OGRN и region
+	if err := MigrateBenchmarkOGRNRegion(db); err != nil {
+		return fmt.Errorf("failed to migrate benchmark OGRN and region: %w", err)
+	}
+
+	// Выполняем миграцию для добавления поля manufacturer_benchmark_id
+	if err := MigrateBenchmarkManufacturerLink(db); err != nil {
+		return fmt.Errorf("failed to migrate benchmark manufacturer link: %w", err)
+	}
+
+	// Выполняем миграцию для добавления поля country в таблицу clients
+	if err := MigrateClientsCountry(db); err != nil {
+		return fmt.Errorf("failed to migrate clients country field: %w", err)
+	}
+
+	// Выполняем миграцию для расширенных полей клиентов и таблицы документов
+	if err := MigrateClientEnhancements(db); err != nil {
+		return fmt.Errorf("failed to migrate client enhancements: %w", err)
+	}
+
+	// Создаем таблицу классификатора ОКПД2 (если её нет)
+	if err := CreateOkpd2ClassifierTable(db); err != nil {
+		return fmt.Errorf("failed to create okpd2_classifier table: %w", err)
+	}
+
+	// Создаем таблицу истории бенчмарков моделей
+	benchmarkHistoryTable := `
+		CREATE TABLE IF NOT EXISTS model_benchmark_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			model_name TEXT NOT NULL,
+			priority INTEGER NOT NULL,
+			speed REAL NOT NULL,
+			avg_response_time_ms INTEGER NOT NULL,
+			median_response_time_ms INTEGER,
+			p95_response_time_ms INTEGER,
+			min_response_time_ms INTEGER,
+			max_response_time_ms INTEGER,
+			success_count INTEGER NOT NULL,
+			error_count INTEGER NOT NULL,
+			total_requests INTEGER NOT NULL,
+			success_rate REAL NOT NULL,
+			status TEXT NOT NULL,
+			test_count INTEGER NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_benchmark_history_timestamp ON model_benchmark_history(timestamp);
+		CREATE INDEX IF NOT EXISTS idx_benchmark_history_model ON model_benchmark_history(model_name);
+		CREATE INDEX IF NOT EXISTS idx_benchmark_history_priority ON model_benchmark_history(priority);
+	`
+	if _, err := db.Exec(benchmarkHistoryTable); err != nil {
+		return fmt.Errorf("failed to create benchmark history table: %w", err)
+	}
+
+	// Создаем таблицы справочников
+	if err := CreateReferenceBooksTables(db); err != nil {
+		return fmt.Errorf("failed to create reference books tables: %w", err)
+	}
+
+	// Выполняем миграцию для добавления полей связи со справочниками
+	if err := MigrateBenchmarkReferenceLinks(db); err != nil {
+		return fmt.Errorf("failed to migrate benchmark reference links: %w", err)
+	}
+
+	// Создаем таблицу normalized_counterparties если её нет
+	// ВАЖНО: Создаем таблицу ДО миграций, которые работают с ней
+	if err := CreateNormalizedCounterpartiesTable(db); err != nil {
+		return fmt.Errorf("failed to create normalized_counterparties table: %w", err)
+	}
+
+	// Создаем таблицу counterparty_databases для связи many-to-many
+	// ВАЖНО: Создаем ПОСЛЕ normalized_counterparties, так как есть FOREIGN KEY
+	if err := CreateCounterpartyDatabasesTable(db); err != nil {
+		return fmt.Errorf("failed to create counterparty_databases table: %w", err)
+	}
+
+	// Выполняем миграцию для добавления поля source_enrichment в normalized_counterparties
+	// ВАЖНО: Вызываем ПОСЛЕ создания таблицы normalized_counterparties
+	if err := MigrateCounterpartyEnrichmentSource(db); err != nil {
+		return fmt.Errorf("failed to migrate counterparty enrichment source: %w", err)
+	}
+
+	// Выполняем миграцию для добавления поля subcategory в normalized_counterparties
+	if err := MigrateNormalizedCounterpartiesSubcategory(db); err != nil {
+		return fmt.Errorf("failed to migrate normalized counterparties subcategory: %w", err)
+	}
+
+	// Выполняем миграцию для заполнения таблицы counterparty_databases из существующих данных
+	if err := MigrateCounterpartyDatabases(db); err != nil {
+		return fmt.Errorf("failed to migrate counterparty databases: %w", err)
+	}
+
+	// Создаем таблицы для системы веб-поиска
+	if err := InitWebSearchSchema(db); err != nil {
+		return fmt.Errorf("failed to initialize websearch schema: %w", err)
+	}
+
+	// Создаем таблицу providers для мульти-провайдерной системы
+	// Это критически важно для инициализации multi-provider client
+	if err := CreateProvidersTable(db); err != nil {
+		return fmt.Errorf("failed to create providers table: %w", err)
+	}
+
+	// Добавляем провайдеров для стандартизации данных (DaData, Adata)
+	if err := AddDataStandardizationProviders(db); err != nil {
+		return fmt.Errorf("failed to add data standardization providers: %w", err)
 	}
 
 	return nil
@@ -636,6 +933,69 @@ func CreateKpvedClassifierTable(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_kpved_code ON kpved_classifier(code)`,
 		`CREATE INDEX IF NOT EXISTS idx_kpved_parent ON kpved_classifier(parent_code)`,
 		`CREATE INDEX IF NOT EXISTS idx_kpved_level ON kpved_classifier(level)`,
+	}
+
+	for _, indexSQL := range indexes {
+		_, err = db.Exec(indexSQL)
+		if err != nil {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
+
+	// Создаем таблицу для классификатора ОКПД2
+	if err := CreateOkpd2ClassifierTable(db); err != nil {
+		return fmt.Errorf("failed to create okpd2_classifier table: %w", err)
+	}
+
+	// Создаем таблицу для классификатора КПВЭД
+	if err := CreateKpvedClassifierTable(db); err != nil {
+		return fmt.Errorf("failed to create kpved_classifier table: %w", err)
+	}
+
+	return nil
+}
+
+// CreateOkpd2ClassifierTable создает таблицу для хранения иерархии классификатора ОКПД2
+func CreateOkpd2ClassifierTable(db *sql.DB) error {
+	// Проверяем существование таблицы
+	var exists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_master
+			WHERE type='table' AND name='okpd2_classifier'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check okpd2_classifier table existence: %w", err)
+	}
+
+	if exists {
+		// Таблица уже существует, пропускаем создание
+		return nil
+	}
+
+	// Создаем таблицу
+	createTable := `
+		CREATE TABLE okpd2_classifier (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			code TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL,
+			parent_code TEXT,
+			level INTEGER,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`
+
+	_, err = db.Exec(createTable)
+	if err != nil {
+		return fmt.Errorf("failed to create okpd2_classifier table: %w", err)
+	}
+
+	// Создаем индексы
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_okpd2_code ON okpd2_classifier(code)`,
+		`CREATE INDEX IF NOT EXISTS idx_okpd2_parent ON okpd2_classifier(parent_code)`,
+		`CREATE INDEX IF NOT EXISTS idx_okpd2_level ON okpd2_classifier(level)`,
 	}
 
 	for _, indexSQL := range indexes {
@@ -696,6 +1056,42 @@ func MigrateNormalizedDataQualityFields(db *sql.DB) error {
 				!strings.Contains(errStr, "duplicate index") {
 				return fmt.Errorf("migration failed: %s, error: %w", migration, err)
 			}
+		}
+	}
+
+	return nil
+}
+
+// MigrateClientsCountry добавляет поле country в таблицу clients для существующих баз данных
+func MigrateClientsCountry(db *sql.DB) error {
+	// Проверяем существование таблицы clients перед миграцией
+	var tableExists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_master
+			WHERE type='table' AND name='clients'
+		)
+	`).Scan(&tableExists)
+	if err != nil {
+		// Если не удалось проверить, продолжаем (возможно, это не критично)
+		tableExists = false
+	}
+
+	// Выполняем миграцию только если таблица существует
+	if !tableExists {
+		// Таблица не существует, пропускаем миграцию (будет создана с полем country в схеме)
+		return nil
+	}
+
+	migration := `ALTER TABLE clients ADD COLUMN country TEXT`
+
+	_, err = db.Exec(migration)
+	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		// Игнорируем ошибки, если поле уже существует
+		if !strings.Contains(errStr, "duplicate column") &&
+			!strings.Contains(errStr, "already exists") {
+			return fmt.Errorf("migration failed: %s, error: %w", migration, err)
 		}
 	}
 
@@ -1056,6 +1452,16 @@ func CreateSnapshotNormalizedDataTable(db *sql.DB) error {
 				return fmt.Errorf("failed to create snapshot normalized data index: %w", err)
 			}
 		}
+	}
+
+	// Создаем таблицу providers с поддержкой каналов
+	if err := CreateProvidersTable(db); err != nil {
+		return fmt.Errorf("failed to create providers table: %w", err)
+	}
+
+	// Добавляем провайдеров для стандартизации данных (DaData, Adata)
+	if err := AddDataStandardizationProviders(db); err != nil {
+		return fmt.Errorf("failed to add data standardization providers: %w", err)
 	}
 
 	return nil

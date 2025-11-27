@@ -55,7 +55,8 @@
       "Bash(httpserver.exe)",
       "Bash(powershell -ExecutionPolicy Bypass -Command \"$env:ARLIAI_API_KEY=''597dbe7e-16ca-4803-ab17-5fa084909f37''; Start-Process -FilePath ''.\\httpserver.exe'' -WindowStyle Normal\" -WorkingDirectory \"E:\\HttpServer\")",
       "Bash(cmd.exe /c \"cd /d E:\\HttpServer && set ARLIAI_API_KEY=597dbe7e-16ca-4803-ab17-5fa084909f37 && start /B httpserver.exe\")",
-      "Bash(cmd.exe /c \"set ARLIAI_API_KEY=597dbe7e-16ca-4803-ab17-5fa084909f37 && httpserver.exe 2>&1 | head -20\")"
+      "Bash(cmd.exe /c \"set ARLIAI_API_KEY=597dbe7e-16ca-4803-ab17-5fa084909f37 && httpserver.exe 2>&1 | head -20\")",
+      "Bash(go test:*)"
     ],
     "deny": [],
     "ask": []

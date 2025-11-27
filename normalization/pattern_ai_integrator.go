@@ -21,14 +21,14 @@ func NewPatternAIIntegrator(patternDetector *PatternDetector, aiNormalizer *AINo
 
 // PatternCorrectionResult результат предложения исправления
 type PatternCorrectionResult struct {
-	OriginalName    string        `json:"original_name"`
+	OriginalName     string         `json:"original_name"`
 	DetectedPatterns []PatternMatch `json:"detected_patterns"`
-	AlgorithmicFix  string        `json:"algorithmic_fix"`  // Исправление алгоритмическими правилами
-	AISuggestedFix  string        `json:"ai_suggested_fix"`  // Предложение от AI
-	FinalSuggestion string        `json:"final_suggestion"`  // Финальное предложение
-	Confidence      float64       `json:"confidence"`
-	Reasoning       string        `json:"reasoning"`
-	RequiresReview  bool          `json:"requires_review"`   // Требует ли ручной проверки
+	AlgorithmicFix   string         `json:"algorithmic_fix"`  // Исправление алгоритмическими правилами
+	AISuggestedFix   string         `json:"ai_suggested_fix"` // Предложение от AI
+	FinalSuggestion  string         `json:"final_suggestion"` // Финальное предложение
+	Confidence       float64        `json:"confidence"`
+	Reasoning        string         `json:"reasoning"`
+	RequiresReview   bool           `json:"requires_review"` // Требует ли ручной проверки
 }
 
 // SuggestCorrectionWithAI предлагает исправление с использованием паттернов и AI
@@ -49,26 +49,26 @@ func (pai *PatternAIIntegrator) SuggestCorrectionWithAI(originalName string) (*P
 	if needsAI && pai.aiNormalizer != nil {
 		// Формируем промпт для AI с информацией о найденных паттернах
 		aiPrompt := pai.buildAIPrompt(originalName, result.DetectedPatterns, result.AlgorithmicFix)
-		
+
 		// Получаем предложение от AI
 		aiResult, err := pai.aiNormalizer.NormalizeWithAI(aiPrompt)
 		if err == nil && aiResult != nil {
 			result.AISuggestedFix = aiResult.NormalizedName
 			result.Confidence = aiResult.Confidence
-			result.Reasoning = fmt.Sprintf("AI предложение: %s. Найдено паттернов: %d", 
+			result.Reasoning = fmt.Sprintf("AI предложение: %s. Найдено паттернов: %d",
 				aiResult.Reasoning, len(result.DetectedPatterns))
 		} else {
 			// Если AI не сработал, используем алгоритмическое исправление
 			result.AISuggestedFix = result.AlgorithmicFix
 			result.Confidence = 0.7
-			result.Reasoning = fmt.Sprintf("AI недоступен, использованы алгоритмические правила. Найдено паттернов: %d", 
+			result.Reasoning = fmt.Sprintf("AI недоступен, использованы алгоритмические правила. Найдено паттернов: %d",
 				len(result.DetectedPatterns))
 		}
 	} else {
 		// Используем только алгоритмическое исправление
 		result.AISuggestedFix = result.AlgorithmicFix
 		result.Confidence = pai.calculateAlgorithmicConfidence(result.DetectedPatterns)
-		result.Reasoning = fmt.Sprintf("Исправлено алгоритмически. Найдено паттернов: %d", 
+		result.Reasoning = fmt.Sprintf("Исправлено алгоритмически. Найдено паттернов: %d",
 			len(result.DetectedPatterns))
 	}
 
@@ -111,9 +111,9 @@ func (pai *PatternAIIntegrator) shouldUseAI(matches []PatternMatch, algorithmicF
 // buildAIPrompt строит промпт для AI с информацией о паттернах
 func (pai *PatternAIIntegrator) buildAIPrompt(originalName string, matches []PatternMatch, algorithmicFix string) string {
 	var prompt strings.Builder
-	
+
 	prompt.WriteString(fmt.Sprintf("НАИМЕНОВАНИЕ ТОВАРА: \"%s\"\n\n", originalName))
-	
+
 	if len(matches) > 0 {
 		prompt.WriteString("ОБНАРУЖЕННЫЕ ПРОБЛЕМЫ:\n")
 		for i, match := range matches {
@@ -152,7 +152,7 @@ func (pai *PatternAIIntegrator) calculateAlgorithmicConfidence(matches []Pattern
 	}
 
 	avgConfidence := totalConfidence / float64(len(matches))
-	
+
 	// Если все паттерны автоприменяемые, уверенность выше
 	allAutoFixable := true
 	for _, match := range matches {
@@ -179,8 +179,8 @@ func (pai *PatternAIIntegrator) determineFinalSuggestion(result *PatternCorrecti
 	// Если AI предложение есть, но уверенность средняя, сравниваем с алгоритмическим
 	if result.AISuggestedFix != "" && result.Confidence >= 0.6 {
 		// Если AI предложение сильно отличается от алгоритмического, предпочитаем AI
-		if strings.ToLower(strings.TrimSpace(result.AISuggestedFix)) != 
-		   strings.ToLower(strings.TrimSpace(result.AlgorithmicFix)) {
+		if strings.ToLower(strings.TrimSpace(result.AISuggestedFix)) !=
+			strings.ToLower(strings.TrimSpace(result.AlgorithmicFix)) {
 			return result.AISuggestedFix
 		}
 	}
@@ -237,4 +237,3 @@ func (pai *PatternAIIntegrator) BatchSuggestCorrections(names []string) ([]*Patt
 
 	return results, nil
 }
-

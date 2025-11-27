@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2025-01-01T00:00:00Z",
+  "entries": [
+    {
+      "id": 1,
+      "name": "ООО Ромашка",
+      "attributes": "<ИНН>1234567890</ИНН><КПП>123456789</КПП>",
+      "expected": {
+        "normalized_name": "ООО Ромашка",
+        "inn": "1234567890",
+        "bin": "",
+        "quality_score": 0.9
+      }
+    },
+    {
+      "id": 2,
+      "name": "ооо тест",
+      "attributes": "<ИНН>9876543210</ИНН>",
+      "expected": {
+        "normalized_name": "ООО Тест",
+        "inn": "9876543210",
+        "bin": "",
+        "quality_score": 0.85
+      }
+    },
+    {
+      "id": 3,
+      "name": "ТОО Алма",
+      "attributes": "<БИН>123456789012</БИН>",
+      "expected": {
+        "normalized_name": "ТОО Алма",
+        "inn": "",
+        "bin": "123456789012",
+        "quality_score": 0.9
+      }
+    }
+  ]
+}
+
+

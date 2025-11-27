@@ -1,0 +1,391 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Линтинг и проверка кода
+  lint:
+    name: Lint & Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Run Go linter
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run TypeScript check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+  # Unit тесты для Go
+  test-go:
+    name: Go Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: |
+          go test ./server/... ./database/... -v -coverprofile=coverage.out -covermode=atomic
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: go-coverage
+          fail_ci_if_error: false
+
+      - name: Check test coverage
+        run: |
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Coverage: $coverage%"
+          if (( $(echo "$coverage < 80" | bc -l) )); then
+            echo "Coverage is below 80%"
+            exit 1
+          fi
+
+  # Unit тесты для Frontend
+  test-frontend:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm run test:unit
+
+      - name: Run tests with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+
+  # Интеграционные тесты
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test-go, test-frontend]
+    services:
+      sqlite:
+        image: alpine:latest
+        options: >-
+          --health-cmd "echo 'SQLite service ready'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run integration tests
+        run: |
+          go test ./tests/integration/... -v -timeout 10m
+
+  # E2E тесты
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-go, test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Build backend
+        run: |
+          go build -o httpserver ./cmd/server || go build -o httpserver main_no_gui.go
+
+      - name: Start backend server
+        run: |
+          ./httpserver &
+          sleep 10
+        env:
+          PORT: 9999
+          DATABASE_PATH: /tmp/test.db
+          SERVICE_DATABASE_PATH: /tmp/service.db
+
+      - name: Wait for backend
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:9999/health; do sleep 2; done'
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:9999
+
+      - name: Start frontend server
+        working-directory: frontend
+        run: npm start &
+        env:
+          NODE_ENV: production
+          PORT: 3000
+
+      - name: Wait for frontend
+        run: |
+          timeout 120 bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+
+      - name: Run E2E tests
+        working-directory: frontend
+        run: npm run test:e2e
+        env:
+          BACKEND_URL: http://localhost:9999
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+      - name: Upload test screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: frontend/test-results/
+          retention-days: 7
+
+  # Сборка Docker образов
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test-go, test-frontend]
+    outputs:
+      backend-image: ${{ steps.backend-image.outputs.image }}
+      frontend-image: ${{ steps.frontend-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for backend
+        id: backend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push backend image
+        id: backend-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.backend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-backend,push=true
+
+      - name: Extract metadata for frontend
+        id: frontend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push frontend image
+        id: frontend-image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.frontend-meta.outputs.tags }}
+          labels: ${{ steps.frontend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-frontend,push=true
+
+  # Деплой на staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-docker, integration-tests, e2e-tests]
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment"
+          # Здесь должна быть логика деплоя на staging
+          # Например, обновление docker-compose или вызов API деплоя
+
+      - name: Health check
+        run: |
+          echo "Running health checks on staging"
+          # Проверка здоровья после деплоя
+
+  # Деплой на production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-docker, integration-tests, e2e-tests]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment"
+          # Здесь должна быть логика деплоя на production
+          # Например, обновление docker-compose или вызов API деплоя
+
+      - name: Health check
+        run: |
+          echo "Running health checks on production"
+          # Проверка здоровья после деплоя
+
+      - name: Notify deployment
+        if: success()
+        run: |
+          echo "Production deployment successful"
+          # Здесь можно добавить уведомления (Slack, Email и т.д.)
+
+  # Генерация отчета
+  generate-report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: [test-go, test-frontend, integration-tests, e2e-tests]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate test report
+        run: |
+          echo "# CI/CD Test Results" > test-report.md
+          echo "## Go Tests" >> test-report.md
+          echo "Status: ${{ needs.test-go.result }}" >> test-report.md
+          echo "## Frontend Tests" >> test-report.md
+          echo "Status: ${{ needs.test-frontend.result }}" >> test-report.md
+          echo "## Integration Tests" >> test-report.md
+          echo "Status: ${{ needs.integration-tests.result }}" >> test-report.md
+          echo "## E2E Tests" >> test-report.md
+          echo "Status: ${{ needs.e2e-tests.result }}" >> test-report.md
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-report.md
+          retention-days: 30
+

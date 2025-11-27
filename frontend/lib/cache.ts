@@ -1,101 +1,139 @@
-// Simple client-side cache with expiration
+/**
+ * Утилиты для кэширования данных
+ */
 
 interface CacheEntry<T> {
   data: T
   timestamp: number
-  expiresIn: number // milliseconds
+  expiresAt: number
 }
 
-const CACHE_PREFIX = 'app_cache_'
+class MemoryCache {
+  private cache = new Map<string, CacheEntry<any>>()
 
-export class ClientCache {
   /**
-   * Set item in cache with expiration time
-   * @param key Cache key
-   * @param data Data to cache
-   * @param expiresIn Expiration time in milliseconds (default: 5 minutes)
+   * Сохраняет данные в кэш
    */
-  static set<T>(key: string, data: T, expiresIn: number = 5 * 60 * 1000): void {
-    if (typeof window === 'undefined') return
-
-    const entry: CacheEntry<T> = {
+  set<T>(key: string, data: T, ttl: number = 5 * 60 * 1000): void {
+    const now = Date.now()
+    this.cache.set(key, {
       data,
-      timestamp: Date.now(),
-      expiresIn,
-    }
-
-    try {
-      localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(entry))
-    } catch (error) {
-      console.warn('Failed to set cache:', error)
-    }
+      timestamp: now,
+      expiresAt: now + ttl,
+    })
   }
 
   /**
-   * Get item from cache if not expired
-   * @param key Cache key
-   * @returns Cached data or null if expired/not found
+   * Получает данные из кэша
    */
-  static get<T>(key: string): T | null {
-    if (typeof window === 'undefined') return null
-
-    try {
-      const item = localStorage.getItem(`${CACHE_PREFIX}${key}`)
-      if (!item) return null
-
-      const entry: CacheEntry<T> = JSON.parse(item)
-      const isExpired = Date.now() - entry.timestamp > entry.expiresIn
-
-      if (isExpired) {
-        this.remove(key)
-        return null
-      }
-
-      return entry.data
-    } catch (error) {
-      console.warn('Failed to get cache:', error)
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key)
+    if (!entry) {
       return null
     }
+
+    // Проверяем срок действия
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key)
+      return null
+    }
+
+    return entry.data as T
   }
 
   /**
-   * Remove item from cache
-   * @param key Cache key
+   * Проверяет наличие данных в кэше
    */
-  static remove(key: string): void {
-    if (typeof window === 'undefined') return
+  has(key: string): boolean {
+    const entry = this.cache.get(key)
+    if (!entry) {
+      return false
+    }
 
-    try {
-      localStorage.removeItem(`${CACHE_PREFIX}${key}`)
-    } catch (error) {
-      console.warn('Failed to remove cache:', error)
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key)
+      return false
+    }
+
+    return true
+  }
+
+  /**
+   * Удаляет данные из кэша
+   */
+  delete(key: string): void {
+    this.cache.delete(key)
+  }
+
+  /**
+   * Очищает весь кэш
+   */
+  clear(): void {
+    this.cache.clear()
+  }
+
+  /**
+   * Очищает истекшие записи
+   */
+  cleanup(): void {
+    const now = Date.now()
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiresAt) {
+        this.cache.delete(key)
+      }
     }
   }
 
   /**
-   * Clear all app cache
+   * Получает размер кэша
    */
-  static clear(): void {
-    if (typeof window === 'undefined') return
-
-    try {
-      const keys = Object.keys(localStorage)
-      keys.forEach(key => {
-        if (key.startsWith(CACHE_PREFIX)) {
-          localStorage.removeItem(key)
-        }
-      })
-    } catch (error) {
-      console.warn('Failed to clear cache:', error)
-    }
-  }
-
-  /**
-   * Check if cache entry exists and is valid
-   * @param key Cache key
-   * @returns true if cache is valid, false otherwise
-   */
-  static has(key: string): boolean {
-    return this.get(key) !== null
+  size(): number {
+    return this.cache.size
   }
 }
+
+// Глобальный экземпляр кэша
+const cache = new MemoryCache()
+
+// Периодическая очистка истекших записей (каждые 5 минут)
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    cache.cleanup()
+  }, 5 * 60 * 1000)
+}
+
+/**
+ * Кэширует результат функции
+ */
+export async function cachedFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl: number = 5 * 60 * 1000
+): Promise<T> {
+  // Проверяем кэш
+  const cached = cache.get<T>(key)
+  if (cached !== null) {
+    return cached
+  }
+
+  // Выполняем запрос
+  const data = await fetcher()
+  
+  // Сохраняем в кэш
+  cache.set(key, data, ttl)
+  
+  return data
+}
+
+/**
+ * Создает ключ кэша из параметров
+ */
+export function createCacheKey(prefix: string, params: Record<string, any>): string {
+  const sortedParams = Object.keys(params)
+    .sort()
+    .map(key => `${key}=${JSON.stringify(params[key])}`)
+    .join('&')
+  return `${prefix}:${sortedParams}`
+}
+
+export { cache, MemoryCache }

@@ -8,7 +8,7 @@ export default function NormalizationPage() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace('/processes?tab=normalization')
+    router.replace('/processes/nomenclature')
   }, [router])
 
   return null

@@ -47,6 +47,11 @@ func (ta *TableAnalyzer) AnalyzeTableForDuplicates(
 ) (int, error) {
 	log.Printf("Starting simple duplicate analysis for table %s", tableName)
 
+	// Валидация имен таблицы и колонок для безопасности
+	if err := database.ValidateTableAndColumnNames(tableName, []string{codeColumn, nameColumn}, false); err != nil {
+		return 0, fmt.Errorf("validation failed: %w", err)
+	}
+
 	// Получаем общее количество записей
 	var total int
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s IS NOT NULL AND %s != ''", 
@@ -408,6 +413,11 @@ func (ta *TableAnalyzer) AnalyzeTableForViolations(
 ) (int, error) {
 	log.Printf("Starting violations analysis for table %s", tableName)
 
+	// Валидация имен таблицы и колонок для безопасности
+	if err := database.ValidateTableAndColumnNames(tableName, []string{codeColumn, nameColumn}, false); err != nil {
+		return 0, fmt.Errorf("validation failed: %w", err)
+	}
+
 	// Получаем общее количество записей
 	var total int
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
@@ -505,6 +515,11 @@ func (ta *TableAnalyzer) AnalyzeTableForSuggestions(
 	progressCallback func(processed, total int),
 ) (int, error) {
 	log.Printf("Starting suggestions analysis for table %s", tableName)
+
+	// Валидация имен таблицы и колонок для безопасности
+	if err := database.ValidateTableAndColumnNames(tableName, []string{codeColumn, nameColumn}, false); err != nil {
+		return 0, fmt.Errorf("validation failed: %w", err)
+	}
 
 	// Получаем общее количество записей
 	var total int

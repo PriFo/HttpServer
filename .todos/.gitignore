@@ -1,0 +1,10 @@
+# Ignore system logs
+system.log
+*.log
+
+# Keep tasks.json and config files in git
+# But ignore temporary files
+*.tmp
+*.bak
+*~
+

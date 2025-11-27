@@ -243,9 +243,9 @@ func TestProductServiceDetector_EnhancedTimePatterns(t *testing.T) {
 	detector := NewProductServiceDetector()
 
 	tests := []struct {
-		name         string
-		input        string
-		expected     ObjectType
+		name          string
+		input         string
+		expected      ObjectType
 		minConfidence float64
 	}{
 		{"Лицензия на год", "Лицензия 1С на 1 год", ObjectTypeService, 0.75},
@@ -275,9 +275,9 @@ func TestProductServiceDetector_EnhancedContextRules(t *testing.T) {
 	detector := NewProductServiceDetector()
 
 	tests := []struct {
-		name         string
-		input        string
-		expected     ObjectType
+		name          string
+		input         string
+		expected      ObjectType
 		minConfidence float64
 	}{
 		{"На прокат", "Велосипед на прокат", ObjectTypeService, 0.80},
@@ -433,4 +433,3 @@ func BenchmarkDetectProductOrService_Product(b *testing.B) {
 		detector.DetectProductOrService("Процессор AMD Ryzen 7", "")
 	}
 }
-

@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Тест - Получение нормализованных контрагентов по клиенту</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .test-header {
+            background: #f5f5f5;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .test-header h2 {
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .test-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .test-button:hover {
+            background: #5568d3;
+        }
+        
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .test-body {
+            padding: 20px;
+        }
+        
+        .api-info {
+            margin-bottom: 20px;
+        }
+        
+        .api-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .api-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .request-info, .response-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .response-info.error {
+            border-left-color: #e74c3c;
+        }
+        
+        .label {
+            font-weight: bold;
+            color: #333;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .status.success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .status.error {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #ffffff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .params-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .params-table th,
+        .params-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .params-table th {
+            background: #f5f5f5;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .params-table td:first-child {
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+        }
+        
+        .config-section {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .config-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .config-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .config-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 API: Получение нормализованных контрагентов по клиенту</h1>
+            <p>Тестирование endpoint /api/counterparties/normalized</p>
+        </div>
+        
+        <div class="content">
+            <!-- Конфигурация -->
+            <div class="config-section">
+                <h3>⚙️ Конфигурация</h3>
+                <label class="config-label">Base URL:</label>
+                <input type="text" id="baseUrl" class="config-input" value="http://localhost:9999" placeholder="http://localhost:9999">
+                <label class="config-label">Client ID (опционально, будет получен автоматически если не указан):</label>
+                <input type="number" id="clientId" class="config-input" value="" placeholder="Оставьте пустым для автоматического получения">
+            </div>
+            
+            <!-- Основная информация об API -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Описание API</h2>
+                </div>
+                <div class="test-body">
+                    <div class="api-info">
+                        <div class="api-name">GET /api/counterparties/normalized</div>
+                        <div class="api-description">
+                            Получает нормализованных контрагентов клиента из таблицы normalized_counterparties. Поддерживает два режима работы: по клиенту (все проекты) или по конкретному проекту. Для работы по клиенту требуется обязательный параметр client_id.
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-top: 20px; margin-bottom: 10px;">Параметры запроса:</h3>
+                    <table class="params-table">
+                        <thead>
+                            <tr>
+                                <th>Параметр</th>
+                                <th>Тип</th>
+                                <th>Обязательный</th>
+                                <th>Описание</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>client_id</td>
+                                <td>integer</td>
+                                <td>Да*</td>
+                                <td>ID клиента (обязателен для режима по клиенту, альтернатива - project_id)</td>
+                            </tr>
+                            <tr>
+                                <td>project_id</td>
+                                <td>integer</td>
+                                <td>Да*</td>
+                                <td>ID проекта (обязателен для режима по проекту, альтернатива - client_id)</td>
+                            </tr>
+                            <tr>
+                                <td>search</td>
+                                <td>string</td>
+                                <td>Нет</td>
+                                <td>Поисковый запрос (поиск по названию, ИНН, БИН)</td>
+                            </tr>
+                            <tr>
+                                <td>page</td>
+                                <td>integer</td>
+                                <td>Нет</td>
+                                <td>Номер страницы (по умолчанию: 1)</td>
+                            </tr>
+                            <tr>
+                                <td>limit</td>
+                                <td>integer</td>
+                                <td>Нет</td>
+                                <td>Количество записей на странице (по умолчанию: 100, максимум: 1000)</td>
+                            </tr>
+                            <tr>
+                                <td>offset</td>
+                                <td>integer</td>
+                                <td>Нет</td>
+                                <td>Смещение для пагинации (альтернатива page, по умолчанию: 0)</td>
+                            </tr>
+                            <tr>
+                                <td>enrichment</td>
+                                <td>string</td>
+                                <td>Нет</td>
+                                <td>Фильтр по обогащению данных</td>
+                            </tr>
+                            <tr>
+                                <td>subcategory</td>
+                                <td>string</td>
+                                <td>Нет</td>
+                                <td>Фильтр по подкатегории</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p style="margin-top: 10px; color: #666; font-size: 13px;">
+                        * Требуется указать либо client_id, либо project_id
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Тест 1: Базовый запрос по клиенту -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Тест 1: Базовый запрос контрагентов по клиенту</h2>
+                    <button class="test-button" onclick="test1()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test1-body">
+                    <div class="api-info">
+                        <div class="api-name">Описание</div>
+                        <div class="api-description">
+                            Получение всех нормализованных контрагентов для указанного клиента с параметрами пагинации по умолчанию.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 2: Запрос с пагинацией -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Тест 2: Запрос с пагинацией</h2>
+                    <button class="test-button" onclick="test2()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test2-body">
+                    <div class="api-info">
+                        <div class="api-name">Описание</div>
+                        <div class="api-description">
+                            Получение контрагентов с указанием конкретной страницы и лимита записей.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 3: Поиск контрагентов -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Тест 3: Поиск контрагентов</h2>
+                    <button class="test-button" onclick="test3()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test3-body">
+                    <div class="api-info">
+                        <div class="api-name">Описание</div>
+                        <div class="api-description">
+                            Поиск контрагентов по названию или ИНН/БИН с использованием параметра search.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 4: Фильтр по проекту -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Тест 4: Фильтр по проекту</h2>
+                    <button class="test-button" onclick="test4()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test4-body">
+                    <div class="api-info">
+                        <div class="api-name">Описание</div>
+                        <div class="api-description">
+                            Получение контрагентов клиента с фильтрацией по конкретному проекту.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тест 5: Валидация параметров -->
+            <div class="test-section">
+                <div class="test-header">
+                    <h2>Тест 5: Валидация параметров</h2>
+                    <button class="test-button" onclick="test5()">Запустить тест</button>
+                </div>
+                <div class="test-body" id="test5-body">
+                    <div class="api-info">
+                        <div class="api-name">Описание</div>
+                        <div class="api-description">
+                            Проверка обработки ошибок при отсутствии обязательных параметров.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_TIMEOUT = 7000; // 7 секунд
+        
+        // Получение конфигурации
+        function getBaseUrl() {
+            return document.getElementById('baseUrl').value || 'http://localhost:9999';
+        }
+        
+        function getClientId() {
+            const clientIdInput = document.getElementById('clientId');
+            return clientIdInput.value ? parseInt(clientIdInput.value) : null;
+        }
+        
+        // Получение списка клиентов
+        async function getClients() {
+            const baseUrl = getBaseUrl();
+            try {
+                const response = await fetch(`${baseUrl}/api/clients`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(API_TIMEOUT)
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                return data.clients || [];
+            } catch (error) {
+                throw new Error(`Ошибка получения списка клиентов: ${error.message}`);
+            }
+        }
+        
+        // Получение информации о клиенте и его проектах
+        async function getClientInfo(clientId) {
+            const baseUrl = getBaseUrl();
+            try {
+                const response = await fetch(`${baseUrl}/api/clients/${clientId}`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(API_TIMEOUT)
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                throw new Error(`Ошибка получения информации о клиенте: ${error.message}`);
+            }
+        }
+        
+        // Выполнение теста
+        async function runTest(testNumber, url, description) {
+            const bodyElement = document.getElementById(`test${testNumber}-body`);
+            const button = bodyElement.previousElementSibling.querySelector('.test-button');
+            
+            button.disabled = true;
+            button.innerHTML = '<span class="loading"></span> Выполняется...';
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(url, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(API_TIMEOUT)
+                });
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+                
+                let responseData;
+                try {
+                    responseData = await response.json();
+                } catch (e) {
+                    responseData = { error: 'Не удалось распарсить JSON ответ' };
+                }
+                
+                const statusClass = response.ok ? 'success' : 'error';
+                const statusText = response.ok ? 'Успешно' : 'Ошибка';
+                
+                bodyElement.innerHTML = `
+                    <div class="api-info">
+                        <div class="api-name">${description}</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Запрос:</span>
+                        <div class="code">GET ${url}</div>
+                    </div>
+                    <div class="response-info ${statusClass}">
+                        <span class="status ${statusClass}">${statusText} (${response.status})</span>
+                        <span style="margin-left: 10px; color: #666;">Время ответа: ${responseTime}ms</span>
+                        <span class="label" style="margin-top: 15px; display: block;">Ответ:</span>
+                        <div class="code">${JSON.stringify(responseData, null, 2)}</div>
+                    </div>
+                `;
+            } catch (error) {
+                bodyElement.innerHTML = `
+                    <div class="api-info">
+                        <div class="api-name">${description}</div>
+                    </div>
+                    <div class="request-info">
+                        <span class="label">Запрос:</span>
+                        <div class="code">GET ${url}</div>
+                    </div>
+                    <div class="response-info error">
+                        <span class="status error">Ошибка</span>
+                        <span class="label" style="margin-top: 15px; display: block;">Сообщение об ошибке:</span>
+                        <div class="code">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                button.disabled = false;
+                button.innerHTML = 'Запустить тест';
+            }
+        }
+        
+        // Тест 1: Базовый запрос
+        async function test1() {
+            let clientId = getClientId();
+            
+            if (!clientId) {
+                try {
+                    const clients = await getClients();
+                    if (clients.length === 0) {
+                        throw new Error('Клиенты не найдены');
+                    }
+                    clientId = clients[0].id;
+                } catch (error) {
+                    document.getElementById('test1-body').innerHTML = `
+                        <div class="response-info error">
+                            <span class="status error">Ошибка</span>
+                            <div class="code">${error.message}</div>
+                        </div>
+                    `;
+                    return;
+                }
+            }
+            
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/api/counterparties/normalized?client_id=${clientId}`;
+            await runTest(1, url, 'Базовый запрос контрагентов по клиенту');
+        }
+        
+        // Тест 2: Пагинация
+        async function test2() {
+            let clientId = getClientId();
+            
+            if (!clientId) {
+                try {
+                    const clients = await getClients();
+                    if (clients.length === 0) {
+                        throw new Error('Клиенты не найдены');
+                    }
+                    clientId = clients[0].id;
+                } catch (error) {
+                    document.getElementById('test2-body').innerHTML = `
+                        <div class="response-info error">
+                            <span class="status error">Ошибка</span>
+                            <div class="code">${error.message}</div>
+                        </div>
+                    `;
+                    return;
+                }
+            }
+            
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/api/counterparties/normalized?client_id=${clientId}&page=1&limit=20`;
+            await runTest(2, url, 'Запрос с пагинацией (page=1, limit=20)');
+        }
+        
+        // Тест 3: Поиск
+        async function test3() {
+            let clientId = getClientId();
+            
+            if (!clientId) {
+                try {
+                    const clients = await getClients();
+                    if (clients.length === 0) {
+                        throw new Error('Клиенты не найдены');
+                    }
+                    clientId = clients[0].id;
+                } catch (error) {
+                    document.getElementById('test3-body').innerHTML = `
+                        <div class="response-info error">
+                            <span class="status error">Ошибка</span>
+                            <div class="code">${error.message}</div>
+                        </div>
+                    `;
+                    return;
+                }
+            }
+            
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/api/counterparties/normalized?client_id=${clientId}&search=тест`;
+            await runTest(3, url, 'Поиск контрагентов (search=тест)');
+        }
+        
+        // Тест 4: Фильтр по проекту
+        async function test4() {
+            let clientId = getClientId();
+            
+            if (!clientId) {
+                try {
+                    const clients = await getClients();
+                    if (clients.length === 0) {
+                        throw new Error('Клиенты не найдены');
+                    }
+                    clientId = clients[0].id;
+                } catch (error) {
+                    document.getElementById('test4-body').innerHTML = `
+                        <div class="response-info error">
+                            <span class="status error">Ошибка</span>
+                            <div class="code">${error.message}</div>
+                        </div>
+                    `;
+                    return;
+                }
+            }
+            
+            try {
+                const clientInfo = await getClientInfo(clientId);
+                const projects = clientInfo.projects || [];
+                
+                if (projects.length === 0) {
+                    throw new Error('У клиента нет проектов');
+                }
+                
+                const projectId = projects[0].id;
+                const baseUrl = getBaseUrl();
+                const url = `${baseUrl}/api/counterparties/normalized?client_id=${clientId}&project_id=${projectId}`;
+                await runTest(4, url, `Фильтр по проекту (project_id=${projectId})`);
+            } catch (error) {
+                document.getElementById('test4-body').innerHTML = `
+                    <div class="response-info error">
+                        <span class="status error">Ошибка</span>
+                        <div class="code">${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Тест 5: Валидация
+        async function test5() {
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/api/counterparties/normalized`;
+            await runTest(5, url, 'Проверка валидации (без обязательных параметров)');
+        }
+    </script>
+</body>
+</html>
+

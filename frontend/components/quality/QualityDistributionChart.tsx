@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { DynamicPieChart, DynamicPie, DynamicCell, DynamicBarChart, DynamicBar, ResponsiveContainer, Tooltip, Legend, XAxis, YAxis, CartesianGrid } from '@/lib/recharts-dynamic';
 import { Badge } from "@/components/ui/badge";
 
 const CONFIDENCE_COLORS = {
@@ -25,11 +25,37 @@ interface QualityDistributionChartProps {
 }
 
 export function QualityDistributionChart({ data, totalRecords, viewType = 'pie' }: QualityDistributionChartProps) {
-  const chartData = data.map(item => ({
+  // Фильтруем данные, убирая записи с нулевыми значениями и NaN
+  const validData = data.filter(item => 
+    !isNaN(item.count) && 
+    !isNaN(item.percentage) && 
+    item.count > 0
+  )
+  
+  const chartData = validData.map(item => ({
     name: item.range,
     value: item.count,
     percentage: item.percentage,
   }));
+  
+  // Если нет данных для отображения, показываем сообщение
+  if (chartData.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Распределение уверенности классификации</CardTitle>
+          <CardDescription>
+            Какой процент записей имеет различный уровень уверенности
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-[350px] text-muted-foreground">
+            <p>Нет данных для отображения</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   // Кастомный тултип
   const CustomTooltip = ({ active, payload }: any) => {
@@ -94,8 +120,8 @@ export function QualityDistributionChart({ data, totalRecords, viewType = 'pie' 
       <CardContent>
         {viewType === 'pie' ? (
           <ResponsiveContainer width="100%" height={350}>
-            <PieChart>
-              <Pie
+            <DynamicPieChart>
+              <DynamicPie
                 data={chartData}
                 cx="50%"
                 cy="50%"
@@ -106,40 +132,40 @@ export function QualityDistributionChart({ data, totalRecords, viewType = 'pie' 
                 dataKey="value"
               >
                 {chartData.map((entry, index) => (
-                  <Cell
+                  <DynamicCell
                     key={`cell-${index}`}
                     fill={CONFIDENCE_COLORS[entry.name as keyof typeof CONFIDENCE_COLORS]}
                   />
                 ))}
-              </Pie>
+              </DynamicPie>
               <Tooltip content={<CustomTooltip />} />
               <Legend />
-            </PieChart>
+            </DynamicPieChart>
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={chartData}>
+            <DynamicBarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
-              <Bar dataKey="value" name="Количество записей" radius={[8, 8, 0, 0]}>
+              <DynamicBar dataKey="value" name="Количество записей" radius={[8, 8, 0, 0]}>
                 {chartData.map((entry, index) => (
-                  <Cell
+                  <DynamicCell
                     key={`cell-${index}`}
                     fill={CONFIDENCE_COLORS[entry.name as keyof typeof CONFIDENCE_COLORS]}
                   />
                 ))}
-              </Bar>
-            </BarChart>
+              </DynamicBar>
+            </DynamicBarChart>
           </ResponsiveContainer>
         )}
 
         {/* Детальная статистика */}
         <div className="mt-6 space-y-3">
           <div className="text-sm font-medium text-muted-foreground mb-2">Детальная разбивка:</div>
-          {data.map((item) => (
+          {validData.length > 0 ? validData.map((item) => (
             <div key={item.range} className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
                 <div
@@ -151,15 +177,19 @@ export function QualityDistributionChart({ data, totalRecords, viewType = 'pie' 
                 <div>
                   <div className="font-medium">{item.range}</div>
                   <div className="text-sm text-muted-foreground">
-                    {item.count.toLocaleString()} записей
+                    {isNaN(item.count) || item.count === undefined ? 'не число записей' : `${item.count.toLocaleString()} записей`}
                   </div>
                 </div>
               </div>
               <Badge variant={item.percentage > 20 ? "default" : "secondary"}>
-                {item.percentage.toFixed(1)}%
+                {isNaN(item.percentage) || item.percentage === undefined ? 'NaN%' : `${item.percentage.toFixed(1)}%`}
               </Badge>
             </div>
-          ))}
+          )) : (
+            <div className="text-sm text-muted-foreground text-center py-4">
+              Нет данных для отображения
+            </div>
+          )}
         </div>
 
         {/* Рекомендации */}
@@ -167,9 +197,9 @@ export function QualityDistributionChart({ data, totalRecords, viewType = 'pie' 
           <div className="text-sm font-medium mb-2">Анализ:</div>
           <div className="space-y-2 text-sm text-muted-foreground">
             {(() => {
-              const highConfidence = data.find(d => d.range === '0.9-1.0')?.percentage || 0;
-              const mediumConfidence = data.find(d => d.range === '0.7-0.9')?.percentage || 0;
-              const lowConfidence = data.filter(d => parseFloat(d.range.split('-')[0]) < 0.7)
+              const highConfidence = validData.find(d => d.range === '0.9-1.0')?.percentage || 0;
+              const mediumConfidence = validData.find(d => d.range === '0.7-0.9')?.percentage || 0;
+              const lowConfidence = validData.filter(d => parseFloat(d.range.split('-')[0]) < 0.7)
                 .reduce((sum, d) => sum + d.percentage, 0);
 
               return (

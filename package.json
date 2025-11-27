@@ -1,0 +1,39 @@
+{
+  "name": "httpserver-todo-system",
+  "version": "1.0.0",
+  "description": "Automated TODO Management System",
+  "scripts": {
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:all": "npm run build",
+    "build:backend": "node -e \"require('fs').mkdirSync('bin', {recursive: true})\" && go build -tags no_gui -o ./bin/httpserver_no_gui.exe main_no_gui.go",
+    "build:frontend": "cd frontend && npm run build",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:all": "npm run start",
+    "start:backend": ".\\bin\\httpserver_no_gui.exe",
+    "start:frontend": "cd frontend && npm run start",
+    "todos:scan": "python .todos/scripts/scan-todos.py",
+    "todos:report": "python .todos/scripts/generate-report.py",
+    "todos:all": "npm run todos:scan && npm run todos:report",
+    "todos:dashboard": "start .todos/dashboard.html",
+    "test:e2e": "cd frontend && npm run test:e2e",
+    "test:e2e:ui": "cd frontend && npm run test:e2e:ui",
+    "test:e2e:debug": "cd frontend && npm run test:e2e:debug",
+    "test:e2e:report": "cd frontend && npm run test:e2e:report"
+  },
+  "keywords": [
+    "todo",
+    "automation",
+    "task-management"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.56.1",
+    "next": "^16.0.4"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@types/node": "^24.10.1",
+    "concurrently": "^9.2.1"
+  }
+}

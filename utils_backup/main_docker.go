@@ -1,5 +1,5 @@
-//go:build no_gui
-// +build no_gui
+//go:build ignore
+// +build ignore
 
 package main
 

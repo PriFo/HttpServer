@@ -5,6 +5,42 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
+### Добавлено
+
+#### Бенчмарк моделей
+- `POST /api/models/benchmark` - улучшена обработка всех доступных моделей
+  - Теперь получает все модели из API, не только первые 2
+  - Множественные попытки с разными query параметрами для получения всех моделей
+  - Детальная статистика в ответе: `models_tested`, `models_available`, `successful_models`, `failed_models`
+  - Информативные сообщения об ошибках для пользователя
+  - Предупреждения при малом количестве моделей или высоком проценте ошибок
+- Улучшена обработка ошибок quota exceeded и rate limit для OpenRouter
+- Добавлена классификация ошибок по типам (quota_exceeded, rate_limit, timeout, network, auth)
+- Улучшено логирование количества моделей на всех этапах
+
+#### Обработка ошибок
+- Улучшена обработка ошибок quota exceeded в `OpenRouterClient`
+  - Retry с экспоненциальной задержкой для rate limit ошибок
+  - Парсинг заголовка Retry-After
+  - Разделение временных и постоянных ошибок
+- Улучшена обработка ошибок в `provider_orchestrator.go`
+  - Классификация ошибок по типам
+  - Fallback на другие провайдеры при ошибках
+- Улучшена обработка ошибок в `ai_client.go` и `arliai_client.go`
+  - Детальная обработка различных HTTP статусов
+  - Проверка на quota/rate limit ошибки
+
+#### Системные эндпоинты
+- `GET /api/system/summary` - сводная информация по всем базам данных системы
+  - Добавлена поддержка фильтрации по статусу, дате создания и поиска по имени
+  - Добавлена сортировка по различным полям (created_at, completed_at, name, status, nomenclature_count, counterparty_count)
+  - Добавлена пагинация результатов (page, limit)
+- `GET /api/system/summary/cache/stats` - статистика кеша системной сводки
+- `POST /api/system/summary/cache/invalidate` - инвалидация кеша системной сводки
+- `POST /api/system/summary/cache/clear` - очистка кеша системной сводки
+
 ## [1.0.0] - 2025-01-15
 
 ### Добавлено

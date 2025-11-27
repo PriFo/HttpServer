@@ -1,26 +1,19 @@
 @echo off
 chcp 65001 >nul
-echo Запуск бэкенда на порту 9999...
+echo ============================================
+echo Starting Backend Server on Port 9999
+echo ============================================
 echo.
 
-REM Переходим в директорию скрипта
-cd /d "%~dp0"
+REM Set environment variables if needed
+REM set ARLIAI_API_KEY=your_key_here
 
-REM Проверяем наличие Go
-where go >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Ошибка: Go не найден в PATH
-    echo Установите Go и добавьте его в PATH
-    pause
-    exit /b 1
-)
+REM Run the server
+echo Starting server...
+go run cmd/server/main.go
 
-REM Устанавливаем API ключ для ArliAI
-set ARLIAI_API_KEY=597dbe7e-16ca-4803-ab17-5fa084909f37
-
-REM Запускаем бэкенд
-echo Запуск сервера с AI нормализацией...
-go run -tags no_gui main_no_gui.go
-
+echo.
+echo ============================================
+echo Server stopped
+echo ============================================
 pause
-

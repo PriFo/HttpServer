@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getBackendUrl } from '@/lib/api-config'
+import { withErrorHandler } from '@/lib/errors'
+import { logger } from '@/lib/logger'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:9999'
+export const runtime = 'nodejs'
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: Promise<{ dbname: string }> }
-) {
+) => {
+  const startTime = Date.now()
+  const BACKEND_URL = getBackendUrl()
+  
   try {
     const { dbname } = await params
     if (!dbname) {
@@ -38,6 +44,16 @@ export async function GET(
     })
 
     if (!response.ok) {
+      // Для 404 возвращаем пустые данные вместо ошибки
+      if (response.status === 404) {
+        return NextResponse.json({
+          total_records: 0,
+          total_size: 0,
+          tables: [],
+          last_analyzed: null,
+        })
+      }
+      
       let errorMessage = 'Failed to fetch database analytics'
       const contentType = response.headers.get('content-type')
       
@@ -64,13 +80,17 @@ export async function GET(
             : responseText
         }
       } catch (parseError) {
-        console.error('Error parsing error response:', parseError)
+        logger.warn('Error parsing error response', {
+          component: 'DatabaseAnalyticsApi',
+          dbname: finalPath,
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+        })
       }
       
-      console.error('Backend error:', {
-        status: response.status,
+      logger.logApiError(`${BACKEND_URL}/api/databases/analytics`, 'GET', response.status, new Error(errorMessage), {
+        endpoint: '/api/databases/analytics/[dbname]',
+        dbname: finalPath,
         statusText: response.statusText,
-        message: errorMessage,
       })
       
       return NextResponse.json(
@@ -80,14 +100,26 @@ export async function GET(
     }
 
     const data = await response.json()
+    const duration = Date.now() - startTime
+    logger.logApiSuccess(`${BACKEND_URL}/api/databases/analytics`, 'GET', duration, {
+      endpoint: '/api/databases/analytics/[dbname]',
+      dbname: finalPath,
+    })
+    
     return NextResponse.json(data)
   } catch (error) {
-    console.error('Error fetching database analytics:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json(
-      { error: `Internal server error: ${errorMessage}` },
-      { status: 500 }
-    )
+    const duration = Date.now() - startTime
+    const { dbname } = await params
+    const url = new URL(request.url)
+    const dbPath = url.searchParams.get('path')
+    const finalPath = dbPath || dbname || 'unknown'
+    
+    logger.logApiError(`${BACKEND_URL}/api/databases/analytics`, 'GET', 0, error as Error, {
+      endpoint: '/api/databases/analytics/[dbname]',
+      dbname: finalPath,
+      duration,
+    })
+    throw error
   }
-}
+})
 

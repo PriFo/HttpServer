@@ -131,10 +131,12 @@ func TestArliaiCache(t *testing.T) {
 
 func TestGenerateTraceID(t *testing.T) {
 	id1 := GenerateTraceID()
+	// Добавляем небольшую задержку для гарантии разных ID
+	time.Sleep(time.Microsecond)
 	id2 := GenerateTraceID()
 
 	if id1 == id2 {
-		t.Error("Expected different trace IDs")
+		t.Errorf("Expected different trace IDs, got: %s and %s", id1, id2)
 	}
 
 	if len(id1) == 0 {

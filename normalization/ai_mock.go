@@ -68,10 +68,10 @@ func (m *MockAINormalizer) NormalizeWithAI(name string) (*AIResult, error) {
 
 	// Возвращаем дефолтный ответ
 	return &AIResult{
-		Category:      "другое",
+		Category:       "другое",
 		NormalizedName: name,
-		Confidence:    0.5,
-		Reasoning:     "Mock response",
+		Confidence:     0.5,
+		Reasoning:      "Mock response",
 	}, nil
 }
 
@@ -157,4 +157,3 @@ func (m *MockPatternAIIntegrator) SuggestCorrectionWithAI(originalName string) (
 func (m *MockPatternAIIntegrator) GetAINormalizer() *MockAINormalizer {
 	return m.aiNormalizer
 }
-

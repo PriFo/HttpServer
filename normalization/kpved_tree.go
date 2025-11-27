@@ -6,7 +6,16 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 )
+
+// Глобальный мьютекс для защиты BuildFromDatabase от параллельных вызовов
+// SQLite плохо справляется с множественными одновременными запросами на чтение
+var buildTreeMutex sync.Mutex
+
+// Кэш для переиспользования дерева (опционально, для дальнейшей оптимизации)
+// var cachedTree *KpvedTree
+// var cachedTreeMutex sync.RWMutex
 
 // KpvedDB интерфейс для доступа к базе данных КПВЭД
 type KpvedDB interface {
@@ -54,7 +63,18 @@ func NewKpvedTree() *KpvedTree {
 }
 
 // BuildFromDatabase строит дерево из базы данных
+// Защищено мьютексом для предотвращения блокировок SQLite при параллельных вызовах
 func (t *KpvedTree) BuildFromDatabase(db KpvedDB) error {
+	// Захватываем мьютекс для защиты от параллельных вызовов
+	// Это критически важно для SQLite, который плохо справляется с конкурентными запросами
+	log.Printf("[KpvedTree] Acquiring mutex for BuildFromDatabase...")
+	buildTreeMutex.Lock()
+	defer func() {
+		buildTreeMutex.Unlock()
+		log.Printf("[KpvedTree] Released mutex for BuildFromDatabase")
+	}()
+	
+	log.Printf("[KpvedTree] Building tree from database (protected by mutex)...")
 	query := `SELECT code, name, parent_code, level FROM kpved_classifier ORDER BY code`
 
 	rows, err := db.Query(query)
@@ -102,9 +122,16 @@ func (t *KpvedTree) BuildFromDatabase(db KpvedDB) error {
 			if parent, exists := t.NodeMap[node.ParentCode]; exists {
 				parent.Children = append(parent.Children, node)
 			} else {
-				// Если родитель не найден, добавляем к корню
-				log.Printf("Warning: parent %s not found for node %s", node.ParentCode, node.Code)
-				t.Root.Children = append(t.Root.Children, node)
+				// Если родитель не найден, пытаемся найти ближайшего существующего родителя
+				actualParent := t.findNearestParent(node.ParentCode)
+				if actualParent != nil {
+					actualParent.Children = append(actualParent.Children, node)
+					log.Printf("Info: Using nearest parent %s for node %s (requested parent %s not found)", actualParent.Code, node.Code, node.ParentCode)
+				} else {
+					// Если ближайший родитель не найден, добавляем к корню
+					log.Printf("Warning: parent %s not found for node %s, adding to root", node.ParentCode, node.Code)
+					t.Root.Children = append(t.Root.Children, node)
+				}
 			}
 		}
 	}
@@ -295,4 +322,32 @@ func GetLevelName(level KpvedLevel) string {
 	default:
 		return "Неизвестный уровень"
 	}
+}
+
+// findNearestParent находит ближайшего существующего родителя для указанного кода
+// Например, если ищется родитель 30.92, но его нет, ищется 30, затем 30.9 и т.д.
+func (t *KpvedTree) findNearestParent(requestedCode string) *KpvedNode {
+	if requestedCode == "" || requestedCode == "root" {
+		return nil
+	}
+
+	// Пытаемся найти родителя, постепенно укорачивая код
+	parts := strings.Split(requestedCode, ".")
+
+	// Пробуем найти родителя, убирая последнюю часть кода
+	for i := len(parts) - 1; i > 0; i-- {
+		parentCode := strings.Join(parts[:i], ".")
+		if parent, exists := t.NodeMap[parentCode]; exists {
+			return parent
+		}
+	}
+
+	// Если не нашли, пробуем найти по первой части (класс)
+	if len(parts) > 0 {
+		if parent, exists := t.NodeMap[parts[0]]; exists {
+			return parent
+		}
+	}
+
+	return nil
 }

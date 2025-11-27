@@ -9,9 +9,9 @@ import (
 type ObjectType string
 
 const (
-	ObjectTypeProduct ObjectType = "product"  // Товар
-	ObjectTypeService ObjectType = "service"   // Услуга
-	ObjectTypeUnknown ObjectType = "unknown"  // Неопределено
+	ObjectTypeProduct ObjectType = "product" // Товар
+	ObjectTypeService ObjectType = "service" // Услуга
+	ObjectTypeUnknown ObjectType = "unknown" // Неопределено
 )
 
 // DetectionResult результат определения типа объекта
@@ -32,17 +32,17 @@ type ContextRule struct {
 
 // ProductServiceDetector детектор для определения товар/услуга
 type ProductServiceDetector struct {
-	productIndicators  []string
-	serviceIndicators  []string
-	productPatterns    []*regexp.Regexp
-	servicePatterns    []*regexp.Regexp
+	productIndicators []string
+	serviceIndicators []string
+	productPatterns   []*regexp.Regexp
+	servicePatterns   []*regexp.Regexp
 
 	// Новые поля для улучшенной детекции
-	timePatterns       []*regexp.Regexp
-	periodicityWords   []string
-	serviceFirstWords  []string
-	serviceLastWords   []string
-	contextRules       []ContextRule
+	timePatterns      []*regexp.Regexp
+	periodicityWords  []string
+	serviceFirstWords []string
+	serviceLastWords  []string
+	contextRules      []ContextRule
 }
 
 // NewProductServiceDetector создает новый детектор товар/услуга
@@ -445,13 +445,13 @@ func minFloat64(a, b float64) float64 {
 func (d *ProductServiceDetector) hasProductCharacteristics(input string) bool {
 	// Паттерны технических характеристик
 	characteristicPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\b\d+\s*(мм|см|м|кг|г|л|мл|шт)\b`),                    // Размеры и единицы измерения
-		regexp.MustCompile(`\b\d+[xх]\d+`),                                      // Размеры типа 120x70
-		regexp.MustCompile(`\b\d+[.,]\d+\s*(мм|см|м|кг|г)\b`),                   // Десятичные размеры
-		regexp.MustCompile(`\b(арт\.?|art\.?|№)\s*[a-zA-Z0-9.-]+\b`),            // Артикулы
-		regexp.MustCompile(`\b(ral|din|iso|gost|гост)\s*[a-zA-Z0-9]+\b`),       // Стандарты
+		regexp.MustCompile(`\b\d+\s*(мм|см|м|кг|г|л|мл|шт)\b`),                     // Размеры и единицы измерения
+		regexp.MustCompile(`\b\d+[xх]\d+`),                                         // Размеры типа 120x70
+		regexp.MustCompile(`\b\d+[.,]\d+\s*(мм|см|м|кг|г)\b`),                      // Десятичные размеры
+		regexp.MustCompile(`\b(арт\.?|art\.?|№)\s*[a-zA-Z0-9.-]+\b`),               // Артикулы
+		regexp.MustCompile(`\b(ral|din|iso|gost|гост)\s*[a-zA-Z0-9]+\b`),           // Стандарты
 		regexp.MustCompile(`\b(марка|модель|тип|серия)\s*[:\-]?\s*[a-zA-Z0-9]+\b`), // Марки и модели
-		regexp.MustCompile(`\b[a-zA-Z]{2,}\d+\b`),                                // Коды типа AKS32R, HELUKABEL
+		regexp.MustCompile(`\b[a-zA-Z]{2,}\d+\b`),                                  // Коды типа AKS32R, HELUKABEL
 	}
 
 	for _, pattern := range characteristicPatterns {
@@ -475,7 +475,7 @@ func (d *ProductServiceDetector) calculateConfidence(primaryScore, secondaryScor
 	}
 
 	// Нормализуем уверенность от 0.6 до 0.95
-	confidence := 0.6 + (diff / (primaryScore + 1)) * 0.35
+	confidence := 0.6 + (diff/(primaryScore+1))*0.35
 	if confidence > 0.95 {
 		confidence = 0.95
 	}
@@ -497,4 +497,3 @@ func (d *ProductServiceDetector) IsLikelyService(name, description string) bool 
 	result := d.DetectProductOrService(name, description)
 	return result.Type == ObjectTypeService && result.Confidence > 0.7
 }
-

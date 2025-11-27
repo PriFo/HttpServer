@@ -55,7 +55,7 @@ func TestNormalizeName(t *testing.T) {
 		{
 			name:     "Только спецсимволы",
 			input:    "!!!",
-			expected: "!!!", // Спецсимволы не удаляются NameNormalizer (это делает PatternDetector)
+			expected: "", // После обновления нормализации спецсимволы очищаются
 		},
 		{
 			name:     "Комплексный пример",
@@ -175,7 +175,7 @@ func TestSpecialCharacters(t *testing.T) {
 		{
 			name:     "С восклицательным знаком",
 			input:    "Молоток!",
-			expected: "молоток!", // Восклицательный знак не удаляется NameNormalizer
+			expected: "молоток", // Восклицательный знак удаляется trailingSpecialCharsRegex
 		},
 		{
 			name:     "С русской буквой х в размерах",
@@ -193,4 +193,3 @@ func TestSpecialCharacters(t *testing.T) {
 		})
 	}
 }
-

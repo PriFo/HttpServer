@@ -1,0 +1,853 @@
+//go:build ignore
+// +build ignore
+
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+type ModelBenchmark struct {
+	Name            string
+	Speed           float64        // запросов в секунду
+	AvgResponseTime time.Duration
+	MinResponseTime time.Duration
+	MaxResponseTime time.Duration
+	MedianResponseTime time.Duration // медианное время
+	P95ResponseTime time.Duration    // 95-й перцентиль
+	SuccessCount    int64
+	ErrorCount      int64
+	TotalRequests   int64
+	SuccessRate     float64        // процент успешных запросов
+	Priority        int // 1 = самый быстрый
+	Status          string
+	ResponseTimes   []time.Duration // все времена ответов для расчета перцентилей
+}
+
+type ModelTestResult struct {
+	Model     string
+	Success   bool
+	Duration  time.Duration
+	Error     string
+}
+
+func main() {
+	// Параметры командной строки
+	var (
+		serverURLFlag    = flag.String("server", "http://localhost:9999", "URL сервера")
+		modelsFlag       = flag.String("models", "", "Список моделей для тестирования (через запятую, пусто = все доступные)")
+		saveProgress     = flag.Bool("save-progress", true, "Сохранять промежуточные результаты")
+		maxRetries       = flag.Int("retries", 3, "Максимальное количество повторных попыток для каждого запроса")
+		requestTimeout   = flag.Int("timeout", 30, "Таймаут запроса в секундах")
+		testProductsFile = flag.String("test-products", "", "Файл с тестовыми продуктами (по одному на строку, пусто = использовать встроенные)")
+		parallel         = flag.Int("parallel", 0, "Количество параллельных запросов (0 = без ограничений)")
+	)
+	flag.Parse()
+
+	serverURL := *serverURLFlag
+	selectedModelsStr := *modelsFlag
+
+	fmt.Println("=== Бенчмарк моделей Eden AI API ===")
+	fmt.Printf("Сервер: %s\n", serverURL)
+	if selectedModelsStr != "" {
+		fmt.Printf("Выбранные модели: %s\n", selectedModelsStr)
+	}
+	fmt.Println()
+
+	// Проверяем доступность сервера
+	resp, err := http.Get(serverURL + "/api/health")
+	if err != nil {
+		log.Fatalf("Сервер недоступен: %v\nУбедитесь, что сервер запущен на %s", err, serverURL)
+	}
+	resp.Body.Close()
+	fmt.Println("✓ Сервер доступен")
+	fmt.Println()
+
+	// Получаем список моделей из Eden AI API
+	fmt.Println("Получение списка доступных моделей Eden AI...")
+	allModels, err := getAvailableModels(serverURL)
+	if err != nil {
+		log.Fatalf("Ошибка получения списка моделей: %v", err)
+	}
+
+	if len(allModels) == 0 {
+		log.Fatal("Не найдено доступных моделей")
+	}
+
+	// Фильтруем модели, если указаны конкретные
+	var models []string
+	if selectedModelsStr != "" {
+		selectedModelsList := strings.Split(selectedModelsStr, ",")
+		selectedModelsMap := make(map[string]bool)
+		for _, m := range selectedModelsList {
+			selectedModelsMap[strings.TrimSpace(m)] = true
+		}
+		
+		models = make([]string, 0)
+		for _, m := range allModels {
+			if selectedModelsMap[m] {
+				models = append(models, m)
+			}
+		}
+		
+		if len(models) == 0 {
+			log.Fatalf("Ни одна из указанных моделей не найдена среди доступных моделей")
+		}
+		fmt.Printf("Отфильтровано моделей: %d из %d\n", len(models), len(allModels))
+	} else {
+		models = allModels
+	}
+
+	fmt.Printf("Найдено моделей: %d\n", len(models))
+	for i, model := range models {
+		fmt.Printf("  %d. %s\n", i+1, model)
+	}
+	fmt.Println()
+
+	// Тестовые данные - загружаем из файла или используем встроенные
+	var testProducts []string
+	if *testProductsFile != "" {
+		data, err := os.ReadFile(*testProductsFile)
+		if err != nil {
+			log.Fatalf("Ошибка чтения файла с тестовыми продуктами: %v", err)
+		}
+		lines := strings.Split(string(data), "\n")
+		testProducts = make([]string, 0, len(lines))
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "#") {
+				testProducts = append(testProducts, line)
+			}
+		}
+		if len(testProducts) == 0 {
+			log.Fatal("Файл с тестовыми продуктами пуст или содержит только комментарии")
+		}
+		fmt.Printf("Загружено %d тестовых продуктов из файла: %s\n", len(testProducts), *testProductsFile)
+	} else {
+		// Встроенные тестовые данные
+		testProducts = []string{
+			"Болт М8х20",
+			"Гайка М8",
+			"Шайба плоская М8",
+			"Винт саморез 4.2х16",
+			"Гвоздь строительный 100мм",
+			"Саморез по дереву 4.5х50",
+			"Дюбель распорный 8х50",
+			"Анкерный болт М10х100",
+			"Шуруп по металлу 4.2х19",
+			"Заклепка вытяжная 4х8",
+			"Болт с гайкой М10",
+			"Шпилька резьбовая М12",
+			"Винт с потайной головкой",
+			"Гайка самоконтрящаяся",
+			"Шайба пружинная",
+		}
+		fmt.Printf("Используется %d встроенных тестовых продуктов\n", len(testProducts))
+	}
+	fmt.Println()
+
+	// Бенчмарк для каждой модели
+	benchmarks := make(map[string]*ModelBenchmark)
+	var benchmarksMutex sync.Mutex
+
+	fmt.Println("=== Запуск бенчмарка моделей ===")
+	fmt.Println()
+
+	var wg sync.WaitGroup
+	totalModels := len(models)
+	completedModels := int64(0)
+	
+	for i, model := range models {
+		wg.Add(1)
+		go func(modelName string, modelIndex int) {
+			defer wg.Done()
+			fmt.Printf("[%d/%d] Тестирование модели: %s...\n", modelIndex+1, totalModels, modelName)
+			
+			benchmark := testModel(serverURL, modelName, testProducts, *maxRetries, time.Duration(*requestTimeout)*time.Second, *parallel)
+			
+			benchmarksMutex.Lock()
+			benchmarks[modelName] = benchmark
+			benchmarksMutex.Unlock()
+			
+			completed := atomic.AddInt64(&completedModels, 1)
+			fmt.Printf("  ✓ [%d/%d] %s: %.2f req/s, среднее время: %v\n", 
+				completed, totalModels, modelName, benchmark.Speed, benchmark.AvgResponseTime)
+			
+			// Сохраняем промежуточные результаты, если включено
+			if *saveProgress && completed%5 == 0 {
+				saveIntermediateResults(benchmarks, completed, int64(totalModels))
+			}
+		}(model, i)
+	}
+
+	wg.Wait()
+	fmt.Println()
+
+	// Сортируем модели по скорости (только успешные запросы учитываются)
+	// Приоритет: скорость > успешность > время ответа
+	sortedModels := make([]*ModelBenchmark, 0, len(benchmarks))
+	for _, bm := range benchmarks {
+		sortedModels = append(sortedModels, bm)
+	}
+	sort.Slice(sortedModels, func(i, j int) bool {
+		// Сначала по успешным запросам
+		if sortedModels[i].SuccessCount > 0 && sortedModels[j].SuccessCount == 0 {
+			return true
+		}
+		if sortedModels[i].SuccessCount == 0 && sortedModels[j].SuccessCount > 0 {
+			return false
+		}
+		// Если оба имеют успешные запросы, сортируем по скорости
+		if sortedModels[i].SuccessCount > 0 && sortedModels[j].SuccessCount > 0 {
+			// Если скорости близки (разница < 5%), учитываем успешность
+			speedDiff := sortedModels[i].Speed - sortedModels[j].Speed
+			if speedDiff > -0.05 && speedDiff < 0.05 {
+				// При одинаковой скорости выбираем более успешную
+				return sortedModels[i].SuccessRate > sortedModels[j].SuccessRate
+			}
+			return sortedModels[i].Speed > sortedModels[j].Speed
+		}
+		// Если оба не имеют успешных запросов, сортируем по среднему времени (быстрее = лучше)
+		return sortedModels[i].AvgResponseTime < sortedModels[j].AvgResponseTime
+	})
+
+	// Устанавливаем приоритеты (1 = самый быстрый)
+	for i, bm := range sortedModels {
+		bm.Priority = i + 1
+	}
+
+	// Выводим информационную панель
+	fmt.Println("=" + repeat("=", 100))
+	fmt.Println("ИНФОРМАЦИОННАЯ ПАНЕЛЬ: БЕНЧМАРК МОДЕЛЕЙ EDEN AI API")
+	fmt.Println("=" + repeat("=", 100))
+	fmt.Println()
+
+	// Заголовок таблицы
+	fmt.Printf("%-30s | %-8s | %-10s | %-12s | %-12s | %-12s | %-8s | %-8s | %-10s\n",
+		"Модель", "Приоритет", "Скорость", "Среднее", "Медиана", "P95", "Успешно", "Ошибок", "Статус")
+	fmt.Println(repeat("-", 140))
+
+	// Данные таблицы
+	for _, bm := range sortedModels {
+		status := "✓ OK"
+		if bm.ErrorCount > 0 {
+			status = fmt.Sprintf("⚠ %d ошибок", bm.ErrorCount)
+		}
+		if bm.SuccessCount == 0 {
+			status = "✗ FAILED"
+		}
+
+		medianStr := "-"
+		p95Str := "-"
+		if bm.MedianResponseTime > 0 {
+			medianStr = bm.MedianResponseTime.Round(time.Millisecond).String()
+		}
+		if bm.P95ResponseTime > 0 {
+			p95Str = bm.P95ResponseTime.Round(time.Millisecond).String()
+		}
+
+		fmt.Printf("%-30s | %-8d | %-10.2f | %-12v | %-12s | %-12s | %-8d | %-8d | %-10s\n",
+			truncateString(bm.Name, 30), bm.Priority, bm.Speed, 
+			bm.AvgResponseTime.Round(time.Millisecond), medianStr, p95Str,
+			bm.SuccessCount, bm.ErrorCount, status)
+	}
+
+	fmt.Println(repeat("-", 120))
+	fmt.Println()
+
+	// Детальная статистика
+	fmt.Println("=== ДЕТАЛЬНАЯ СТАТИСТИКА ===")
+	fmt.Println()
+
+	for i, bm := range sortedModels {
+		fmt.Printf("%d. %s (Приоритет: %d)\n", i+1, bm.Name, bm.Priority)
+		if bm.SuccessCount > 0 {
+			fmt.Printf("   Скорость: %.2f запросов/сек (на основе успешных запросов)\n", bm.Speed)
+			fmt.Printf("   Среднее время ответа: %v\n", bm.AvgResponseTime.Round(time.Millisecond))
+			if bm.MedianResponseTime > 0 {
+				fmt.Printf("   Медианное время: %v\n", bm.MedianResponseTime.Round(time.Millisecond))
+			}
+			if bm.P95ResponseTime > 0 {
+				fmt.Printf("   95-й перцентиль: %v\n", bm.P95ResponseTime.Round(time.Millisecond))
+			}
+			fmt.Printf("   Минимальное время: %v\n", bm.MinResponseTime.Round(time.Millisecond))
+			fmt.Printf("   Максимальное время: %v\n", bm.MaxResponseTime.Round(time.Millisecond))
+		} else {
+			fmt.Printf("   Скорость: 0 запросов/сек (нет успешных запросов)\n")
+			fmt.Printf("   Среднее время ответа: %v (время до ошибки)\n", bm.AvgResponseTime.Round(time.Millisecond))
+		}
+		fmt.Printf("   Успешных запросов: %d (%.1f%%)\n", bm.SuccessCount, bm.SuccessRate)
+		fmt.Printf("   Ошибок: %d (%.1f%%)\n", bm.ErrorCount, 100-bm.SuccessRate)
+		fmt.Printf("   Всего запросов: %d\n", bm.TotalRequests)
+		fmt.Println()
+	}
+
+	// Рекомендации
+	fmt.Println("=== РЕКОМЕНДАЦИИ ===")
+	fmt.Println()
+
+	if len(sortedModels) > 0 {
+		// Находим самую быструю модель с успешными запросами
+		var fastest *ModelBenchmark
+		for _, bm := range sortedModels {
+			if bm.SuccessCount > 0 {
+				fastest = bm
+				break
+			}
+		}
+
+		if fastest != nil {
+			fmt.Printf("🏆 Самая быстрая модель: %s (%.2f req/s)\n", fastest.Name, fastest.Speed)
+			fmt.Println()
+
+			fmt.Println("Топ-3 самых быстрых моделей (с успешными запросами):")
+			count := 0
+			for i := 0; i < len(sortedModels) && count < 3; i++ {
+				bm := sortedModels[i]
+				if bm.SuccessCount > 0 {
+					count++
+					fmt.Printf("  %d. %s - %.2f req/s, среднее время: %v (приоритет: %d)\n", 
+						count, bm.Name, bm.Speed, bm.AvgResponseTime.Round(time.Millisecond), bm.Priority)
+				}
+			}
+			if count == 0 {
+				fmt.Println("  Нет моделей с успешными запросами")
+			}
+			fmt.Println()
+
+			fmt.Println("Рекомендуемая конфигурация для максимальной скорости:")
+			fmt.Printf("  EDENAI_MODEL=%s\n", fastest.Name)
+			fmt.Printf("  MaxWorkers=2 (для параллельной обработки)\n")
+			fmt.Printf("  RateLimit=2.0 (2 запроса/сек)\n")
+		} else {
+			fmt.Println("⚠ ВНИМАНИЕ: Нет моделей с успешными запросами!")
+			fmt.Println("  Возможные причины:")
+			fmt.Println("  1. EDENAI_API_KEY не установлен")
+			fmt.Println("  2. Провайдер Eden AI не настроен в конфигурации")
+			fmt.Println("  3. Модели недоступны в Eden AI API")
+			fmt.Println("  4. Проблемы с сетью или API сервисом")
+			fmt.Println()
+			fmt.Println("  Для полного тестирования установите EDENAI_API_KEY, настройте провайдер Eden AI и перезапустите сервер")
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("=" + repeat("=", 100))
+
+	// Сохраняем результаты в JSON файл
+	saveResultsToJSON(sortedModels)
+	
+	// Создаем HTML отчет
+	saveResultsToHTML(sortedModels)
+}
+
+// saveIntermediateResults сохраняет промежуточные результаты
+func saveIntermediateResults(benchmarksMap map[string]*ModelBenchmark, completed, total int64) {
+	benchmarks := make([]*ModelBenchmark, 0, len(benchmarksMap))
+	for _, bm := range benchmarksMap {
+		benchmarks = append(benchmarks, bm)
+	}
+	
+	// Сортируем по скорости
+	sort.Slice(benchmarks, func(i, j int) bool {
+		if benchmarks[i].SuccessCount > 0 && benchmarks[j].SuccessCount == 0 {
+			return true
+		}
+		if benchmarks[i].SuccessCount == 0 && benchmarks[j].SuccessCount > 0 {
+			return false
+		}
+		return benchmarks[i].Speed > benchmarks[j].Speed
+	})
+	
+	filename := fmt.Sprintf("edenai_models_benchmark_progress_%d_of_%d_%s.json", 
+		completed, total, time.Now().Format("20060102_150405"))
+	saveResultsToJSONFile(benchmarks, filename)
+}
+
+func saveResultsToJSON(benchmarks []*ModelBenchmark) {
+	filename := fmt.Sprintf("edenai_models_benchmark_%s.json", time.Now().Format("20060102_150405"))
+	saveResultsToJSONFile(benchmarks, filename)
+	fmt.Printf("\n✓ Результаты сохранены в: %s\n", filename)
+}
+
+func saveResultsToJSONFile(benchmarks []*ModelBenchmark, filename string) {
+	results := make([]map[string]interface{}, 0, len(benchmarks))
+	for _, bm := range benchmarks {
+		results = append(results, map[string]interface{}{
+			"model":                bm.Name,
+			"priority":             bm.Priority,
+			"speed":                bm.Speed,
+			"avg_response_time_ms": bm.AvgResponseTime.Milliseconds(),
+			"median_response_time_ms": bm.MedianResponseTime.Milliseconds(),
+			"p95_response_time_ms": bm.P95ResponseTime.Milliseconds(),
+			"min_response_time_ms": bm.MinResponseTime.Milliseconds(),
+			"max_response_time_ms": bm.MaxResponseTime.Milliseconds(),
+			"success_count":        bm.SuccessCount,
+			"error_count":          bm.ErrorCount,
+			"total_requests":       bm.TotalRequests,
+			"success_rate":         bm.SuccessRate,
+			"status":               bm.Status,
+		})
+	}
+
+	jsonData, err := json.MarshalIndent(map[string]interface{}{
+		"timestamp": time.Now().Format(time.RFC3339),
+		"models":    results,
+	}, "", "  ")
+	if err == nil {
+		os.WriteFile(filename, jsonData, 0644)
+	}
+}
+
+func saveResultsToHTML(benchmarks []*ModelBenchmark) {
+	html := `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Бенчмарк моделей Eden AI API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #4CAF50; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        tr:hover { background: #f9f9f9; }
+        .priority-1 { background: #d4edda !important; font-weight: bold; }
+        .priority-2 { background: #fff3cd; }
+        .status-ok { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-failed { color: #dc3545; }
+        .speed-bar { background: #e0e0e0; height: 20px; border-radius: 10px; position: relative; }
+        .speed-fill { background: linear-gradient(90deg, #4CAF50, #8BC34A); height: 100%; border-radius: 10px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #4CAF50; }
+        .stat-label { color: #666; font-size: 14px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Бенчмарк моделей Eden AI API</h1>
+        <p><strong>Дата тестирования:</strong> ` + time.Now().Format("2006-01-02 15:04:05") + `</p>
+        <p><strong>Примечание:</strong> Тестируются все доступные модели Eden AI</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">` + fmt.Sprintf("%d", len(benchmarks)) + `</div>
+                <div class="stat-label">Всего моделей</div>
+            </div>
+`
+
+	// Находим самую быструю модель
+	var fastest *ModelBenchmark
+	for _, bm := range benchmarks {
+		if bm.SuccessCount > 0 {
+			fastest = bm
+			break
+		}
+	}
+
+	if fastest != nil {
+		html += fmt.Sprintf(`
+            <div class="stat-card">
+                <div class="stat-value">%s</div>
+                <div class="stat-label">Самая быстрая модель</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">%.2f req/s</div>
+                <div class="stat-label">Максимальная скорость</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">%v</div>
+                <div class="stat-label">Среднее время ответа</div>
+            </div>
+`, fastest.Name, fastest.Speed, fastest.AvgResponseTime.Round(time.Millisecond))
+	}
+
+	html += `
+        </div>
+
+        <h2>Таблица результатов</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Модель</th>
+                    <th>Приоритет</th>
+                    <th>Скорость (req/s)</th>
+                    <th>Среднее время</th>
+                    <th>Медиана</th>
+                    <th>P95</th>
+                    <th>Успешно</th>
+                    <th>Ошибок</th>
+                    <th>Успешность</th>
+                    <th>Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+`
+
+	maxSpeed := 0.0
+	for _, bm := range benchmarks {
+		if bm.Speed > maxSpeed {
+			maxSpeed = bm.Speed
+		}
+	}
+
+	for _, bm := range benchmarks {
+		priorityClass := fmt.Sprintf("priority-%d", bm.Priority)
+		statusClass := "status-ok"
+		if bm.ErrorCount > 0 && bm.SuccessCount == 0 {
+			statusClass = "status-failed"
+		} else if bm.ErrorCount > 0 {
+			statusClass = "status-warning"
+		}
+
+		speedPercent := 0.0
+		if maxSpeed > 0 {
+			speedPercent = (bm.Speed / maxSpeed) * 100
+		}
+
+		medianStr := "-"
+		p95Str := "-"
+		if bm.MedianResponseTime > 0 {
+			medianStr = bm.MedianResponseTime.Round(time.Millisecond).String()
+		}
+		if bm.P95ResponseTime > 0 {
+			p95Str = bm.P95ResponseTime.Round(time.Millisecond).String()
+		}
+
+		html += fmt.Sprintf(`
+                <tr class="%s">
+                    <td><strong>%s</strong></td>
+                    <td>%d</td>
+                    <td>
+                        <div class="speed-bar">
+                            <div class="speed-fill" style="width: %.1f%%"></div>
+                        </div>
+                        <span style="margin-left: 10px;">%.2f</span>
+                    </td>
+                    <td>%v</td>
+                    <td>%s</td>
+                    <td>%s</td>
+                    <td>%d</td>
+                    <td>%d</td>
+                    <td>%.1f%%</td>
+                    <td class="%s">%s</td>
+                </tr>
+`, priorityClass, bm.Name, bm.Priority, speedPercent, bm.Speed,
+			bm.AvgResponseTime.Round(time.Millisecond), medianStr, p95Str,
+			bm.SuccessCount, bm.ErrorCount, bm.SuccessRate, statusClass, bm.Status)
+	}
+
+	html += `
+            </tbody>
+        </table>
+
+        <h2>Рекомендации</h2>
+        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 20px;">
+`
+
+	if fastest != nil {
+		html += fmt.Sprintf(`
+            <h3>🏆 Самая быстрая модель: %s</h3>
+            <p><strong>Скорость:</strong> %.2f запросов/сек</p>
+            <p><strong>Среднее время ответа:</strong> %v</p>
+            <p><strong>Успешность:</strong> %.1f%%</p>
+            <h4>Рекомендуемая конфигурация:</h4>
+            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">
+EDENAI_MODEL=%s
+MaxWorkers=2
+RateLimit=2.0
+</pre>
+`, fastest.Name, fastest.Speed, fastest.AvgResponseTime.Round(time.Millisecond),
+			fastest.SuccessRate, fastest.Name)
+	}
+
+	html += `
+        </div>
+    </div>
+</body>
+</html>`
+
+	filename := fmt.Sprintf("edenai_models_benchmark_%s.html", time.Now().Format("20060102_150405"))
+	os.WriteFile(filename, []byte(html), 0644)
+	fmt.Printf("✓ HTML отчет сохранен в: %s\n", filename)
+}
+
+func getAvailableModels(serverURL string) ([]string, error) {
+	// Получаем модели через API сервера с параметром provider=edenai
+	resp, err := http.Get(serverURL + "/api/workers/models?provider=edenai")
+	if err == nil && resp.StatusCode == http.StatusOK {
+		var apiResp struct {
+			Success bool `json:"success"`
+			Data    struct {
+				Models []struct {
+					Name   string `json:"name"`
+					ID     string `json:"id"`
+					Status string `json:"status"`
+				} `json:"models"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err == nil {
+			resp.Body.Close()
+			if apiResp.Success && len(apiResp.Data.Models) > 0 {
+				models := make([]string, 0, len(apiResp.Data.Models))
+				for _, m := range apiResp.Data.Models {
+					// Используем name или id
+					modelName := m.Name
+					modelID := m.ID
+					if modelName == "" {
+						modelName = modelID
+					}
+					
+					// Добавляем все модели (без фильтрации по "free")
+					models = append(models, modelName)
+				}
+				if len(models) > 0 {
+					fmt.Printf("Получено %d моделей из API Eden AI\n", len(models))
+					return models, nil
+				}
+			}
+		}
+		resp.Body.Close()
+	}
+
+	// Если не получилось через API, пробуем без параметра provider (fallback)
+	resp, err = http.Get(serverURL + "/api/workers/models")
+	if err == nil && resp.StatusCode == http.StatusOK {
+		var apiResp struct {
+			Success bool `json:"success"`
+			Data    struct {
+				Models []struct {
+					Name   string `json:"name"`
+					ID     string `json:"id"`
+					Status string `json:"status"`
+				} `json:"models"`
+				Provider string `json:"provider"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err == nil {
+			resp.Body.Close()
+			// Проверяем, что это модели Eden AI
+			if apiResp.Success && apiResp.Data.Provider == "edenai" && len(apiResp.Data.Models) > 0 {
+				models := make([]string, 0, len(apiResp.Data.Models))
+				for _, m := range apiResp.Data.Models {
+					modelName := m.Name
+					if modelName == "" {
+						modelName = m.ID
+					}
+					models = append(models, modelName)
+				}
+				if len(models) > 0 {
+					fmt.Printf("Получено %d моделей Eden AI из API (без параметра provider)\n", len(models))
+					return models, nil
+				}
+			}
+		}
+		resp.Body.Close()
+	}
+
+	// Если не получилось через API, возвращаем ошибку с более подробным сообщением
+	return nil, fmt.Errorf("не удалось получить список моделей Eden AI из API. Убедитесь, что провайдер Eden AI настроен и активен")
+}
+
+func testModel(serverURL, modelName string, testProducts []string, maxRetries int, requestTimeout time.Duration, maxParallel int) *ModelBenchmark {
+	benchmark := &ModelBenchmark{
+		Name:            modelName,
+		MinResponseTime: time.Hour,
+		Status:          "testing",
+		ResponseTimes:   make([]time.Duration, 0, len(testProducts)),
+	}
+
+	startTime := time.Now()
+	var totalDuration int64
+	var successCount int64
+	var errorCount int64
+
+	// Семафор для ограничения параллелизма
+	var semaphore chan struct{}
+	if maxParallel > 0 {
+		semaphore = make(chan struct{}, maxParallel)
+	}
+
+	// WaitGroup для ожидания всех запросов
+	var wg sync.WaitGroup
+	var responseTimesMutex sync.Mutex
+
+	// Тестируем каждую модель с несколькими запросами
+	for _, product := range testProducts {
+		wg.Add(1)
+		go func(productName string) {
+			defer wg.Done()
+			
+			// Ограничение параллелизма
+			if semaphore != nil {
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+			}
+
+			var reqDuration time.Duration
+			var success bool
+			requestStartTime := time.Now()
+
+			// Повторяем запрос до maxRetries раз
+			for attempt := 0; attempt < maxRetries; attempt++ {
+				reqStart := time.Now()
+
+				// Устанавливаем модель через параметр запроса
+				reqBody := map[string]interface{}{
+					"normalized_name": productName,
+					"category":        "общее",
+					"model":           modelName,
+				}
+				jsonData, _ := json.Marshal(reqBody)
+
+				// Используем endpoint для иерархической классификации
+				client := &http.Client{Timeout: requestTimeout}
+				req, _ := http.NewRequest("POST", serverURL+"/api/kpved/classify-hierarchical", bytes.NewBuffer(jsonData))
+				req.Header.Set("Content-Type", "application/json")
+				
+				resp, err := client.Do(req)
+				reqDuration = time.Since(reqStart)
+
+				if err == nil {
+					if resp.StatusCode == http.StatusOK {
+					success = true
+					reqDuration = time.Since(requestStartTime)
+					break // Успешный запрос - выходим из цикла
+				} else {
+					// Читаем тело ответа для диагностики (но не используем)
+					io.ReadAll(resp.Body)
+					resp.Body.Close()
+					
+					// Проверяем, стоит ли повторять для 5xx ошибок
+					if resp.StatusCode >= 500 && attempt < maxRetries-1 {
+						// Серверная ошибка - повторяем
+						delay := time.Duration(1<<uint(attempt)) * 200 * time.Millisecond
+						time.Sleep(delay)
+						continue
+					}
+					// Клиентская ошибка (4xx) - не повторяем
+					break
+				}
+				} else {
+					// Ошибка сети - повторяем, если не последняя попытка
+					if attempt < maxRetries-1 {
+						delay := time.Duration(1<<uint(attempt)) * 200 * time.Millisecond
+						time.Sleep(delay)
+						continue
+					}
+				}
+			}
+
+			// Обновляем статистику
+			atomic.AddInt64(&totalDuration, int64(reqDuration))
+			
+			responseTimesMutex.Lock()
+			if reqDuration < benchmark.MinResponseTime {
+				benchmark.MinResponseTime = reqDuration
+			}
+			if reqDuration > benchmark.MaxResponseTime {
+				benchmark.MaxResponseTime = reqDuration
+			}
+			responseTimesMutex.Unlock()
+
+			if success {
+				atomic.AddInt64(&successCount, 1)
+				responseTimesMutex.Lock()
+				benchmark.ResponseTimes = append(benchmark.ResponseTimes, reqDuration)
+				responseTimesMutex.Unlock()
+			} else {
+				atomic.AddInt64(&errorCount, 1)
+			}
+		}(product)
+	}
+
+	// Ждем завершения всех запросов
+	wg.Wait()
+
+	totalTime := time.Since(startTime)
+	benchmark.TotalRequests = int64(len(testProducts))
+	benchmark.SuccessCount = successCount
+	benchmark.ErrorCount = errorCount
+	benchmark.AvgResponseTime = time.Duration(totalDuration) / time.Duration(len(testProducts))
+
+	// Рассчитываем скорость только на основе успешных запросов
+	if benchmark.SuccessCount > 0 && totalTime.Seconds() > 0 {
+		benchmark.Speed = float64(benchmark.SuccessCount) / totalTime.Seconds()
+		// Пересчитываем среднее время только для успешных запросов
+		benchmark.AvgResponseTime = time.Duration(totalDuration) / time.Duration(benchmark.SuccessCount)
+		
+		// Рассчитываем медиану и перцентили
+		if len(benchmark.ResponseTimes) > 0 {
+			// Сортируем времена ответов
+			sortedTimes := make([]time.Duration, len(benchmark.ResponseTimes))
+			copy(sortedTimes, benchmark.ResponseTimes)
+			sort.Slice(sortedTimes, func(i, j int) bool {
+				return sortedTimes[i] < sortedTimes[j]
+			})
+			
+			// Медиана
+			medianIdx := len(sortedTimes) / 2
+			if len(sortedTimes)%2 == 0 {
+				benchmark.MedianResponseTime = (sortedTimes[medianIdx-1] + sortedTimes[medianIdx]) / 2
+			} else {
+				benchmark.MedianResponseTime = sortedTimes[medianIdx]
+			}
+			
+			// 95-й перцентиль
+			p95Idx := int(float64(len(sortedTimes)) * 0.95)
+			if p95Idx >= len(sortedTimes) {
+				p95Idx = len(sortedTimes) - 1
+			}
+			benchmark.P95ResponseTime = sortedTimes[p95Idx]
+		}
+	} else {
+		// Если нет успешных запросов, скорость = 0
+		benchmark.Speed = 0
+	}
+	
+	// Рассчитываем процент успешных запросов
+	if benchmark.TotalRequests > 0 {
+		benchmark.SuccessRate = float64(benchmark.SuccessCount) / float64(benchmark.TotalRequests) * 100
+	}
+
+	if benchmark.SuccessCount > 0 {
+		benchmark.Status = "✓ OK"
+	} else if benchmark.ErrorCount > 0 {
+		benchmark.Status = "✗ FAILED"
+	} else {
+		benchmark.Status = "⚠ UNKNOWN"
+	}
+
+	return benchmark
+}
+
+func repeat(s string, count int) string {
+	result := ""
+	for i := 0; i < count; i++ {
+		result += s
+	}
+	return result
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+

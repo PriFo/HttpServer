@@ -1,0 +1,90 @@
+Исправь все ошибки компиляции в файле `internal/infrastructure/persistence/client_repository.go`.
+
+## Файл для исправления:
+`internal/infrastructure/persistence/client_repository.go`
+
+## Ошибки компилятора в этом файле:
+
+Ошибка 1:
+  Строка: 43, Колонка: 14
+  Сообщение компилятора: cannot use strconv.Itoa(createdClient.ID) (value of type string) as int value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 2:
+  Строка: 44, Колонка: 21
+  Сообщение компилятора: cannot use createdClient.CreatedAt.Format(time.RFC3339) (value of type string) as time.Time value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 3:
+  Строка: 45, Колонка: 21
+  Сообщение компилятора: cannot use createdClient.UpdatedAt.Format(time.RFC3339) (value of type string) as time.Time value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 4:
+  Строка: 70, Колонка: 32
+  Сообщение компилятора: cannot use client.ID (variable of type int) as string value in argument to strconv.Atoi
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 5:
+  Строка: 246, Колонка: 32
+  Сообщение компилятора: cannot use project.ClientID (variable of type int) as string value in argument to strconv.Atoi
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 6:
+  Строка: 263, Колонка: 15
+  Сообщение компилятора: cannot use strconv.Itoa(createdProject.ID) (value of type string) as int value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 7:
+  Строка: 264, Колонка: 21
+  Сообщение компилятора: cannot use strconv.Itoa(createdProject.ClientID) (value of type string) as int value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 8:
+  Строка: 265, Колонка: 22
+  Сообщение компилятора: cannot use createdProject.CreatedAt.Format(time.RFC3339) (value of type string) as time.Time value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 9:
+  Строка: 266, Колонка: 22
+  Сообщение компилятора: cannot use createdProject.UpdatedAt.Format(time.RFC3339) (value of type string) as time.Time value in assignment
+  Пакет: httpserver/internal/infrastructure/persistence
+
+Ошибка 10:
+  Строка: 287, Колонка: 17
+  Сообщение компилятора: cannot use strconv.Itoa(c.ID) (value of type string) as int value in struct literal
+  Пакет: httpserver/internal/infrastructure/persistence
+
+## Объяснение типов ошибок (тонкости):
+
+
+Ошибка "cannot use" означает несовместимость типов - переменная одного типа используется там, где ожидается другой тип.
+
+Тонкости этой ошибки:
+- Go строго типизированный язык, неявные преобразования типов ограничены
+- Компилятор показывает, какой тип передан и какой ожидается
+- Может потребоваться явное преобразование типа
+- Может быть проблема с интерфейсами - тип не реализует требуемый интерфейс
+- Может быть проблема с указателями - передается значение вместо указателя или наоборот
+- strconv.Itoa преобразует int в string, но результат нельзя присвоить переменной типа int
+- strconv.Atoi принимает string и возвращает (int, error), но нельзя передать int напрямую
+- Format(time.RFC3339) возвращает string, но нельзя присвоить переменной типа time.Time
+- Нужно проверить типы полей структуры и убедиться, что присваиваются правильные типы
+
+## Важные примечания:
+
+- Некоторые зависимые файлы могли создаваться отдельно, т.е. Handler может зависеть от repository, но repository мог не существовать на момент написания handler
+
+- Могут быть простые ошибки в наименовании файлов при импорте
+
+- Но может быть действительно отсутствующий файл - убедись на 150%, что файл действительно отсутствует, прежде чем создавать его
+
+- Проверь все импорты и убедись, что они указывают на существующие файлы с правильными именами
+
+- Проверь после исправления компиляцию файла напрямую и, если есть ошибки - исправь их. Делай циклы "Проверка компиляции - исправление ошибки" пока не будет ошибок. Если после компиляции файла остались ошибки - сообщи об этом.
+
+## Задача:
+
+Проанализируй каждую ошибку компилятора, определи её причину, подумай над решением и исправь все ошибки в файле. 
+
+ВАЖНО: Не исправляй файл построчно - исправь все ошибки в файле за один раз полностью. После исправления проверь компиляцию файла с помощью команды в терминале (PowerShell): `go build ./internal/infrastructure/persistence` или `go build ./internal/infrastructure/persistence/client_repository.go`. Если после исправления остались ошибки - исправь их в цикле до полного устранения всех ошибок компиляции.

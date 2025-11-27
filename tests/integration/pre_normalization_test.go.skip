@@ -1,0 +1,474 @@
+package integration
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"httpserver/database"
+	"httpserver/server"
+)
+
+// TestPreNormalization_DataQualityReport тестирует генерацию отчета о качестве данных
+func TestPreNormalization_DataQualityReport(t *testing.T) {
+	// Создаем тестовые БД
+	serviceDB, err := database.NewServiceDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create service DB: %v", err)
+	}
+	defer serviceDB.Close()
+
+	// Инициализируем схему
+	if err := database.InitServiceSchema(serviceDB.GetDB()); err != nil {
+		t.Fatalf("Failed to init schema: %v", err)
+	}
+
+	// Создаем тестового клиента и проект
+	client, err := serviceDB.CreateClient("Test Client", "Test Legal", "Desc", "test@test.com", "+123", "TAX", "user")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	project, err := serviceDB.CreateClientProject(client.ID, "Test Project", "counterparty", "Desc", "1C", 0.8)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Загружаем golden dataset для создания тестовых данных
+	goldenPath := filepath.Join("tests", "data", "golden_dataset.json")
+	goldenData, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Skipf("Golden dataset not found at %s, skipping test", goldenPath)
+		return
+	}
+
+	var goldenDataset struct {
+		Entries []struct {
+			ID         int    `json:"id"`
+			EntityType string `json:"entity_type"`
+			Name       string `json:"name"`
+			Attributes string `json:"attributes"`
+		} `json:"entries"`
+	}
+
+	if err := json.Unmarshal(goldenData, &goldenDataset); err != nil {
+		t.Fatalf("Failed to parse golden dataset: %v", err)
+	}
+
+	// Создаем тестовую БД с данными из golden dataset
+	testDBPath := filepath.Join(t.TempDir(), "test.db")
+	testDB, err := database.NewDB(testDBPath)
+	if err != nil {
+		t.Fatalf("Failed to create test DB: %v", err)
+	}
+	defer testDB.Close()
+
+	upload, err := testDB.CreateUpload("test-uuid", "8.3", "test-config")
+	if err != nil {
+		t.Fatalf("Failed to create upload: %v", err)
+	}
+
+	// Добавляем контрагентов из golden dataset
+	counterpartyCatalog, err := testDB.AddCatalog(upload.ID, "Контрагенты", "counterparties")
+	if err != nil {
+		t.Fatalf("Failed to create catalog: %v", err)
+	}
+
+	for _, entry := range goldenDataset.Entries {
+		if entry.EntityType == "counterparty" {
+			if err := testDB.AddCatalogItem(
+				counterpartyCatalog.ID,
+				fmt.Sprintf("ref%d", entry.ID),
+				fmt.Sprintf("code%d", entry.ID),
+				entry.Name,
+				entry.Attributes,
+				"",
+			); err != nil {
+				t.Fatalf("Failed to add catalog item: %v", err)
+			}
+		}
+	}
+
+	// Создаем проект БД
+	_, err = serviceDB.CreateProjectDatabase(project.ID, "Test DB", testDBPath, "Test DB Description", 0)
+	if err != nil {
+		t.Fatalf("Failed to create project database: %v", err)
+	}
+
+	// Создаем сервер
+	config := &server.Config{
+		Port:                       "8080",
+		DatabasePath:               testDBPath,
+		NormalizedDatabasePath:     ":memory:",
+		ServiceDatabasePath:        ":memory:",
+		LogBufferSize:              100,
+		NormalizerEventsBufferSize: 100,
+	}
+
+	srv := server.NewServerWithConfig(testDB, testDB, serviceDB, ":memory:", ":memory:", config)
+
+	// Тест 1: POST /api/reports/generate-data-quality-report без project_id
+	t.Run("GenerateDataQualityReport_AllProjects", func(t *testing.T) {
+		reqBody := map[string]interface{}{}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/reports/generate-data-quality-report", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		srv.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+		}
+
+		var report map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		// Проверяем структуру ответа
+		if _, ok := report["counterparty_stats"]; !ok {
+			t.Error("Response should contain 'counterparty_stats' field")
+		}
+
+		if _, ok := report["nomenclature_stats"]; !ok {
+			t.Error("Response should contain 'nomenclature_stats' field")
+		}
+
+		if _, ok := report["overall_score"]; !ok {
+			t.Error("Response should contain 'overall_score' field")
+		}
+
+		// Проверяем статистику контрагентов
+		counterpartyStats, ok := report["counterparty_stats"].(map[string]interface{})
+		if !ok {
+			t.Error("counterparty_stats should be an object")
+		}
+
+		if totalRecords, ok := counterpartyStats["total_records"].(float64); ok {
+			if totalRecords < 1 {
+				t.Errorf("Expected at least 1 counterparty record, got %.0f", totalRecords)
+			}
+		} else {
+			t.Error("counterparty_stats.total_records should be a number")
+		}
+	})
+
+	// Тест 2: POST /api/reports/generate-data-quality-report с project_id
+	t.Run("GenerateDataQualityReport_WithProjectID", func(t *testing.T) {
+		reqBody := map[string]interface{}{
+			"project_id": project.ID,
+		}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/reports/generate-data-quality-report", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		srv.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+		}
+
+		var report map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		// Проверяем, что отчет сгенерирован для конкретного проекта
+		metadata, ok := report["metadata"].(map[string]interface{})
+		if ok {
+			if totalProjects, ok := metadata["total_projects"].(float64); ok {
+				if totalProjects != 1 {
+					t.Errorf("Expected 1 project in metadata, got %.0f", totalProjects)
+				}
+			}
+		}
+	})
+
+	// Тест 3: POST /api/reports/generate-data-quality-report с невалидным project_id
+	t.Run("GenerateDataQualityReport_InvalidProjectID", func(t *testing.T) {
+		reqBody := map[string]interface{}{
+			"project_id": -1,
+		}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/reports/generate-data-quality-report", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		srv.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400 for invalid project_id, got %d. Body: %s", w.Code, w.Body.String())
+		}
+	})
+
+	// Тест 4: Проверка подсчета дубликатов
+	t.Run("GenerateDataQualityReport_DuplicateCount", func(t *testing.T) {
+		reqBody := map[string]interface{}{}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/reports/generate-data-quality-report", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		srv.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+			return
+		}
+
+		var report map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		counterpartyStats, ok := report["counterparty_stats"].(map[string]interface{})
+		if !ok {
+			t.Error("counterparty_stats should be an object")
+			return
+		}
+
+		// Проверяем наличие поля potential_duplicate_rate
+		if _, ok := counterpartyStats["potential_duplicate_rate"]; !ok {
+			t.Error("counterparty_stats should contain 'potential_duplicate_rate' field")
+		}
+
+		// Проверяем наличие top_inconsistencies
+		if _, ok := counterpartyStats["top_inconsistencies"]; !ok {
+			t.Error("counterparty_stats should contain 'top_inconsistencies' field")
+		}
+	})
+}
+
+// TestPreNormalization_QualityStats тестирует GET /api/quality/stats
+func TestPreNormalization_QualityStats(t *testing.T) {
+	// Создаем тестовые БД
+	testDBPath := filepath.Join(t.TempDir(), "test.db")
+	testDB, err := database.NewDB(testDBPath)
+	if err != nil {
+		t.Fatalf("Failed to create test DB: %v", err)
+	}
+	defer testDB.Close()
+
+	serviceDB, err := database.NewServiceDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create service DB: %v", err)
+	}
+	defer serviceDB.Close()
+
+	// Инициализируем схему
+	if err := database.InitServiceSchema(serviceDB.GetDB()); err != nil {
+		t.Fatalf("Failed to init schema: %v", err)
+	}
+
+	// Создаем сервер
+	config := &server.Config{
+		Port:                       "8080",
+		DatabasePath:               testDBPath,
+		NormalizedDatabasePath:     ":memory:",
+		ServiceDatabasePath:        ":memory:",
+		LogBufferSize:              100,
+		NormalizerEventsBufferSize: 100,
+	}
+
+	srv := server.NewServerWithConfig(testDB, testDB, serviceDB, ":memory:", ":memory:", config)
+
+	// Тест: GET /api/quality/stats
+	t.Run("GetQualityStats", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/quality/stats", nil)
+		w := httptest.NewRecorder()
+
+		srv.ServeHTTP(w, req)
+
+		// Может быть 200 или 404/500 в зависимости от наличия данных
+		if w.Code != http.StatusOK && w.Code != http.StatusNotFound && w.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 200, 404, or 500, got %d. Body: %s", w.Code, w.Body.String())
+		}
+
+		// Если статус 200, проверяем структуру ответа
+		if w.Code == http.StatusOK {
+			var stats map[string]interface{}
+			if err := json.Unmarshal(w.Body.Bytes(), &stats); err != nil {
+				t.Fatalf("Failed to parse response: %v", err)
+			}
+
+			// Проверяем наличие основных полей
+			if _, ok := stats["total_records"]; !ok {
+				t.Error("Response should contain 'total_records' field")
+			}
+		}
+	})
+}
+
+// TestPreNormalization_ReportStructure тестирует структуру отчета о качестве данных
+func TestPreNormalization_ReportStructure(t *testing.T) {
+	serviceDB, err := database.NewServiceDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create service DB: %v", err)
+	}
+	defer serviceDB.Close()
+
+	// Инициализируем схему
+	if err := database.InitServiceSchema(serviceDB.GetDB()); err != nil {
+		t.Fatalf("Failed to init schema: %v", err)
+	}
+
+	// Создаем тестового клиента и проект
+	client, err := serviceDB.CreateClient("Test Client", "Test Legal", "Desc", "test@test.com", "+123", "TAX", "user")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	project, err := serviceDB.CreateClientProject(client.ID, "Test Project", "counterparty", "Desc", "1C", 0.8)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Создаем тестовую БД
+	testDBPath := filepath.Join(t.TempDir(), "test.db")
+	testDB, err := database.NewDB(testDBPath)
+	if err != nil {
+		t.Fatalf("Failed to create test DB: %v", err)
+	}
+	defer testDB.Close()
+
+	upload, err := testDB.CreateUpload("test-uuid", "8.3", "test-config")
+	if err != nil {
+		t.Fatalf("Failed to create upload: %v", err)
+	}
+
+	catalog, err := testDB.AddCatalog(upload.ID, "Контрагенты", "counterparties")
+	if err != nil {
+		t.Fatalf("Failed to create catalog: %v", err)
+	}
+
+	// Добавляем тестовые данные с дубликатами
+	testData := []struct {
+		name       string
+		attributes string
+	}{
+		{"ООО Ромашка", `<ИНН>1234567890</ИНН>`},
+		{"Ромашка ООО", `<ИНН>1234567890</ИНН>`},
+		{"ООО Тест", `<ИНН>9876543210</ИНН>`},
+	}
+
+	for i, data := range testData {
+		if err := testDB.AddCatalogItem(
+			catalog.ID,
+			fmt.Sprintf("ref%d", i+1),
+			fmt.Sprintf("code%d", i+1),
+			data.name,
+			data.attributes,
+			"",
+		); err != nil {
+			t.Fatalf("Failed to add catalog item: %v", err)
+		}
+	}
+
+	// Создаем проект БД
+	_, err = serviceDB.CreateProjectDatabase(project.ID, "Test DB", testDBPath, "Test DB Description", 0)
+	if err != nil {
+		t.Fatalf("Failed to create project database: %v", err)
+	}
+
+	// Создаем сервер
+	config := &server.Config{
+		Port:                       "8080",
+		DatabasePath:               testDBPath,
+		NormalizedDatabasePath:     ":memory:",
+		ServiceDatabasePath:        ":memory:",
+		LogBufferSize:              100,
+		NormalizerEventsBufferSize: 100,
+	}
+
+	srv := server.NewServerWithConfig(testDB, testDB, serviceDB, ":memory:", ":memory:", config)
+
+	// Генерируем отчет
+	reqBody := map[string]interface{}{
+		"project_id": project.ID,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/api/reports/generate-data-quality-report", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var report map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	// Проверяем полную структуру отчета
+	requiredFields := []string{
+		"metadata",
+		"overall_score",
+		"counterparty_stats",
+		"nomenclature_stats",
+		"database_breakdown",
+		"recommendations",
+	}
+
+	for _, field := range requiredFields {
+		if _, ok := report[field]; !ok {
+			t.Errorf("Report should contain '%s' field", field)
+		}
+	}
+
+	// Проверяем структуру metadata
+	metadata, ok := report["metadata"].(map[string]interface{})
+	if !ok {
+		t.Error("metadata should be an object")
+	} else {
+		metadataFields := []string{"generated_at", "report_version", "total_databases", "total_projects"}
+		for _, field := range metadataFields {
+			if _, ok := metadata[field]; !ok {
+				t.Errorf("metadata should contain '%s' field", field)
+			}
+		}
+	}
+
+	// Проверяем структуру overall_score
+	overallScore, ok := report["overall_score"].(map[string]interface{})
+	if !ok {
+		t.Error("overall_score should be an object")
+	} else {
+		scoreFields := []string{"score", "completeness", "uniqueness", "consistency", "data_quality"}
+		for _, field := range scoreFields {
+			if _, ok := overallScore[field]; !ok {
+				t.Errorf("overall_score should contain '%s' field", field)
+			}
+		}
+	}
+
+	// Проверяем структуру counterparty_stats
+	counterpartyStats, ok := report["counterparty_stats"].(map[string]interface{})
+	if !ok {
+		t.Error("counterparty_stats should be an object")
+	} else {
+		statsFields := []string{
+			"total_records",
+			"completeness_score",
+			"potential_duplicate_rate",
+			"records_with_name",
+			"records_with_inn",
+			"records_without_name",
+			"records_without_tax_id",
+		}
+		for _, field := range statsFields {
+			if _, ok := counterpartyStats[field]; !ok {
+				t.Errorf("counterparty_stats should contain '%s' field", field)
+			}
+		}
+	}
+}

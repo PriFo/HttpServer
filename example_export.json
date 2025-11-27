@@ -1,0 +1,58 @@
+{
+  "pairs": [
+    {
+      "s1": "ООО Рога и Копыта",
+      "s2": "Рога и Копыта ООО",
+      "similarity": 0.7652450980392156,
+      "is_duplicate": true,
+      "breakdown": {
+        "jaro_winkler": 0.7771241830065359,
+        "lcs": 0.7647058823529411,
+        "phonetic": 0.5833333333333334,
+        "ngram": 0.8125,
+        "jaccard": 1
+      },
+      "confidence": 0.9695098039215688
+    },
+    {
+      "s1": "Кабель ВВГнг 3x2.5",
+      "s2": "Кабель ВВГ 3x2.5",
+      "similarity": 0.8975816993464054,
+      "is_duplicate": true,
+      "breakdown": {
+        "jaro_winkler": 0.9777777777777777,
+        "lcs": 0.8888888888888888,
+        "phonetic": 1,
+        "ngram": 0.8823529411764706,
+        "jaccard": 0.5
+      },
+      "confidence": 0.7048366013071892
+    },
+    {
+      "s1": "ООО Рога и Копыта",
+      "s2": "ООО Другая Компания",
+      "similarity": 0.54515960590264,
+      "is_duplicate": false,
+      "breakdown": {
+        "jaro_winkler": 0.8282448201952846,
+        "lcs": 0.631578947368421,
+        "phonetic": 0.5833333333333334,
+        "ngram": 0.18518518518518517,
+        "jaccard": 0.16666666666666666
+      },
+      "confidence": 0.59031921180528
+    }
+  ],
+  "statistics": {
+    "total_pairs": 3,
+    "duplicate_pairs": 2,
+    "non_duplicate_pairs": 1,
+    "average_similarity": 0.7359954677627537,
+    "min_similarity": 0.54515960590264,
+    "max_similarity": 0.8975816993464054,
+    "median_similarity": 0.7652450980392156
+  },
+  "recommendations": [
+    "Высокий процент дубликатов (66.7%). Рекомендуется проверить качество данных."
+  ]
+}
