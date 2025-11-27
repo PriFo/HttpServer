@@ -64,31 +64,35 @@ class ExplainabilityEngine:
     def explain_instance(
         self,
         item: NomenclatureItem,
-        predicted: NomenclatureType,
+        predicted: str,
         probability: float,
     ) -> str:
+        """Объясняет предсказание для произвольного класса."""
         tokens = self._tokenize(item)
         reasons: list[str] = []
 
         service_hits = self._match(tokens, self.SERVICE_KWS)
         product_hits = self._match(tokens, self.PRODUCT_KWS)
+        
+        predicted_lower = str(predicted).lower()
 
-        if predicted == NomenclatureType.SERVICE and service_hits:
+        # Универсальные маркеры для разных классов
+        if service_hits and ("услуг" in predicted_lower or "service" in predicted_lower):
             reasons.append(
-                f"найдены сервисные маркеры {service_hits} в названии, что усилило вероятность услуги"
+                f"найдены сервисные маркеры {service_hits} в названии, что усилило вероятность '{predicted}'"
             )
-        if predicted == NomenclatureType.PRODUCT and product_hits:
+        if product_hits and ("товар" in predicted_lower or "product" in predicted_lower or "goods" in predicted_lower):
             reasons.append(
-                f"найдены товарные маркеры {product_hits} в названии, что усилило вероятность товара"
+                f"найдены товарные маркеры {product_hits} в названии, что усилило вероятность '{predicted}'"
             )
         if item.okved_code:
-            if item.okved_code.startswith(("45", "46", "47")) and predicted == NomenclatureType.PRODUCT:
-                reasons.append("класс OKВЭД относится к торговле, что тянет классификацию к товару")
-            if item.okved_code.startswith(("62", "63", "69")) and predicted == NomenclatureType.SERVICE:
+            if item.okved_code.startswith(("45", "46", "47")):
+                reasons.append("класс OKВЭД относится к торговле")
+            if item.okved_code.startswith(("62", "63", "69")):
                 reasons.append("класс OKВЭД относится к услугам (IT/профсервисы)")
 
         prob_statement = (
-            f"вероятность класса {predicted.value} = {probability:.2%} согласно нейросети"
+            f"вероятность класса '{predicted}' = {probability:.2%} согласно нейросети"
         )
         reasons.insert(0, prob_statement)
 

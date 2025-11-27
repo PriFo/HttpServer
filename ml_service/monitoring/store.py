@@ -26,6 +26,7 @@ from sqlalchemy import (
     delete,
     select,
     update,
+    text,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
@@ -210,6 +211,40 @@ class MonitoringStore:
             rows = conn.execute(query).mappings().all()
             return [dict(row) for row in rows]
 
+    def worker_usage(self, limit: int = 25) -> list[dict]:
+        query = text(
+            """
+            SELECT prediction_id, request_kind, status, client_ip, user_agent,
+                   created_at, meta, workers_allocated
+            FROM predictions_log
+            ORDER BY prediction_id DESC
+            LIMIT :limit
+            """
+        )
+        with self.engine.begin() as conn:
+            rows = conn.execute(query, {"limit": limit}).mappings().all()
+        usage: list[dict] = []
+        for row in rows:
+            meta = row.get("meta") or {}
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except json.JSONDecodeError:
+                    meta = {}
+            usage.append(
+                {
+                    "id": row["prediction_id"],
+                    "kind": row["request_kind"],
+                    "status": row["status"],
+                    "client_ip": row["client_ip"],
+                    "user_agent": row["user_agent"],
+                    "created_at": row["created_at"],
+                    "meta": meta,
+                    "workers_allocated": row["workers_allocated"],
+                }
+            )
+        return usage
+
     def record_worker_snapshot(
         self,
         *,
@@ -235,7 +270,7 @@ class MonitoringStore:
             conn.execute(insert(self.worker_snapshots), payload)
 
     def prune_worker_snapshots(self, days: int = 7) -> int:
-        threshold = datetime.now(datetime.timezone.utc) - timedelta(days=days)
+        threshold = datetime.utcnow() - timedelta(days=days)
         stmt = delete(self.worker_snapshots).where(
             self.worker_snapshots.c.created_at < threshold
         )

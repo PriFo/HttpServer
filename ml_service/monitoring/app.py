@@ -4,22 +4,39 @@ import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-
+import io
+import secrets
 import json
+
+import httpx
 import pandas as pd
 import plotly.express as px
 from plotly.utils import PlotlyJSONEncoder
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-import secrets
 
 from ..config import settings
 from ..metadata import MetadataStore
+from ..feature_store import FeatureBuilder
+from ..repository import DatasetVersionExists, repository
+from ..schemas import NomenclatureItem
 from .store import MonitoringStore, get_monitoring_store
 security = HTTPBasic()
 def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
@@ -68,7 +85,8 @@ def get_metadata_store() -> MetadataStore:
 
 
 def render_template(name: str, request: Request, **context):
-    ctx = {"request": request, "now": datetime.utcnow(), **context}
+    flash = request.session.pop("flash", None)
+    ctx = {"request": request, "now": datetime.utcnow(), "flash": flash, **context}
     return templates.TemplateResponse(name, ctx)
 
 
@@ -77,12 +95,36 @@ def _safe_figure_dict(fig):
 
 
 @app.get("/", response_class=HTMLResponse)
+async def overview(request: Request, store: MonitoringStore = Depends(get_monitoring_store)):
+    snapshot = store.latest_worker_snapshot()
+    stats = store.request_metrics()
+    chart = store.requests_timeseries()
+    recent_events = store.recent_events(limit=12)
+    recent_requests = repository.recent_responses(limit=8)
+    active_models = repository.list_models(active_only=True, limit=6)
+    dataset_info = repository.latest_dataset_info(model_key="nomenclature_classifier")
+    return render_template(
+        "overview.html",
+        request,
+        snapshot=snapshot,
+        stats=stats,
+        chart=chart,
+        recent_events=recent_events,
+        recent_requests=recent_requests,
+        models=active_models,
+        dataset=dataset_info,
+    )
+
+
+@app.get("/workers", response_class=HTMLResponse)
 async def workers_dashboard(request: Request, store: MonitoringStore = Depends(get_monitoring_store)):
     snapshot = store.latest_worker_snapshot()
     history = store.worker_history()
     chart = store.requests_timeseries()
     recent_errors = store.recent_events(limit=10)
-    errored_requests = store.filter_requests(status="error", limit=10)
+    usage = store.worker_usage(limit=15)
+    queued_requests = store.filter_requests(status="queued", limit=10)
+    running_requests = store.filter_requests(status="running", limit=10)
     metrics = store.request_metrics()
     return render_template(
         "workers.html",
@@ -91,7 +133,9 @@ async def workers_dashboard(request: Request, store: MonitoringStore = Depends(g
         history=history,
         chart=chart,
         recent_events=recent_errors,
-        errored_requests=errored_requests,
+        usage=usage,
+        queued_requests=queued_requests,
+        running_requests=running_requests,
         metrics=metrics,
     )
 
@@ -164,12 +208,26 @@ async def models_dashboard(
         fig_data = _safe_figure_dict(fig)
     else:
         fig_data = _safe_figure_dict(px.line(title="No models yet"))
+    active_models = repository.list_models(active_only=True, limit=10)
+    model_history = repository.list_models(
+        model_key="nomenclature_classifier", limit=25
+    )
+    recent_responses = repository.recent_responses(
+        limit=12, model_key="nomenclature_classifier"
+    )
+    dataset_info = repository.latest_dataset_info(model_key="nomenclature_classifier")
+    feature_list = FeatureBuilder.describe_features()
     return render_template(
         "models.html",
         request,
         envelope=envelope,
         history=history,
         chart=fig_data,
+        active_models=active_models,
+        model_history=model_history,
+        recent_responses=recent_responses,
+        dataset=dataset_info,
+        features=feature_list,
     )
 
 
@@ -254,4 +312,113 @@ async def workers_ws(websocket: WebSocket, store: MonitoringStore = Depends(get_
             await asyncio.sleep(10)
     except WebSocketDisconnect:
         return
+
+
+@app.post("/datasets/upload")
+async def upload_dataset(
+    request: Request,
+    model_key: str = Form("nomenclature_classifier"),
+    task_type: str = Form("classification"),
+    version_label: str = Form(...),
+    dataset_name: str = Form("Интерактивная загрузка"),
+    rewrite_dataset: bool = Form(False),
+    trigger_training: bool = Form(False),
+    target_field: str = Form("label"),
+    feature_fields: str = Form(""),
+    file: UploadFile = File(...),
+):
+    raw = await file.read()
+    filename = file.filename or ""
+    is_json = filename.lower().endswith(".json")
+    
+    items: list[NomenclatureItem] = []
+    metadata = {}
+    
+    try:
+        if is_json:
+            payload = json.loads(raw.decode("utf-8"))
+            if isinstance(payload, dict) and "data" in payload:
+                metadata = {
+                    "version": payload.get("version"),
+                    "description": payload.get("description"),
+                    "created_date": payload.get("created_date"),
+                    "statistics": payload.get("statistics", {}),
+                }
+                records = payload["data"]
+            elif isinstance(payload, list):
+                records = payload
+            else:
+                raise ValueError("JSON должен содержать массив объектов или объект с полем 'data'")
+        else:
+            frame = pd.read_csv(io.BytesIO(raw))
+            records = frame.to_dict("records")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Неверный формат JSON: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Не удалось прочитать файл: {exc}") from exc
+    
+    for row in records:
+        try:
+            items.append(NomenclatureItem(**row))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=f"Ошибка в данных: {exc}") from exc
+    
+    if not items:
+        raise HTTPException(status_code=400, detail="Файл пуст или не содержит валидных строк.")
+    
+    try:
+        dataset_record = repository.persist_dataset(
+            model_key=model_key,
+            task_type=task_type,
+            version_label=version_label,
+            dataset_name=dataset_name,
+            items=items,
+            rewrite=rewrite_dataset,
+            source="dashboard",
+        )
+    except DatasetVersionExists:
+        raise HTTPException(
+            status_code=409,
+            detail="Версия датасета уже существует. Укажите rewrite_dataset для перезаписи.",
+        )
+
+    stats_info = ""
+    if metadata.get("statistics") and "total_items" in metadata["statistics"]:
+        stats_info = f" (всего записей: {metadata['statistics']['total_items']})"
+    
+    message = f"Датасет {version_label} сохранён ({dataset_record.row_count} записей{stats_info})."
+    if trigger_training:
+        train_payload = {
+            "model_key": model_key,
+            "task_type": task_type,
+            "dataset_name": dataset_name,
+            "version": version_label,
+            "rewrite_dataset": True,
+            "target_field": target_field,
+            "data": [item.dict() for item in items],
+        }
+        if feature_fields.strip():
+            train_payload["feature_fields"] = [f.strip() for f in feature_fields.split(",") if f.strip()]
+        try:
+            async with httpx.AsyncClient(
+                base_url=f"http://localhost:{settings.api_port}", timeout=120
+            ) as client:
+                response = await client.post("/train", json=jsonable_encoder(train_payload))
+                response.raise_for_status()
+            message += " Обучение запущено."
+        except httpx.HTTPError as exc:
+            message += f" Не удалось запустить обучение: {exc}"
+    request.session["flash"] = message
+    return RedirectResponse("/models", status_code=303)
+
+
+@app.post("/models/activate")
+async def activate_model_ui(
+    request: Request,
+    version: str = Form(...),
+    model_key: str = Form("nomenclature_classifier"),
+):
+    repository.activate_model(version=version, model_key=model_key)
+    request.session["flash"] = f"Модель {version} активирована."
+    return RedirectResponse("/models", status_code=303)
 

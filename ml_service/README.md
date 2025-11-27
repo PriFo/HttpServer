@@ -1,6 +1,6 @@
 # Номенклатурный ML-сервис
 
-Независимый Python-сервис, который обучает и обслуживает нейросеть (scikit-learn `MLPClassifier`) для классификации номенклатуры на «товар» / «услугу». Сервис включает контроль качества входных данных, feature store, мониторинг дрейфа, Explainable AI и управление метаданными модели.
+Независимый Python-сервис, который обучает и обслуживает нейросеть (scikit-learn `MLPClassifier`) для классификации номенклатуры. Система поддерживает произвольные классы классификации (например, «Товар», «Услуга», «Тара», «Набор», «Работа» и т.д.), а также гибкую конфигурацию полей для обучения. Сервис включает контроль качества входных данных, feature store, мониторинг дрейфа, Explainable AI и управление метаданными модели.
 
 ## Основные возможности
 
@@ -73,6 +73,8 @@ POST /train
 {
   "version": "v1.0.0",
   "refresh_baseline": true,
+  "target_field": "label",
+  "feature_fields": ["name", "full_name", "kind", "unit", "okved_code", "hs_code"],
   "data": [
     {
       "name": "Поставка серверов",
@@ -82,11 +84,30 @@ POST /train
       "type_hint": "товар",
       "okved_code": "46.51",
       "hs_code": "8471",
-      "label": "product"
+      "label": "Товар"
+    },
+    {
+      "name": "Услуги консультации",
+      "full_name": "Консультационные услуги по внедрению",
+      "kind": "услуга",
+      "unit": "час",
+      "label": "Услуга"
+    },
+    {
+      "name": "Тара картонная",
+      "full_name": "Картонная тара для упаковки",
+      "kind": "упаковка",
+      "unit": "шт",
+      "label": "Тара"
     }
   ]
 }
 ```
+
+**Параметры обучения:**
+- `target_field` (опционально, по умолчанию `"label"`) — поле в `NomenclatureItem`, которое используется как целевая переменная для обучения. Может быть любым строковым полем (например, `label`, `type_hint`, `kind`).
+- `feature_fields` (опционально) — список полей, используемых как признаки для обучения. Если не указан, используются все доступные поля кроме `target_field`. Пример: `["name", "full_name", "kind", "unit", "okved_code", "hs_code"]`.
+- `label` в данных может содержать произвольные строковые значения (например, `"Товар"`, `"Услуга"`, `"Тара"`, `"Набор"`, `"Работа"` и т.д.), а не только `"product"` и `"service"`.
 
 Если поле `data` опущено (или пустое), сервис использует `ml_service/datasets/train_dataset.csv` как основной набор для переобучения. Перед первым запуском убедитесь, что файл существует; иначе `/train` вернёт:
 
@@ -181,7 +202,7 @@ python -m ml_service.data.dataset_builder ^
 
 - распознаёт кодировку и разделитель каждого файла;
 - приводит данные к схеме `NomenclatureItem`, чистит пробелы и заполняет обязательные поля;
-- нормализует метки (`товар/услуга` → `product/service`) и удаляет дубликаты;
+- нормализует метки (поддерживает произвольные классы: `Товар`, `Услуга`, `Тара`, `Набор`, `Работа` и т.д.) и удаляет дубликаты;
 - сохраняет parquet/CSV и печатает JSON-сводку, где видно, сколько строк попало из каждого файла и какие выгрузки пришлось пропустить.
 
 Полученный parquet-файл автоматически подхватывается `ReferenceDatasetManager` (см. `settings.reference_dataset_path`) и подходит для офлайн-обучения/валидации.
@@ -226,4 +247,214 @@ python -m ml_service.scripts.model_cli predict --json payload.json --base-url ht
 - Подключить централизованное хранилище (PostgreSQL/ClickHouse) вместо файловых артефактов.
 - Завести пайплайн CI/CD для автоматического прогона `/quality` + `/train` в sandbox.
 - Интегрировать сервис в существующий Go-бэкенд по HTTP/gRPC.
+
+---
+
+# Расширенная документация
+
+## 1. REST API `ml_service.service:app`
+
+- **Базовый URL:** `http://localhost:8085`
+- **Формат:** JSON (`Content-Type: application/json`)
+- **Аутентификация:** по умолчанию не требуется, но может быть добавлен API Key (`X-API-Key`), OAuth2 или mTLS — сервис воспринимает любые стандартные FastAPI зависимости, если их подключить в `build_app()`.
+- **Заголовки, которые поддерживаются:**
+  - `X-Request-ID` — пользовательский идентификатор запроса. Если передан, попадёт в `MonitoringStore`.
+  - `X-User-IP` — если стоит прокси, можно принудительно указать IP клиента для логирования.
+  - `X-Model-Key` — альтернативный способ указать ключ модели вместо поля `model_key` в теле (приоритет у поля).
+
+### 1.1 `POST /train`
+- **Назначение:** обучает модель на смеси эталонного и переданного датасета.
+- **Тело:**
+  - `version` (опц.) — желаемая версия датасета/модели.
+  - `dataset_name` (опц.) — человекочитаемое название датасета.
+  - `model_key` (опц., дефолт `nomenclature_classifier`) — имя модели; влияет на связку с БД.
+  - `task_type` (опц., дефолт `classification`) — тип задачи. Любое иное значение пока отклоняется (HTTP 400).
+  - `rewrite_dataset` (bool, дефолт false) — перезаписывать ли существующую версию датасета.
+  - `refresh_baseline` (bool) — обновить baseline для дрейфа.
+  - `target_field` (опц., дефолт `"label"`) — поле в `NomenclatureItem`, которое используется как целевая переменная для обучения. Может быть любым строковым полем (например, `label`, `type_hint`, `kind`).
+  - `feature_fields` (опц.) — список полей, используемых как признаки для обучения. Если не указан, используются все доступные поля кроме `target_field`. Пример: `["name", "full_name", "kind", "unit", "okved_code", "hs_code"]`.
+  - `items`/`data` — массив `NomenclatureItem`. Поле `label` (или указанное в `target_field`) может содержать произвольные строковые значения (например, `"Товар"`, `"Услуга"`, `"Тара"`, `"Набор"`, `"Работа"` и т.д.), а не только `"product"` и `"service"`.
+- **Поведение:** 
+  - Если `rewrite_dataset=false` и версия уже есть, вернётся 409.
+  - Если метрики `accuracy >= 0.9` и `avg_confidence >= 0.75`, версия автоматически активируется и попадает в `models` + `metadata.json`.
+
+### 1.2 `POST /predict`
+- **Назначение:** инференс классификатора.
+- **Тело:**
+  - `items`: `List[NomenclatureItem]`.
+  - `top_k` (1–2) — количество альтернатив.
+  - `explain` (bool) — добавить объяснение.
+  - `model_key` — ключ модели. Сейчас поддержан только `nomenclature_classifier`, иначе 400.
+- **Ответ:** `PredictResponse` с результатами, версией модели и списком неожиданных записей.
+- **Поведение:** 
+  - Очередь с приоритетом (`PriorityScheduler`): чем больше информации в записи, тем быстрее попадёт на исполнение.
+  - Таймаут берётся из `ML_PREDICT_TIMEOUT_SECONDS` (по умолчанию 120 секунд). При превышении возвращается 504.
+
+### 1.3 `POST /quality`
+- **Назначение:** лёгкий скрининг данных.
+- **Тело:** `TrainRequest` (можно передавать только `items` или `data`).
+- **Ответ:** `QualityReport` с флагами, сэмплами, списком дублей.
+- **Особенности:** 
+  - Дубликаты определяются по всему JSON (включая вложенные поля). 
+  - Даже при ошибке запрос логируется (RequestTracker + `predictions_log`).
+
+### 1.4 `POST /drift/check`
+- **Назначение:** отчёт о дрейфе относительно baseline.
+- **Тело:** `TrainRequest` (используются данные в `items`/`data`).
+- **Ответ:** `DriftReport` с PSI, признаком `triggered`, версией baseline.
+- **Ограничения:** если baseline отсутствует, 412 Precondition Failed.
+
+### 1.5 `POST /drift/baseline`
+- **Назначение:** принудительное обновление baseline.
+- **Тело:** `TrainRequest` — данные, которые станут новым baseline. 
+- **Ответ:** версия baseline и количество строк.
+
+### 1.6 `GET /metadata`
+- **Назначение:** JSON-история версий модели.
+- **Ответ:** `MetadataEnvelope { current, history[] }`.
+- **Использование:** UI на странице «Модели» строит график по этим данным.
+
+### 1.7 `GET /features`
+- **Назначение:** список версий фич в `feature_store`.
+- **Ответ:** массив словарей `FeatureSetMeta`.
+
+### 1.8 `POST /normalize`
+- **Назначение:** предобработка текстов (нормализация, транслитерация, извлечение дат/чисел).
+- **Тело:** `NormalizationRequest { items, transliterate_to, locale }`.
+- **Ответ:** `NormalizationResponse` со списком нормализованных полей, комментариями, извлечёнными сущностями.
+- **Параметры:**
+  - `transliterate_to`: `latin`, `ascii`, `cyrillic` (любое другое значение → исходная строка без изменений).
+  - `locale`: резерв, можно расширять для специфичных правил (например, `en`, `ru`).
+
+### 1.9 Модельные утилиты (REST)
+- `GET /models/{model_key}/history` — список версий модели из SQLite (`models`).
+- `GET /models/{model_key}/responses` — последние записи из `predictions_log`.
+- `GET /models/{model_key}/dataset/latest` — последняя информация о датасете.
+- `GET /models/{model_key}/features/active` — документированный список фич (использует `FeatureBuilder.describe_features()`).
+- `POST /models/{model_key}/activate` — ручная активация версии (тело `ModelActivationRequest { version, model_key? }`).
+
+### 1.10 Загрузка датасетов через UI (`POST /datasets/upload`)
+- **Назначение:** загрузка датасета через веб-интерфейс мониторинга (порт 6565).
+- **Формат:** `multipart/form-data`.
+- **Параметры:**
+  - `file` (обязательный) — файл CSV или JSON.
+  - `version_label` (обязательный) — версия датасета (например, `ds_2024_11_27`).
+  - `dataset_name` (опционально, дефолт "Интерактивная загрузка") — человекочитаемое имя.
+  - `model_key` (опционально, дефолт `nomenclature_classifier`) — ключ модели.
+  - `task_type` (опционально, дефолт `classification`) — тип задачи.
+  - `rewrite_dataset` (bool, дефолт false) — перезаписать существующую версию.
+  - `trigger_training` (bool, дефолт false) — сразу запустить обучение после загрузки.
+- **Поддерживаемые форматы:**
+  - **CSV:** стандартный формат с заголовками (`name`, `full_name`, `unit`, `kind`, `label`, `type_hint`, `okved_code`, `hs_code`).
+  - **JSON:** два варианта:
+    1. Массив объектов: `[{ "name": "...", "full_name": "...", ... }, ...]`
+    2. Объект с полем `data`: `{ "version": "...", "description": "...", "data": [{...}], "statistics": {...} }`
+- **Метаданные JSON (опционально):**
+  - `version` — автоматически заполняет поле `version_label` в форме.
+  - `description` — автоматически заполняет поле `dataset_name`.
+  - `created_date` — информационное поле (не используется для обучения).
+  - `statistics` — объект со статистикой:
+    - `total_items` — общее количество записей (отображается в UI, не используется для обучения).
+    - `distribution` — распределение по категориям (например, `{"Товар": 3710, "Услуга": 3080}`).
+- **Поведение:**
+  - При загрузке JSON UI автоматически читает файл и заполняет поля формы (версия, имя).
+  - Статистика из JSON отображается в отдельном блоке на странице загрузки.
+  - Если `trigger_training=true`, после сохранения датасета автоматически вызывается `/train` с переданными данными.
+  - При успешной загрузке происходит редирект на `/models` с flash-сообщением.
+
+### 1.11 Внутренние заголовки (опции)
+- `Accept-Language` — влияет только на будущие расширения UI/ответов (пока игнорируется).
+- `X-Monitoring-Bypass` — можно использовать для отключения логирования (не реализовано по умолчанию, но легко добавить проверку в `RequestTracker`).
+
+## 2. Структура сервиса (файл за файлом)
+
+| Файл | Назначение / ключевые сущности |
+|------|--------------------------------|
+| `ml_service/__init__.py` | Помечает каталог как пакет, размещает метаданные (версия сервиса). |
+| `ml_service/service.py` | Основное FastAPI-приложение. Функции: `build_app()`, обработчики `/health`, `/train`, `/predict`, `/quality`, `/drift/*`, `/normalize`, `/models/*`. Классы: `RequestTracker` — логирование и связь с MonitoringStore + `predictions_log`. Утилиты `compute_information_score`, `trim_payload`, `summarize_payload`, `build_audit_meta`. |
+| `ml_service/config.py` | Pydantic Settings: пути к артефактам, лимиты, число воркеров, креды мониторинга. Поля доступны через `ML_` env vars. |
+| `ml_service/schemas.py` | Все Pydantic-модели API: `NomenclatureItem`, `TrainRequest`, `PredictRequest`, `PredictResponse`, `QualityReport`, `MetadataRecord`, `NormalizationRequest/Response`. Содержит валидаторы, перечисление `NomenclatureType`. |
+| `ml_service/model.py` | Класс `NomenclatureClassifier`: подготовка DataFrame, сбор pipeline (TF-IDF + OneHot + MLPClassifier), методы `train`, `predict`, `_persist_pipeline`, `load_latest`. Использует `ExplainabilityEngine`. |
+| `ml_service/feature_store.py` | Класс `FeatureStore` для версионирования parquet-фич + `FeatureBuilder` (создаёт производные признаки), датакласс `FeatureSetMeta`. Метод `describe_features()` возвращает человекочитаемые описания для UI. |
+| `ml_service/data_quality.py` | Класс `DataQualityGuard`: проверка обязательных полей, дублей (по JSON), длины, валидности кодов. Возвращает `QualityReport`. |
+| `ml_service/dataset_manager.py` | `ReferenceDatasetManager`: хранение эталонного датасета (Parquet), смешивание клиентских данных, оверсемплинг эталона, формирование отчёта `MixingReport`. |
+| `ml_service/drift_monitor.py` | `DriftMonitor`: управление baseline, расчёт PSI и Jensen–Shannon, формирование `DriftReport`. |
+| `ml_service/metadata.py` | `MetadataStore`: JSON-хранилище истории метрик (`metadata.json`). Методы `_load`, `_save`, `add_record`, `get_envelope`. |
+| `ml_service/repository.py` | `MlRepository`: обёртка над SQLite (`ml_store.db`). Методы: `persist_dataset`, `save_model_version`, `activate_model`, `log_request_start`, `finalize_request_log`, `latest_dataset_info`, `list_models`, `recent_responses`, `worker_usage`. Обрабатывает поля `model_key`, `task_type`, снапшоты, расширяет таблицы при необходимости (ALTER TABLE). |
+| `ml_service/priority_scheduler.py` | Очередь задач с приоритетом. Класс `PriorityScheduler`: фоновые треды, приоритеты по величине информации. |
+| `ml_service/monitoring/app.py` | Второе FastAPI-приложение (UI). Роуты: `/` (главная), `/workers`, `/db`, `/requests`, `/models`, `/datasets/upload` (поддерживает CSV и JSON с автозаполнением), `/models/activate`, REST `/monitoring/*`. Использует Jinja2 (`templates/`) и Plotly, валидацию загрузок, вызов `/train` через httpx. |
+| `ml_service/monitoring/store.py` | `MonitoringStore`: связь с SQLite (таблицы `monitoring_requests`, `worker_snapshots`, `system_events`, `admin_logs`). Методы `start_request`, `update_request`, `record_event`, `worker_usage`, `db_summary`, `fetch_table_preview`, `initialize_database`, `export_statistics`. |
+| `ml_service/templates/*.html` | UI слои (Jinja + PicoCSS + Plotly). `base.html` — макет, `overview.html`, `workers.html`, `requests.html`, `models.html`, `database.html`. |
+| `ml_service/text_processing.py` | `TextNormalizer`: нормализация строк, извлечение дат, чисел, транслитерация (через `unidecode`). API `/normalize` возвращает `NormalizationResponse`. |
+| `ml_service/regional_validation.py` | `RegionalValidator`: проверяет ISO-коды, кодировки и региональные ограничения. |
+| `ml_service/feature_store.py` | см. выше; предоставляет `FeatureStore` и описания фич. |
+| `ml_service/explainability.py` | `ExplainabilityEngine`: permutation importance + локальные объяснения (лексические маркеры, ОКВЭД). Методы `update_global_importance`, `explain_instance`. |
+| `ml_service/data` / `datasets/` | Примеры данных (CSV, parquet). Служебные скрипты расположены в `ml_service/scripts`. |
+| `ml_service/sql/sqlite_schema.sql` | Актуальная схема SQLite: таблицы датасетов, версий, пользовательских правок, моделей, запросов, метаданных мониторинга. Используется при инициализации/пересоздании `ml_store.db`. |
+| `ml_service/README.md` | Текущий документ. |
+
+> Примечание: файлы `tools/*.go` и прочие утилиты находятся за пределами папки `ml_service`; их работа описана в соответствующих README или комментариях в исходниках.
+
+## 3. Frontend / мониторинг
+
+- **Приложение:** `ml_service.monitoring.app` (порт 6565 по умолчанию).
+- **Стек:** FastAPI + Jinja2 + PicoCSS + Plotly + WebSocket.
+- **Навигация:** Главная → Воркеры → База данных → Запросы → Модели.
+
+### 3.1 Главная (`overview.html`)
+- Виджет активных моделей (карточки с точностью/F1/уверенностью).
+- Статистика запросов за 24 часа (выполнено, ошибок, в очереди, в работе).
+- Состояние актуального датасета (версия, строки, последнее использование).
+- Лента событий и последние запросы (ID, тип, статус, IP, воркеры).
+- Plotly-график активности (`requests_timeseries`), данные передаются через `<script type="application/json">`.
+
+### 3.2 Воркеры (`workers.html`)
+- Плитки с метриками (активные, очередь, завершено, ошибки, загрузка CPU/RAM).
+- «Использование воркеров» — таблица последних записей из `predictions_log`.
+- Блоки с очередью (`status=queued`) и текущими запросами (`status=running`), обновляются через MonitoringStore.
+- История событий + график динамики запросов.
+
+### 3.3 База данных (`database.html`)
+- Карточки всех таблиц `ml_store.db`, отображает число столбцов и записей.
+- Выбор таблицы → предпросмотр через «псевдотаблицу» (flex/grid, не `<table>`), чтобы соответствовать требованию «визуальные таблицы без `<table>`».
+- Ошибки SQLite выводятся в алерте.
+
+### 3.4 Запросы (`requests.html`)
+- Фильтр по статусу/типу.
+- Метрики окна (всего, выполнено, ошибок, в работе/очереди, запросы с дообучением).
+- Plotly-график (bar). Данные прокидываются в JSON-скрипт.
+- Список запросов (ID, тип, статус, приоритет, прогресс, старт, ошибка).
+
+### 3.5 Модели (`models.html`)
+- Текущая версия (плитки по метрикам).
+- График истории метрик (Plotly line).
+- Активные версии + форма ручной активации (POST `/models/activate`).
+- История версий в формате «псевдотаблицы».
+- Форма загрузки датасета (эндпойнт `/datasets/upload`): 
+  - **Поддерживает CSV и JSON** (`.csv`, `.json`).
+  - **JSON-формат:** может быть массивом объектов `[{...}]` или объектом с полем `data: [{...}]` и опциональными метаданными:
+    - `version` — версия датасета (автозаполняет поле "Версия").
+    - `description` — описание (автозаполняет "Имя датасета").
+    - `created_date` — дата создания (информационное).
+    - `statistics` — объект со статистикой (не используется для обучения, но отображается в UI):
+      - `total_items` — общее количество записей.
+      - `distribution` — распределение по категориям (например, `{"Товар": 3710, "Услуга": 3080}`).
+  - При выборе JSON-файла JavaScript автоматически читает его и заполняет поля формы (версия, имя), а также отображает статистику в отдельном блоке.
+  - Связывает датасет с моделью/версией, опционально запускает `/train`.
+- Отчёты по запросам (журнал последних `predictions_log`).
+- Список фич из `FeatureBuilder.describe_features()` с описанием.
+
+### 3.6 Шаблоны и стили
+- `base.html` подключает PicoCSS, определяет палитры светлой/тёмной темы, кастомные компоненты (псевдотаблицы, карточки, flash-сообщения).
+- Все страницы наследуют `base.html`, вставляют контент в `{% block content %}`.
+- Plotly и данные графиков передаются через JSON в `<script type="application/json">`, что делает HTML пригодным для линтеров.
+
+### 3.7 Мониторинг API
+- `/monitoring/workers/stats`, `/monitoring/db/status`, `/monitoring/requests/active` — REST-энндпоинты для внешнего доступа к статистике.
+- `/ws/workers` — WebSocket, каждые ~15 сек отправляет снапшоты.
+- Административные действия (`/monitoring/actions/*`) защищены Basic Auth (`ML_MONITOR_ADMIN_*`).
+
+---
+
+Документ теперь содержит полный справочник по API, структуре модулей и фронтенду. При изменении кода рекомендуется обновлять этот раздел, чтобы поддерживать соответствие документации фактическому поведению.*** End Patch
 

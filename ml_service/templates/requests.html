@@ -21,7 +21,7 @@
     </div>
     <div class="metrics-grid">
         <article>
-            <p>Всего ({{ metrics.window_hours }}h)</p>
+            <p>Всего ({{ metrics.window_hours }} ч)</p>
             <h3>{{ metrics.total }}</h3>
         </article>
         <article>
@@ -33,7 +33,7 @@
             <h3>{{ metrics.errored }}</h3>
         </article>
         <article>
-            <p>Running / Queued</p>
+            <p>В работе / В очереди</p>
             <h3>{{ metrics.running }}/{{ metrics.queued }}</h3>
         </article>
         <article>
@@ -42,48 +42,41 @@
         </article>
     </div>
     <div id="requests-chart" style="height: 360px;"></div>
+    <script type="application/json" id="requests-chart-data">{{ chart|tojson }}</script>
     <script>
-        const reqChart = {{ chart|tojson }};
+        const reqChartNode = document.getElementById('requests-chart-data');
+        const reqChart = reqChartNode ? JSON.parse(reqChartNode.textContent) : null;
         if (reqChart && reqChart.data) {
             Plotly.newPlot('requests-chart', reqChart.data, reqChart.layout, {responsive: true});
         }
     </script>
-    <div class="pane">
-        <div class="data-table">
-            <table>
-                <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Тип</th>
-                    <th>Статус</th>
-                    <th>Приоритет</th>
-                    <th>Прогресс</th>
-                    <th>Начало</th>
-                    <th>Ошибка</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for item in items %}
-                    <tr>
-                        <td>{{ item.id }}</td>
-                        <td>{{ item.kind }}</td>
-                        <td>
-                            <span class="status-pill {% if item.status == 'completed' %}success{% elif item.status == 'error' %}error{% else %}running{% endif %}">
-                                {{ item.status }}
-                            </span>
-                        </td>
-                        <td>{{ '%.2f'|format(item.priority) }}</td>
-                        <td>{{ item.progress }}%</td>
-                        <td>{{ item.started_at }}</td>
-                        <td>{{ item.error or "—" }}</td>
-                    </tr>
-                {% else %}
-                    <tr><td colspan="7">Запросов нет.</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    {% if items %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>Статус</div>
+            <div>Приоритет</div>
+            <div>Прогресс</div>
+            <div>Начало</div>
+            <div>Ошибка</div>
         </div>
+        {% for item in items %}
+        {% set status_class = 'success' if item.status in ['completed','success'] else 'error' if item.status == 'error' else 'running' %}
+        <div class="pseudo-row">
+            <div>{{ item.id }}</div>
+            <div>{{ item.kind }}</div>
+            <div><span class="status-pill {{ status_class }}">{{ item.status }}</span></div>
+            <div>{{ '%.2f'|format(item.priority) }}</div>
+            <div>{{ item.progress }}%</div>
+            <div>{{ item.started_at }}</div>
+            <div>{{ item.error or "—" }}</div>
+        </div>
+        {% endfor %}
     </div>
+    {% else %}
+    <p>Запросов нет.</p>
+    {% endif %}
 </div>
 {% endblock %}
 

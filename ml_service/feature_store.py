@@ -31,12 +31,33 @@ class FeatureSetMeta:
 class FeatureBuilder:
     """Utility that converts normalized nomenclature rows into ML-ready features."""
 
+    FEATURE_DESCRIPTIONS = {
+        "text_joined": "Объединённая строка из name и full_name в нижнем регистре.",
+        "token_count": "Количество токенов в text_joined.",
+        "name_len": "Длина поля name.",
+        "full_name_len": "Длина поля full_name.",
+        "contains_service_kw": "Флаг наличия сервисных ключевых слов.",
+        "contains_goods_kw": "Флаг наличия товарных ключевых слов.",
+        "kind": "Категория номенклатуры (one-hot).",
+        "unit": "Единица измерения (one-hot).",
+        "type_hint": "Подсказка типа (one-hot).",
+        "okved_code": "Код ОКВЭД, нормализованный до строки.",
+        "hs_code": "Код ТН ВЭД, нормализованный до строки.",
+    }
+
     @staticmethod
     def _base_frame(items: Iterable[NomenclatureItem]) -> pd.DataFrame:
         payload = []
         for item in items:
             payload.append(item.dict())
         return pd.DataFrame(payload)
+
+    @classmethod
+    def describe_features(cls) -> list[dict]:
+        return [
+            {"name": name, "description": description}
+            for name, description in cls.FEATURE_DESCRIPTIONS.items()
+        ]
 
     def build(self, items: Iterable[NomenclatureItem]) -> pd.DataFrame:
         df = self._base_frame(items)

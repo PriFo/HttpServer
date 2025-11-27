@@ -8,7 +8,7 @@
     <div class="grid">
         <article>
             <h4>Размер</h4>
-            <p>{{ summary.size_mb }} MB</p>
+            <p>{{ summary.size_mb }} МБ</p>
         </article>
         <article>
             <h4>Последнее обновление</h4>
@@ -41,25 +41,19 @@
             {% if table_preview.error %}
                 <div class="alert">{{ table_preview.error }}</div>
             {% elif table_preview.rows %}
-                <div class="data-table">
-                    <table>
-                        <thead>
-                        <tr>
-                            {% for column in table_preview.columns %}
-                                <th>{{ column }}</th>
-                            {% endfor %}
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {% for row in table_preview.rows %}
-                            <tr>
-                                {% for column in table_preview.columns %}
-                                    <td>{{ row[column] }}</td>
-                                {% endfor %}
-                            </tr>
+                <div class="pseudo-table">
+                    <div class="pseudo-row pseudo-head">
+                        {% for column in table_preview.columns %}
+                        <div>{{ column }}</div>
                         {% endfor %}
-                        </tbody>
-                    </table>
+                    </div>
+                    {% for row in table_preview.rows %}
+                    <div class="pseudo-row">
+                        {% for column in table_preview.columns %}
+                        <div>{{ row[column] }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
                 </div>
             {% else %}
                 <p>В таблице нет данных.</p>

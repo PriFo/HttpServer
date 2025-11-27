@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict, validator
 
 
 class NomenclatureType(str, Enum):
+    """Устаревшее перечисление для обратной совместимости. Используйте строковые значения в label."""
     PRODUCT = "product"
     SERVICE = "service"
 
@@ -46,19 +47,22 @@ class NomenclatureItem(BaseModel):
         default=None,
         description="Original character encoding reported by upstream system.",
     )
-    label: Optional[NomenclatureType] = Field(
-        default=None, description="Ground-truth class for supervised tasks."
+    label: Optional[str] = Field(
+        default=None, description="Ground-truth class for supervised tasks. Может быть любым строковым значением (Товар, Услуга, Тара, Набор, Работа и т.д.)."
     )
 
-    LABEL_ALIASES: ClassVar[dict[str, NomenclatureType]] = {
-        "товар": NomenclatureType.PRODUCT,
-        "товары": NomenclatureType.PRODUCT,
-        "product": NomenclatureType.PRODUCT,
-        "goods": NomenclatureType.PRODUCT,
-        "услуга": NomenclatureType.SERVICE,
-        "услуги": NomenclatureType.SERVICE,
-        "service": NomenclatureType.SERVICE,
-        "services": NomenclatureType.SERVICE,
+    LABEL_ALIASES: ClassVar[dict[str, str]] = {
+        "товар": "Товар",
+        "товары": "Товар",
+        "product": "Товар",
+        "goods": "Товар",
+        "услуга": "Услуга",
+        "услуги": "Услуга",
+        "service": "Услуга",
+        "services": "Услуга",
+        "тара": "Тара",
+        "набор": "Набор",
+        "работа": "Работа",
     }
 
     @validator("name", "full_name", "kind", "unit", "type_hint", "okved_code", "hs_code")
@@ -82,12 +86,17 @@ class NomenclatureItem(BaseModel):
 
     @validator("label", pre=True)
     def _normalize_label(cls, value):
-        if value is None or isinstance(value, NomenclatureType):
+        if value is None:
             return value
+        if isinstance(value, NomenclatureType):
+            return value.value
         if isinstance(value, str):
             normalized = value.strip().lower().replace("ё", "е")
-            return cls.LABEL_ALIASES.get(normalized, value)
-        return value
+            mapped = cls.LABEL_ALIASES.get(normalized)
+            if mapped:
+                return mapped
+            return value.strip()
+        return str(value).strip() if value else None
 
 
 class NomenclatureBatch(BaseModel):
@@ -108,11 +117,35 @@ class TrainRequest(NomenclatureBatch):
     )
     version: Optional[str] = Field(
         default=None,
-        description="Optional semantic version for the resulting model/feature set.",
+        description="Версия датасета (и связанной модели) для текущего запуска.",
     )
     refresh_baseline: bool = Field(
         default=False,
         description="If true, replace the drift baseline with this dataset.",
+    )
+    model_key: str = Field(
+        default="nomenclature_classifier",
+        description="Базовая модель, к которой относится датасет/обучение.",
+    )
+    dataset_name: Optional[str] = Field(
+        default=None,
+        description="Человекочитаемое имя датасета для мониторинга.",
+    )
+    rewrite_dataset: bool = Field(
+        default=False,
+        description="Разрешить перезапись датасета с той же версией.",
+    )
+    task_type: str = Field(
+        default="classification",
+        description="Тип ML-задачи (classification/normalization/etc).",
+    )
+    target_field: Optional[str] = Field(
+        default="label",
+        description="Поле в NomenclatureItem, которое используется как целевая переменная для обучения. По умолчанию 'label'. Может быть любым строковым полем (label, type_hint, kind и т.д.).",
+    )
+    feature_fields: Optional[List[str]] = Field(
+        default=None,
+        description="Список полей, используемых как признаки для обучения. Если не указан, используются все доступные поля кроме target_field. Пример: ['name', 'full_name', 'kind', 'unit', 'okved_code', 'hs_code'].",
     )
 
 
@@ -126,13 +159,17 @@ class PredictRequest(NomenclatureBatch):
     explain: bool = Field(
         default=False, description="If true, include SHAP-driven explanations."
     )
+    model_key: str = Field(
+        default="nomenclature_classifier",
+        description="Ключ модели, которую следует использовать для инференса.",
+    )
 
 
 class PredictResult(BaseModel):
     name: str
-    predicted_type: NomenclatureType
+    predicted_type: str  # Теперь произвольная строка, не только NomenclatureType
     probability: float
-    alternatives: List[NomenclatureType] = Field(default_factory=list)
+    alternatives: List[str] = Field(default_factory=list)  # Список строк
     explanation: Optional[str] = None
 
 
@@ -146,6 +183,29 @@ class PredictResponse(BaseModel):
     results: List[PredictResult]
     model_version: str
     unexpected_items: List[UnexpectedItem] = Field(default_factory=list)
+
+
+class NormalizationRequest(BaseModel):
+    items: List[NomenclatureItem]
+    transliterate_to: str = Field(
+        default="latin",
+        description="Целевой алфавит для транслитерации (latin/cyrillic).",
+    )
+    locale: str = Field(default="ru", description="Локаль для форматирования.")
+
+
+class NormalizationResult(BaseModel):
+    name: str
+    normalized_name: str
+    normalized_full_name: Optional[str]
+    corrections: List[str] = Field(default_factory=list)
+    detected_dates: List[str] = Field(default_factory=list)
+    detected_numbers: List[str] = Field(default_factory=list)
+    transliteration: Optional[str] = None
+
+
+class NormalizationResponse(BaseModel):
+    results: List[NormalizationResult]
 
 
 class QualityWarning(BaseModel):
@@ -182,4 +242,9 @@ class MetadataRecord(BaseModel):
 class MetadataEnvelope(BaseModel):
     current: Optional[MetadataRecord]
     history: List[MetadataRecord] = Field(default_factory=list)
+
+
+class ModelActivationRequest(BaseModel):
+    version: str
+    model_key: Optional[str] = None
 

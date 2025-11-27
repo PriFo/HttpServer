@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import json
 from typing import Any, Dict, Iterable, List, Set
 
 import pandas as pd
@@ -69,13 +70,19 @@ class DataQualityGuard:
                 sample_columns=[field],
             )
 
-        if {"name", "full_name"}.issubset(frame.columns):
-            duplicates_mask = frame.duplicated(subset=["name", "full_name"], keep=False)
+        if len(frame) > 1:
+            normalized = frame.fillna("").copy()
+            normalized = normalized.applymap(self._normalize_value)
+            signatures = normalized.apply(
+                lambda row: "|".join(str(row[col]) for col in normalized.columns),
+                axis=1,
+            )
+            duplicates_mask = signatures.duplicated(keep=False)
             _register_issue(
-                field="name/full_name",
+                field="payload",
                 issue="duplicates",
                 mask=duplicates_mask,
-                sample_columns=["name", "full_name"],
+                sample_columns=list(frame.columns),
             )
 
         if "kind" in frame.columns:
@@ -109,4 +116,10 @@ class DataQualityGuard:
             valid_items=rows,
             unexpected_items=unexpected_items,
         )
+
+    @staticmethod
+    def _normalize_value(value: Any) -> str:
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        return str(value).strip()
 

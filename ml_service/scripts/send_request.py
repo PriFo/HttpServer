@@ -74,8 +74,8 @@ async def main() -> None:
         print("== quality ==")
         final_result["quality"] = await send_request(session, base_url + endpoints["quality"], quality_payload)
 
-        print("== train ==")
-        final_result["train"] = await send_request(session, base_url + endpoints["train"], train_payload)
+        # print("== train ==")
+        # final_result["train"] = await send_request(session, base_url + endpoints["train"], train_payload)
 
         print("== predict ==")
         predict_body = {"items": predict_payload["items"], "top_k": 2, "explain": False}

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="frame">
+    <div class="frame-header">
+        <h3>Активные модели</h3>
+        <span class="badge">{{ models|length }} в работе</span>
+    </div>
+    {% if models %}
+    <div class="card-grid">
+        {% for model in models %}
+        <article>
+            <h4>{{ model.model_key }}</h4>
+            <p class="text-muted">Версия {{ model.version }}</p>
+            <p>Точность: {{ '%.3f'|format(model.metrics.accuracy or model.accuracy or 0) }}</p>
+            <p>F1-мера: {{ '%.3f'|format(model.metrics.f1_macro or model.f1_macro or 0) }}</p>
+            <p>Уверенность: {{ '%.2f'|format(model.metrics.avg_confidence or model.confidence or 0) }}</p>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Еще нет активных моделей.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Запросы за 24 часа</h3>
+    </div>
+    <div class="metrics-grid">
+        <article>
+            <p>Всего</p>
+            <h3>{{ stats.total }}</h3>
+        </article>
+        <article>
+            <p>Успешно</p>
+            <h3>{{ stats.completed }}</h3>
+        </article>
+        <article>
+            <p>Ошибок</p>
+            <h3>{{ stats.errored }}</h3>
+        </article>
+        <article>
+            <p>В очереди</p>
+            <h3>{{ stats.queued }}</h3>
+        </article>
+        <article>
+            <p>Запущено</p>
+            <h3>{{ stats.running }}</h3>
+        </article>
+    </div>
+    <div id="overview-chart" style="height: 320px;"></div>
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Актуальный датасет</h3>
+    </div>
+    {% if dataset %}
+    <div class="card-grid">
+        <article>
+            <p class="text-muted">Версия</p>
+            <h4>{{ dataset.version_label }}</h4>
+        </article>
+        <article>
+            <p class="text-muted">Строк</p>
+            <h4>{{ dataset.version_rows }}</h4>
+        </article>
+        <article>
+            <p class="text-muted">Последнее использование</p>
+            <h4>{{ dataset.last_used or "—" }}</h4>
+        </article>
+    </div>
+    {% else %}
+    <p>Информация по датасету недоступна.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Лента событий</h3>
+    </div>
+    {% if recent_events %}
+    <div class="events-grid">
+        {% for event in recent_events %}
+        <div class="event-card">
+            <small>{{ event.created_at }}</small>
+            <h5>{{ event.source }} · {{ event.level|upper }}</h5>
+            <p>{{ event.message }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Ошибок и предупреждений нет.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Последние запросы</h3>
+    </div>
+    {% if recent_requests %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>Статус</div>
+            <div>IP-адрес</div>
+            <div>Воркеров</div>
+        </div>
+        {% for req in recent_requests %}
+        {% set status_class = 'success' if req.status in ['success','completed'] else 'error' if req.status == 'error' else 'running' %}
+        <div class="pseudo-row">
+            <div>#{{ req.id }}</div>
+            <div>{{ req.request_kind }}</div>
+            <div><span class="status-pill {{ status_class }}">{{ req.status }}</span></div>
+            <div>{{ req.client_ip or "—" }}</div>
+            <div>{{ req.workers_allocated }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Запросов пока нет.</p>
+    {% endif %}
+</div>
+
+<script type="application/json" id="overview-chart-data">{{ chart|tojson }}</script>
+<script>
+    const overviewChartNode = document.getElementById('overview-chart-data');
+    const overviewChart = overviewChartNode ? JSON.parse(overviewChartNode.textContent) : null;
+    if (overviewChart && overviewChart.data) {
+        Plotly.newPlot('overview-chart', overviewChart.data, overviewChart.layout, {responsive: true});
+    }
+</script>
+{% endblock %}
+

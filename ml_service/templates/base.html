@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>{{ title if title else "ML Monitoring" }}</title>
+    <title>{{ title if title else "ML Мониторинг" }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
@@ -14,20 +14,21 @@
             --badge-bg: #5761d7;
             --badge-color: #fff;
             --table-header-bg: #eef0fb;
+            --page-bg: #f7f8ff;
         }
         :root[data-theme="dark"] {
-            --frame-bg: #1f2433;
-            --frame-border: #30384f;
-            --accent: #8f9dff;
-            --text-color: #f5f7ff;
-            --badge-bg: #8f9dff;
-            --badge-color: #1f2433;
-            --table-header-bg: #2a3144;
-            background: #151925;
+            --frame-bg: #050505;
+            --frame-border: rgba(255, 255, 255, 0.18);
+            --accent: #ffffff;
+            --text-color: #ffffff;
+            --badge-bg: #ffffff;
+            --badge-color: #050505;
+            --table-header-bg: rgba(255,255,255,0.08);
+            --page-bg: #000000;
         }
         body {
             padding: 1.5rem;
-            background: var(--frame-bg);
+            background: var(--page-bg);
             color: var(--text-color);
         }
         nav {
@@ -41,6 +42,7 @@
         }
         nav a {
             font-weight: 600;
+            color: var(--text-color);
         }
         .badge {
             padding: 0.2rem 0.6rem;
@@ -60,6 +62,15 @@
             border-radius: 18px;
             padding: 1.25rem 1.5rem;
             box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        }
+        article {
+            background: var(--frame-bg);
+            border: 1px solid var(--frame-border);
+            border-radius: 12px;
+            padding: 0.8rem 1rem;
+        }
+        :root[data-theme="dark"] article {
+            border-color: rgba(255,255,255,0.3);
         }
         .frame-header {
             display: flex;
@@ -93,6 +104,30 @@
         table th, table td {
             padding: 0.55rem 0.6rem;
             border-bottom: 1px solid #e2e6f3;
+        }
+        .pseudo-table {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--frame-border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .pseudo-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.6rem;
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid var(--frame-border);
+            align-items: center;
+        }
+        .pseudo-row:last-child {
+            border-bottom: none;
+        }
+        .pseudo-row.pseudo-head {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         .status-pill {
             border-radius: 999px;
@@ -178,21 +213,37 @@
             padding: 0.6rem 0.8rem;
             background: var(--frame-bg);
         }
+        .flash {
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            background: rgba(87, 97, 215, 0.12);
+            color: var(--text-color);
+        }
+        :root[data-theme="dark"] .flash {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            border-color: rgba(255,255,255,0.4);
+        }
     </style>
 </head>
 <body>
 <nav>
     <ul>
-        <li><strong>ML Monitoring</strong></li>
+        <li><strong>ML Мониторинг</strong></li>
     </ul>
     <ul>
-        <li><a href="/">Воркеры</a></li>
+        <li><a href="/">Главная</a></li>
+        <li><a href="/workers">Воркеры</a></li>
         <li><a href="/db">База данных</a></li>
         <li><a href="/requests">Запросы</a></li>
         <li><a href="/models">Модели</a></li>
         <li><button id="theme-toggle" aria-label="Toggle theme">🌓</button></li>
     </ul>
 </nav>
+{% if flash %}
+<div class="flash">{{ flash }}</div>
+{% endif %}
 <main>
     {% block content %}{% endblock %}
 </main>

@@ -3,14 +3,17 @@ PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 
 CREATE TABLE IF NOT EXISTS datasets (
-    dataset_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL,
-    source          TEXT,
-    description     TEXT,
-    row_count       INTEGER DEFAULT 0,
-    status          TEXT NOT NULL DEFAULT 'pending', -- pending | ready | archived
-    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    dataset_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                TEXT NOT NULL,
+    source              TEXT,
+    description         TEXT,
+    row_count           INTEGER DEFAULT 0,
+    status              TEXT NOT NULL DEFAULT 'pending', -- pending | ready | archived
+    model_key           TEXT NOT NULL DEFAULT 'nomenclature_classifier',
+    task_type           TEXT NOT NULL DEFAULT 'classification',
+    latest_version_label TEXT,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS dataset_versions (
@@ -22,6 +25,9 @@ CREATE TABLE IF NOT EXISTS dataset_versions (
     feature_version TEXT,
     notes           TEXT,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    row_count       INTEGER DEFAULT 0,
+    task_type       TEXT NOT NULL DEFAULT 'classification',
+    dataset_hash    TEXT,
     UNIQUE(dataset_id, version_label)
 );
 
@@ -67,6 +73,8 @@ CREATE TABLE IF NOT EXISTS training_jobs (
     initiated_by    TEXT,
     started_at      DATETIME,
     finished_at     DATETIME,
+    model_key       TEXT NOT NULL DEFAULT 'nomenclature_classifier',
+    task_type       TEXT NOT NULL DEFAULT 'classification',
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -80,6 +88,12 @@ CREATE TABLE IF NOT EXISTS models (
     artifact_blob   BLOB,
     metrics         JSON,
     notes           TEXT,
+    task_type       TEXT NOT NULL DEFAULT 'classification',
+    model_key       TEXT NOT NULL DEFAULT 'nomenclature_classifier',
+    status          TEXT NOT NULL DEFAULT 'draft',
+    accuracy        REAL,
+    f1_macro        REAL,
+    confidence      REAL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     activated_at    DATETIME
 );
@@ -87,10 +101,15 @@ CREATE TABLE IF NOT EXISTS models (
 CREATE TABLE IF NOT EXISTS predictions_log (
     prediction_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     model_version   TEXT NOT NULL,
+    request_kind    TEXT NOT NULL DEFAULT 'predict',
     request_payload JSON NOT NULL,
     response_payload JSON,
     status          TEXT DEFAULT 'pending', -- pending | success | failed
     error_message   TEXT,
+    client_ip       TEXT,
+    user_agent      TEXT,
+    workers_allocated INTEGER NOT NULL DEFAULT 1,
+    meta            JSON,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at    DATETIME
 );

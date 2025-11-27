@@ -2,7 +2,7 @@
 {% block content %}
 <div class="frame">
     <div class="frame-header">
-        <h3>Модели</h3>
+        <h3>Текущая модель</h3>
         {% if envelope.current %}
             <span class="badge">{{ envelope.current.model_version }}</span>
         {% endif %}
@@ -10,20 +10,20 @@
     {% if envelope.current %}
         <div class="grid">
             <article>
-                <h4>Дата обучения</h4>
-                <p>{{ envelope.current.created_at }}</p>
+                <p>Дата обучения</p>
+                <h4>{{ envelope.current.created_at }}</h4>
             </article>
             <article>
-                <h4>Accuracy</h4>
-                <p>{{ envelope.current.metrics.accuracy }}</p>
+                <p>Точность</p>
+                <h4>{{ '%.3f'|format(envelope.current.metrics.accuracy) }}</h4>
             </article>
             <article>
-                <h4>F1 macro</h4>
-                <p>{{ envelope.current.metrics.f1_macro }}</p>
+                <p>F1-мера</p>
+                <h4>{{ '%.3f'|format(envelope.current.metrics.f1_macro) }}</h4>
             </article>
             <article>
-                <h4>Confidence</h4>
-                <p>{{ envelope.current.metrics.avg_confidence }}</p>
+                <p>Уверенность</p>
+                <h4>{{ '%.2f'|format(envelope.current.metrics.avg_confidence) }}</h4>
             </article>
         </div>
     {% else %}
@@ -40,46 +40,259 @@
 
 <div class="frame">
     <div class="frame-header">
+        <h3>Активные версии</h3>
+        <form method="post" action="/models/activate" style="display:flex; gap:0.5rem;">
+            <select name="version">
+                {% for model in model_history %}
+                <option value="{{ model.version }}">{{ model.version }}</option>
+                {% endfor %}
+            </select>
+            <input type="hidden" name="model_key" value="nomenclature_classifier">
+            <button type="submit">Сделать активной</button>
+        </form>
+    </div>
+    {% if active_models %}
+    <div class="card-grid">
+        {% for model in active_models %}
+        <article>
+            <h4>{{ model.version }}</h4>
+            <p class="text-muted">Активирована {{ model.activated_at or "—" }}</p>
+            <p>Точность {{ '%.3f'|format(model.accuracy or 0) }}</p>
+            <p>F1-мера {{ '%.3f'|format(model.f1_macro or 0) }}</p>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Нет активных моделей.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
         <h3>История версий</h3>
     </div>
-    <div class="pane">
-        <div class="data-table">
-            <table>
-                <thead>
-                <tr>
-                    <th>Версия</th>
-                    <th>Дата</th>
-                    <th>Accuracy</th>
-                    <th>F1</th>
-                    <th>Confidence</th>
-                    <th>Данных</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for record in history %}
-                    <tr>
-                        <td>{{ record.model_version }}</td>
-                        <td>{{ record.created_at }}</td>
-                        <td>{{ record.metrics.accuracy }}</td>
-                        <td>{{ record.metrics.f1_macro }}</td>
-                        <td>{{ record.metrics.avg_confidence }}</td>
-                        <td>{{ record.data_volume }}</td>
-                    </tr>
-                {% endfor %}
-                {% if not history %}
-                    <tr><td colspan="6">История пуста.</td></tr>
-                {% endif %}
-                </tbody>
-            </table>
+    {% if history %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>Версия</div>
+            <div>Дата</div>
+            <div>Точность</div>
+            <div>F1-мера</div>
+            <div>Уверенность</div>
+            <div>Данных</div>
         </div>
+        {% for record in history %}
+        <div class="pseudo-row">
+            <div>{{ record.model_version }}</div>
+            <div>{{ record.created_at }}</div>
+            <div>{{ record.metrics.accuracy }}</div>
+            <div>{{ record.metrics.f1_macro }}</div>
+            <div>{{ record.metrics.avg_confidence }}</div>
+            <div>{{ record.data_volume }}</div>
+        </div>
+        {% endfor %}
     </div>
+    {% else %}
+    <p>История пуста.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Загрузка датасета / переобучение</h3>
+    </div>
+    <form method="post" action="/datasets/upload" enctype="multipart/form-data" id="dataset-upload-form" class="grid" style="grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:0.75rem;">
+        <input type="hidden" name="model_key" value="nomenclature_classifier">
+        <input type="hidden" name="task_type" value="classification">
+        <label>
+            Версия
+            <input type="text" name="version_label" id="version_label" required placeholder="ds_2024_11_27">
+        </label>
+        <label>
+            Имя датасета
+            <input type="text" name="dataset_name" id="dataset_name" placeholder="Интерактивная загрузка">
+        </label>
+        <label>
+            Файл (CSV или JSON)
+            <input type="file" name="file" id="dataset_file" accept=".csv,.json" required>
+        </label>
+        <div id="dataset_stats" style="grid-column: 1 / -1; padding: 0.75rem; background: rgba(87, 97, 215, 0.08); border-radius: 8px; display: none;">
+            <strong>Статистика датасета:</strong>
+            <div id="stats_content"></div>
+        </div>
+        <label>
+            <input type="checkbox" name="rewrite_dataset">
+            Перезаписать существующую версию
+        </label>
+        <label>
+            <input type="checkbox" name="trigger_training" id="trigger_training">
+            Сразу запустить обучение
+        </label>
+        <div id="training-config" style="grid-column: 1 / -1; display: none; padding: 0.75rem; background: rgba(87, 97, 215, 0.05); border-radius: 8px;">
+            <h4 style="margin-top: 0;">Настройки обучения</h4>
+            <div class="grid" style="grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap:0.75rem;">
+                <label>
+                    Целевое поле (target_field)
+                    <input type="text" name="target_field" id="target_field" value="label" placeholder="label">
+                    <small class="text-muted">Поле, которое используется как целевая переменная (по умолчанию: label)</small>
+                </label>
+                <label>
+                    Поля признаков (feature_fields)
+                    <input type="text" name="feature_fields" id="feature_fields" placeholder="kind,unit,okved_code,hs_code">
+                    <small class="text-muted">
+                        Список полей через запятую. Доступные поля: 
+                        <strong>kind, unit, type_hint, okved_code, hs_code, country_code, jurisdiction</strong> (категориальные),
+                        <strong>name_len, full_name_len, token_count</strong> (числовые),
+                        <strong>text_joined</strong> (текстовое),
+                        <strong>service_kw_flag, product_kw_flag</strong> (булевы).
+                        Если не указано, используются все доступные поля.
+                    </small>
+                </label>
+            </div>
+        </div>
+        <button type="submit">Загрузить датасет</button>
+    </form>
+    {% if dataset %}
+    <p class="text-muted">Последний датасет: {{ dataset.version_label }} ({{ dataset.version_rows }} строк)</p>
+    {% endif %}
 </div>
 <script>
-    const modelChart = {{ chart|tojson }};
+(function() {
+    const fileInput = document.getElementById('dataset_file');
+    const versionInput = document.getElementById('version_label');
+    const nameInput = document.getElementById('dataset_name');
+    const statsDiv = document.getElementById('dataset_stats');
+    const statsContent = document.getElementById('stats_content');
+    
+    if (!fileInput) return;
+    
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const isJson = file.name.toLowerCase().endsWith('.json');
+        if (!isJson) {
+            statsDiv.style.display = 'none';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                let data = parsed;
+                let metadata = null;
+                
+                if (Array.isArray(parsed)) {
+                    data = { data: parsed };
+                } else if (parsed && typeof parsed === 'object' && 'data' in parsed) {
+                    metadata = parsed;
+                    data = parsed;
+                } else {
+                    throw new Error('JSON должен быть массивом объектов или объектом с полем "data"');
+                }
+                
+                if (data.version && !versionInput.value) {
+                    versionInput.value = data.version;
+                }
+                
+                if (data.description && !nameInput.value) {
+                    nameInput.value = data.description;
+                }
+                
+                if (data.statistics) {
+                    let statsHtml = '<ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;">';
+                    if (data.statistics.total_items) {
+                        statsHtml += '<li>Всего записей: <strong>' + data.statistics.total_items + '</strong></li>';
+                    }
+                    if (data.statistics.distribution) {
+                        statsHtml += '<li>Распределение:';
+                        statsHtml += '<ul style="margin-left: 1rem;">';
+                        for (const [key, value] of Object.entries(data.statistics.distribution)) {
+                            statsHtml += '<li>' + key + ': ' + value + '</li>';
+                        }
+                        statsHtml += '</ul></li>';
+                    }
+                    statsHtml += '</ul>';
+                    statsContent.innerHTML = statsHtml;
+                    statsDiv.style.display = 'block';
+                } else {
+                    if (Array.isArray(data.data) || (data.data && Array.isArray(data.data))) {
+                        const count = Array.isArray(data.data) ? data.data.length : data.data.length;
+                        statsContent.innerHTML = '<ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;"><li>Всего записей: <strong>' + count + '</strong></li></ul>';
+                        statsDiv.style.display = 'block';
+                    } else {
+                        statsDiv.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                console.error('Ошибка парсинга JSON:', err);
+                statsDiv.style.display = 'none';
+            }
+        };
+        reader.readAsText(file);
+    });
+    
+    const triggerTrainingCheckbox = document.getElementById('trigger_training');
+    const trainingConfigDiv = document.getElementById('training-config');
+    if (triggerTrainingCheckbox && trainingConfigDiv) {
+        triggerTrainingCheckbox.addEventListener('change', function() {
+            trainingConfigDiv.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+})();
+</script>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Отчеты по запросам</h3>
+    </div>
+    {% if recent_responses %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>Статус</div>
+            <div>IP</div>
+            <div>Время</div>
+        </div>
+        {% for item in recent_responses %}
+        {% set status_class = 'success' if item.status in ['completed','success'] else 'error' if item.status == 'error' else 'running' %}
+        <div class="pseudo-row">
+            <div>{{ item.id }}</div>
+            <div>{{ item.request_kind }}</div>
+            <div><span class="status-pill {{ status_class }}">{{ item.status }}</span></div>
+            <div>{{ item.client_ip or "—" }}</div>
+            <div>{{ item.created_at }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Еще нет запросов к модели.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Фичи модели</h3>
+    </div>
+    <div class="grid">
+        {% for feature in features %}
+        <article>
+            <h4>{{ feature.name }}</h4>
+            <p class="text-muted">{{ feature.description }}</p>
+        </article>
+        {% endfor %}
+    </div>
+</div>
+
+<script type="application/json" id="model-chart-data">{{ chart|tojson }}</script>
+<script>
+    const modelChartNode = document.getElementById('model-chart-data');
+    const modelChart = modelChartNode ? JSON.parse(modelChartNode.textContent) : null;
     if (modelChart && modelChart.data) {
         Plotly.newPlot('model-chart', modelChart.data, modelChart.layout, {responsive: true});
     }
 </script>
 
 {% endblock %}
-

@@ -32,44 +32,106 @@ class NomenclatureClassifier:
     @staticmethod
     def _frame_from_items(items: Iterable[NomenclatureItem]) -> pd.DataFrame:
         frame = pd.DataFrame([item.dict() for item in items])
+        # Заполняем пропуски для основных полей
         frame["full_name"] = frame["full_name"].fillna("")
         frame["kind"] = frame["kind"].fillna("unknown")
         frame["unit"] = frame["unit"].fillna("unit_na")
         frame["type_hint"] = frame["type_hint"].fillna("unassigned")
         frame["okved_code"] = frame["okved_code"].fillna("0000")
         frame["hs_code"] = frame["hs_code"].fillna("0000")
+        # Создаем дополнительные признаки
         frame["text_joined"] = (frame["name"].fillna("") + " " + frame["full_name"]).str.lower()
         frame["name_len"] = frame["name"].str.len().fillna(0)
         frame["full_name_len"] = frame["full_name"].str.len().fillna(0)
         frame["token_count"] = frame["text_joined"].str.split().apply(len)
+        # Опциональные флаги (не используются, если не в feature_fields)
         frame["service_kw_flag"] = frame["text_joined"].str.contains("услуг|service", regex=True)
         frame["product_kw_flag"] = frame["text_joined"].str.contains("товар|product|item", regex=True)
         return frame
 
-    def _build_pipeline(self) -> Pipeline:
-        categorical_cols = ["kind", "unit", "type_hint", "okved_code", "hs_code"]
-        numeric_cols = ["name_len", "full_name_len", "token_count"]
-
-        preprocessor = ColumnTransformer(
-            transformers=[
-                (
-                    "text",
+    def _build_pipeline(self, feature_fields: Optional[List[str]] = None, X_columns: Optional[List[str]] = None) -> Pipeline:
+        """Строит pipeline с учетом указанных полей признаков."""
+        # Определяем доступные поля
+        available_categorical = ["kind", "unit", "type_hint", "okved_code", "hs_code", "country_code", "jurisdiction"]
+        available_numeric = ["name_len", "full_name_len", "token_count"]
+        available_text = ["text_joined"]
+        available_bool = ["service_kw_flag", "product_kw_flag"]
+        
+        # Используем реальные колонки из X, если они переданы
+        columns_to_use = X_columns if X_columns is not None else (feature_fields if feature_fields else None)
+        
+        if columns_to_use:
+            # Фильтруем только те поля, которые реально есть в X и могут быть обработаны
+            categorical_cols = [col for col in columns_to_use if col in available_categorical]
+            numeric_cols = [col for col in columns_to_use if col in available_numeric]
+            text_cols = [col for col in columns_to_use if col in available_text]
+            bool_cols = [col for col in columns_to_use if col in available_bool]
+            
+            # Проверяем, что хотя бы некоторые поля были найдены
+            if not (categorical_cols or numeric_cols or text_cols or bool_cols):
+                # Если ни одно поле не найдено, но columns_to_use указаны, это ошибка
+                unused_fields = [col for col in columns_to_use if col not in (available_categorical + available_numeric + available_text + available_bool)]
+                raise ValueError(
+                    f"Указанные поля признаков не могут быть обработаны pipeline. "
+                    f"Необработанные поля: {unused_fields}. "
+                    f"Доступные категориальные: {available_categorical}, "
+                    f"числовые: {available_numeric}, "
+                    f"текстовые: {available_text}, "
+                    f"булевы: {available_bool}"
+                )
+        else:
+            categorical_cols = available_categorical
+            numeric_cols = available_numeric
+            text_cols = available_text
+            bool_cols = available_bool
+        
+        transformers = []
+        
+        # Текстовые поля
+        if text_cols:
+            for text_col in text_cols:
+                transformers.append((
+                    f"text_{text_col}",
                     TfidfVectorizer(
                         max_features=20000,
                         ngram_range=(1, 2),
                         min_df=2,
                         sublinear_tf=True,
                     ),
-                    "text_joined",
-                ),
-                (
-                    "categorical",
-                    OneHotEncoder(handle_unknown="ignore"),
-                    categorical_cols,
-                ),
-                ("numeric", MaxAbsScaler(), numeric_cols),
-            ],
+                    text_col,
+                ))
+        
+        # Категориальные поля
+        if categorical_cols:
+            transformers.append((
+                "categorical",
+                OneHotEncoder(handle_unknown="ignore"),
+                categorical_cols,
+            ))
+        
+        # Числовые поля
+        if numeric_cols:
+            transformers.append((
+                "numeric",
+                MaxAbsScaler(),
+                numeric_cols,
+            ))
+        
+        # Булевы поля (преобразуем в числовые)
+        if bool_cols:
+            transformers.append((
+                "bool",
+                MaxAbsScaler(),
+                bool_cols,
+            ))
+        
+        if not transformers:
+            raise ValueError("Не указано ни одного поля признаков для обучения.")
+        
+        preprocessor = ColumnTransformer(
+            transformers=transformers,
             sparse_threshold=0.3,
+            remainder="drop",  # Игнорируем поля, которые не обрабатываются
         )
 
         mlp = MLPClassifier(
@@ -100,27 +162,45 @@ class NomenclatureClassifier:
         items: List[NomenclatureItem],
         version: Optional[str] = None,
         test_size: float = 0.2,
+        target_field: str = "label",
+        feature_fields: Optional[List[str]] = None,
     ) -> dict:
         frame = self._frame_from_items(items)
-        if "label" not in frame.columns or frame["label"].isna().all():
-            raise ValueError("Training requires labeled data (label field is empty).")
+        
+        if target_field not in frame.columns:
+            raise ValueError(f"Целевое поле '{target_field}' отсутствует в данных.")
+        
+        if frame[target_field].isna().all():
+            raise ValueError(f"Training requires labeled data (поле '{target_field}' пустое).")
 
-        def _normalize_label(value):
+        def _normalize_target(value):
             if value is None:
                 return None
-            if isinstance(value, NomenclatureType):
-                return value.value
             if isinstance(value, str):
                 normalized = value.strip().lower().replace("ё", "е")
-                return NomenclatureItem.LABEL_ALIASES.get(normalized, normalized)
-            return str(value).strip().lower()
+                mapped = NomenclatureItem.LABEL_ALIASES.get(normalized)
+                if mapped:
+                    return mapped
+                return value.strip()
+            return str(value).strip() if value else None
 
-        frame["label"] = frame["label"].apply(_normalize_label)
-        if frame["label"].isna().any() or (frame["label"] == "").any():
-            raise ValueError("Training dataset contains unlabeled rows after normalization.")
+        frame[target_field] = frame[target_field].apply(_normalize_target)
+        if frame[target_field].isna().any() or (frame[target_field] == "").any():
+            raise ValueError(f"Датасет содержит пустые значения в поле '{target_field}' после нормализации.")
 
-        y = frame["label"]
-        X = frame.drop(columns=["label"])
+        y = frame[target_field]
+        
+        if feature_fields:
+            missing_fields = [f for f in feature_fields if f not in frame.columns]
+            if missing_fields:
+                raise ValueError(f"Указанные поля признаков отсутствуют в данных: {missing_fields}")
+            X = frame[feature_fields].copy()
+            # Используем только те поля, которые реально есть в X
+            actual_feature_fields = list(X.columns)
+        else:
+            exclude_cols = [target_field, "text_joined", "service_kw_flag", "product_kw_flag"]
+            X = frame.drop(columns=[col for col in exclude_cols if col in frame.columns]).copy()
+            actual_feature_fields = None  # Используем все доступные поля
 
         if y.nunique() < 2:
             raise ValueError("Need at least two classes to train the classifier.")
@@ -134,8 +214,19 @@ class NomenclatureClassifier:
                 f"Training dataset ({len(X_train)}) exceeds hard cap {settings.max_training_rows}."
             )
 
-        self.pipeline = self._build_pipeline()
-        self.pipeline.fit(X_train, y_train)
+        # Передаем реальные колонки из X_train, чтобы pipeline знал, какие поля обрабатывать
+        # Важно: передаем именно колонки из X_train, чтобы избежать ошибок "column not found"
+        self.pipeline = self._build_pipeline(feature_fields=actual_feature_fields, X_columns=X_train.columns.tolist())
+        
+        # Проверяем, что все поля, которые будут использоваться в pipeline, есть в X_train
+        try:
+            self.pipeline.fit(X_train, y_train)
+        except KeyError as e:
+            raise ValueError(
+                f"Ошибка при обучении: поле отсутствует в данных. "
+                f"Доступные колонки: {list(X_train.columns)}, "
+                f"Ошибка: {e}"
+            ) from e
 
         y_pred = self.pipeline.predict(X_valid)
         y_proba = self.pipeline.predict_proba(X_valid)
@@ -182,9 +273,9 @@ class NomenclatureClassifier:
             probs = scores[idx]
             order = np.argsort(probs)[::-1]
             predicted_idx = order[0]
-            predicted_class = NomenclatureType(classes[predicted_idx])
+            predicted_class = str(classes[predicted_idx])  # Произвольная строка
             alternatives = [
-                NomenclatureType(classes[i])
+                str(classes[i])
                 for i in order[1 : min(len(classes), top_k)]
             ]
             explanation = None

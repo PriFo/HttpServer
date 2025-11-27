@@ -2,40 +2,123 @@
 {% block content %}
 <div class="frame">
     <div class="frame-header">
-<h3>Главная</h3>
+        <h3>Статус воркеров</h3>
         <span class="badge">Обновлено {{ snapshot.get("created_at", "—") }}</span>
     </div>
     <div class="grid">
         <article>
-            <h4>Активные</h4>
-            <p><strong>{{ snapshot.get("active_workers", 0) }}</strong></p>
+            <p>Активные</p>
+            <h3>{{ snapshot.get("active_workers", 0) }}</h3>
         </article>
         <article>
-            <h4>Очередь</h4>
-            <p><strong>{{ snapshot.get("queued_tasks", 0) }}</strong></p>
+            <p>Очередь</p>
+            <h3>{{ snapshot.get("queued_tasks", 0) }}</h3>
         </article>
         <article>
-            <h4>Завершено</h4>
-            <p><strong>{{ snapshot.get("completed_tasks", 0) }}</strong></p>
+            <p>Выполнено</p>
+            <h3>{{ snapshot.get("completed_tasks", 0) }}</h3>
         </article>
         <article>
-            <h4>Ошибок</h4>
-            <p><strong>{{ snapshot.get("error_tasks", 0) }}</strong></p>
+            <p>Ошибки</p>
+            <h3>{{ snapshot.get("error_tasks", 0) }}</h3>
         </article>
         <article>
-            <h4>CPU</h4>
-            <p>{{ snapshot.get("cpu_usage", 0) }}%</p>
+            <p>Загрузка ЦП</p>
+            <h3>{{ snapshot.get("cpu_usage", 0) }}%</h3>
         </article>
         <article>
-            <h4>RAM</h4>
-            <p>{{ snapshot.get("ram_usage", 0) }}%</p>
+            <p>Использование памяти</p>
+            <h3>{{ snapshot.get("ram_usage", 0) }}%</h3>
         </article>
     </div>
 </div>
 
 <div class="frame">
     <div class="frame-header">
-        <h4>Лента событий</h4>
+        <h3>Использование воркеров</h3>
+    </div>
+    {% if usage %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>IP-адрес</div>
+            <div>Модель</div>
+            <div>Записей</div>
+            <div>Воркеров</div>
+        </div>
+        {% for row in usage %}
+        {% set status_class = 'success' if row.status in ['success','completed'] else 'error' if row.status == 'error' else 'running' %}
+        <div class="pseudo-row">
+            <div>#{{ row.id }}</div>
+            <div>{{ row.kind }}</div>
+            <div>{{ row.client_ip or "—" }}</div>
+            <div>{{ row.meta.get('model_key', '—') }}</div>
+            <div>{{ row.meta.get('items', {}).get('count') or row.meta.get('data', {}).get('count', '—') }}</div>
+            <div>{{ row.workers_allocated }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>История запросов пуста.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Очередь запросов</h3>
+    </div>
+    {% if queued_requests %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>Начало</div>
+            <div>Детали</div>
+        </div>
+        {% for item in queued_requests %}
+        <div class="pseudo-row">
+            <div>{{ item.id }}</div>
+            <div>{{ item.kind }}</div>
+            <div>{{ item.started_at }}</div>
+            <div>{{ item.detail }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Очередь пуста.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Текущие запросы</h3>
+    </div>
+    {% if running_requests %}
+    <div class="pseudo-table">
+        <div class="pseudo-row pseudo-head">
+            <div>ID</div>
+            <div>Тип</div>
+            <div>Прогресс</div>
+            <div>Обновлено</div>
+        </div>
+        {% for item in running_requests %}
+        <div class="pseudo-row">
+            <div>{{ item.id }}</div>
+            <div>{{ item.kind }}</div>
+            <div>{{ item.progress or 0 }}%</div>
+            <div>{{ item.updated_at }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>Нет выполняющихся запросов.</p>
+    {% endif %}
+</div>
+
+<div class="frame">
+    <div class="frame-header">
+        <h3>Лента событий</h3>
     </div>
     {% if recent_events %}
     <div class="events-grid">
@@ -54,42 +137,18 @@
 
 <div class="frame">
     <div class="frame-header">
-        <h4>Последние ошибочные запросы</h4>
+        <h3>Динамика запросов</h3>
     </div>
-    {% if errored_requests %}
-    <div class="pane">
-        <table>
-            <thead>
-            <tr>
-                <th>ID</th>
-                <th>Тип</th>
-                <th>Статус</th>
-                <th>Ошибка</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for item in errored_requests %}
-                <tr>
-                    <td>{{ item.id }}</td>
-                    <td>{{ item.kind }}</td>
-                    <td><span class="status-pill error">{{ item.status }}</span></td>
-                    <td>{{ item.error or "—" }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p>Все запросы выполнились успешно.</p>
-    {% endif %}
+    <div id="requests-chart" style="height: 320px;"></div>
 </div>
 
+<script type="application/json" id="workers-chart-data">{{ chart|tojson }}</script>
 <script>
-    const chartData = {{ chart|tojson }};
+    const workersChartNode = document.getElementById('workers-chart-data');
+    const chartData = workersChartNode ? JSON.parse(workersChartNode.textContent) : null;
     if (chartData && chartData.data) {
         Plotly.newPlot('requests-chart', chartData.data, chartData.layout, {responsive: true});
     }
 </script>
 
 {% endblock %}
-
